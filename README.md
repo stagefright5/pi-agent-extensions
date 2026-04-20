@@ -1,6 +1,6 @@
 # pi Extensions
 
-This repository is a small workspace for custom [pi](https://github.com/mariozechner/pi-coding-agent) extensions.
+This repository is a small workspace for custom [pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) extensions.
 
 Each extension lives in its own directory and should document its behavior locally.
 
