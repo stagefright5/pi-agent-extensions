@@ -206,24 +206,25 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 	function updateUI(ctx: ExtensionContext): void {
 		const t = ctx.ui.theme;
 		if (active) {
-			const iterInfo = iterations.length > 0 ? ` v${iterations.length}` : "";
-			ctx.ui.setStatus("plan-mode", t.fg("warning", `📋 PLAN${iterInfo}`));
+			ctx.ui.setStatus("plan-mode", t.fg("warning", "📋 PLAN"));
 
-			const widgetLines: string[] = [];
-			widgetLines.push(
-				t.fg("accent", "📋 Plan Mode") +
-					(planTitle ? t.fg("muted", ` — ${planTitle}`) : "") +
-					(iterations.length > 0
-						? t.fg("dim", ` (${iterations.length} iteration${iterations.length !== 1 ? "s" : ""})`)
-						: ""),
-			);
-			const hints: string[] = [];
-			if (iterations.length > 1) {
-				hints.push("ctrl+alt+d diff", "ctrl+alt+s summary", "ctrl+alt+a all changes");
+			if (iterations.length > 0) {
+				const widgetLines: string[] = [];
+				widgetLines.push(
+					t.fg("accent", "📋 Plan Mode") +
+						(planTitle ? t.fg("muted", ` — ${planTitle}`) : "") +
+						t.fg("dim", ` (${iterations.length} iteration${iterations.length !== 1 ? "s" : ""})`),
+				);
+				const hints: string[] = [];
+				if (iterations.length > 1) {
+					hints.push("ctrl+alt+d diff", "ctrl+alt+s summary", "ctrl+alt+a all changes");
+				}
+				hints.push("ctrl+alt+q Q&A");
+				widgetLines.push(t.fg("dim", `  ${hints.join("  │  ")}`));
+				ctx.ui.setWidget("plan-mode", widgetLines);
+			} else {
+				ctx.ui.setWidget("plan-mode", undefined);
 			}
-			hints.push("ctrl+alt+q Q&A");
-			widgetLines.push(t.fg("dim", `  ${hints.join("  │  ")}`));
-			ctx.ui.setWidget("plan-mode", widgetLines);
 		} else {
 			ctx.ui.setStatus("plan-mode", undefined);
 			ctx.ui.setWidget("plan-mode", undefined);
