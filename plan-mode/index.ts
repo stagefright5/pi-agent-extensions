@@ -4,7 +4,7 @@
  * Interactive planning mode that activates with Alt+P or /plan.
  * Forces the agent to ask clarifying questions before creating plans.
  * Plans are rendered in markdown, tracked in a per-plan git repo,
- * and file edits are blocked until the plan is approved.
+ * and tool availability is preserved while the agent prepares a plan.
  *
  * Shortcuts (in plan review UI):
  *   a        — approve plan
@@ -33,15 +33,12 @@ import { Type } from "@sinclair/typebox";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { isSafeCommand, generateSlug } from "./utils.js";
+import { generateSlug } from "./utils.js";
 
 // ─── Constants ──────────────────────────────────────────────
 
-const READ_ONLY_TOOLS = ["read", "bash", "grep", "find", "ls"];
-const FULL_TOOLS = ["read", "bash", "edit", "write"];
-
 const PLAN_MODE_SYSTEM_PROMPT = `
-[PLAN MODE ACTIVE — Read-only exploration mode]
+[PLAN MODE ACTIVE — Guided planning workflow]
 
 You are in plan mode. Your goal is to help the user create a comprehensive, well-thought-out plan BEFORE any code changes are made.
 
@@ -52,7 +49,8 @@ CRITICAL RULES:
 2. Go back and forth with the user. Have a real conversation. Don't rush to a plan.
 3. When you have gathered enough information and are confident, present the plan
    by calling the plan_output tool with a descriptive title and full markdown plan.
-4. You CANNOT edit or write files. Only read, search, and analyze the codebase.
+4. Do NOT execute the plan yet. You may inspect the codebase and use available tools
+   to understand the task, but wait for explicit user approval before making changes.
 5. Structure plans with clear phases/sections, numbered steps, expected outcomes,
    risk considerations, and dependency ordering.
 6. If the user asks you to revise after reviewing, incorporate their feedback
@@ -70,7 +68,6 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 	let planDir: string | null = null;
 	let iterations: string[] = []; // full markdown text per iteration
 	let planTitle: string | null = null;
-	let savedToolNames: string[] | null = null;
 	let qaMessages: Array<{ role: "user" | "assistant"; content: string }> = [];
 
 	const PLANS_BASE = join(homedir(), ".pi", "plans");
@@ -173,14 +170,12 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 	// ─── Enter / Exit ───────────────────────────────────────
 
 	function enterPlanMode(ctx: ExtensionContext): void {
-		savedToolNames = pi.getActiveTools().map((t) => t.name);
 		active = true;
 		planDir = null;
 		iterations = [];
 		planTitle = null;
 		qaMessages = [];
 
-		pi.setActiveTools([...READ_ONLY_TOOLS, "plan_output"]);
 		ctx.ui.notify("📋 Plan mode activated. The agent will ask questions before creating a plan.", "info");
 		updateUI(ctx);
 		persistState();
@@ -188,13 +183,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 
 	function exitPlanMode(ctx: ExtensionContext, approved = false): void {
 		active = false;
-		if (savedToolNames) {
-			pi.setActiveTools(savedToolNames);
-			savedToolNames = null;
-		} else {
-			pi.setActiveTools(FULL_TOOLS);
-		}
-		ctx.ui.notify(approved ? "✅ Plan approved! Full tool access restored." : "📋 Plan mode deactivated.", approved ? "info" : "info");
+		ctx.ui.notify(approved ? "✅ Plan approved! Plan mode deactivated." : "📋 Plan mode deactivated.", "info");
 		updateUI(ctx);
 		persistState();
 	}
@@ -886,7 +875,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 							{
 								type: "text",
 								text:
-									"✅ Plan approved by the user. Full tool access has been restored.\n" +
+									"✅ Plan approved by the user.\n" +
 									"Execute the approved plan step by step. Here is the plan:\n\n" +
 									params.plan,
 							},
@@ -961,7 +950,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.registerCommand("plan", {
-		description: "Toggle plan mode (read-only planning with clarifying questions)",
+		description: "Toggle plan mode (guided planning with clarifying questions)",
 		handler: async (_args, ctx) => {
 			if (active) {
 				exitPlanMode(ctx);
@@ -1048,33 +1037,6 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		}
 	});
 
-	// ─── Event: Block destructive tools in plan mode ────────
-
-	pi.on("tool_call", async (event) => {
-		if (!active) return;
-
-		// Hard block on edit/write (defense in depth)
-		if (event.toolName === "edit" || event.toolName === "write") {
-			return {
-				block: true,
-				reason:
-					"Cannot edit or write files in plan mode. " +
-					"Create a plan using plan_output first, and get it approved.",
-			};
-		}
-
-		// Allowlist bash commands
-		if (event.toolName === "bash") {
-			const command = (event.input as { command?: string }).command ?? "";
-			if (!isSafeCommand(command)) {
-				return {
-					block: true,
-					reason: `Plan mode: command not allowed (not in read-only allowlist).\nCommand: ${command}`,
-				};
-			}
-		}
-	});
-
 	// ─── Event: Inject plan-mode system prompt ──────────────
 
 	pi.on("before_agent_start", async (event) => {
@@ -1086,7 +1048,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 				customType: "plan-mode-context",
 				content:
 					"[PLAN MODE] I will ask clarifying questions before creating a plan. " +
-					"I cannot edit or write files until the plan is approved.",
+					"I should wait for approval before executing changes.",
 				display: false,
 			},
 		};
@@ -1141,10 +1103,6 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			iterations = stateEntry.data.iterations ?? [];
 			planTitle = stateEntry.data.planTitle ?? null;
 			qaMessages = stateEntry.data.qaMessages ?? [];
-
-			if (active) {
-				pi.setActiveTools([...READ_ONLY_TOOLS, "plan_output"]);
-			}
 		}
 
 		updateUI(ctx);
