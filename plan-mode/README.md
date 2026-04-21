@@ -2,22 +2,21 @@
 
 Interactive planning mode for pi.
 
-Plan Mode switches the agent into a read-only workflow where it must ask clarifying questions, build a plan, and wait for approval before making file changes.
+Plan Mode switches the agent into a guided planning workflow where it must ask clarifying questions, build a plan, and wait for approval before executing the plan.
 
 ## What it does
 
 When enabled, this extension:
 
-- restricts tool access to read-only exploration plus a custom `plan_output` tool
+- leaves the current active tool set unchanged while planning
 - requires the agent to ask clarifying questions before presenting a plan
-- blocks `edit` and `write` while planning
-- restricts `bash` to safe read-only commands
+- instructs the agent to wait for approval before executing changes
 - renders plans in an interactive review UI
 - stores each plan iteration in a per-plan git repo
 - shows diffs between revisions
 - generates LLM summaries of changes between iterations or across all iterations
 - keeps a Q&A history for plan discussions
-- restores full tool access after plan approval
+- does not modify tool activation state when entering or leaving plan mode
 
 ## Activation
 
@@ -31,11 +30,11 @@ You can enable Plan Mode in any of these ways:
 
 1. Enable Plan Mode.
 2. Ask the agent for help on a task.
-3. The agent explores the codebase in read-only mode and asks clarifying questions.
+3. The agent explores the codebase, asks clarifying questions, and prepares a plan.
 4. Once ready, it presents a structured plan through the `plan_output` tool.
 5. Review the plan in the TUI.
 6. Approve it or request revisions.
-7. After approval, normal tool access is restored and the agent can execute the approved plan.
+7. After approval, plan mode exits and the agent can execute the approved plan.
 
 ## Review UI shortcuts
 
@@ -62,7 +61,7 @@ Inside the plan review screen:
 ## Files
 
 - [`index.ts`](./index.ts) — extension entry point, UI, tool registration, state management, and event hooks
-- [`utils.ts`](./utils.ts) — safe-command detection and slug generation helpers
+- [`utils.ts`](./utils.ts) — slug generation helpers
 
 ## Persistence
 
@@ -79,9 +78,8 @@ Each plan gets its own timestamped directory and stores the current plan as `pla
 Plan Mode uses pi extension APIs to:
 
 - register the `plan_output` custom tool
-- inject planning-specific system instructions
-- limit active tools during planning
-- intercept and block destructive tool calls
+- inject plan-specific system instructions
+- keep tool activation unchanged while planning
 - store extension state in the session
 - render custom TUI screens for review, diffs, summaries, and Q&A
 
