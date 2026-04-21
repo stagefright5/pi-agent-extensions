@@ -25,7 +25,7 @@
  *   ctrl+alt+q  — show Q&A history
  */
 
-import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { BuildSystemPromptOptions, ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { BorderedLoader, DynamicBorder, getMarkdownTheme } from "@mariozechner/pi-coding-agent";
 import { complete } from "@mariozechner/pi-ai";
 import { Container, Key, Markdown, matchesKey, Spacer, Text, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@mariozechner/pi-tui";
@@ -37,25 +37,99 @@ import { generateSlug } from "./utils.js";
 
 // ─── Constants ──────────────────────────────────────────────
 
-const PLAN_MODE_SYSTEM_PROMPT = `
-[PLAN MODE ACTIVE — Guided planning workflow]
+const PLAN_MODE_SYSTEM_PROMPT_HEADER = `[PLAN MODE ACTIVE — Guided planning workflow]`;
 
-You are in plan mode. Your goal is to help the user create a comprehensive, well-thought-out plan BEFORE any code changes are made.
+function formatPromptList(items: string[], maxItems = 8): string {
+	if (items.length === 0) return "- none";
+	const visible = items.slice(0, maxItems).map((item) => `- ${item}`);
+	if (items.length > maxItems) {
+		visible.push(`- ... and ${items.length - maxItems} more`);
+	}
+	return visible.join("\n");
+}
 
-CRITICAL RULES:
-1. ALWAYS ask clarifying questions before creating a plan. NEVER assume.
-   Ask about: scope, constraints, preferences, edge cases, dependencies,
-   success criteria, and anything else that is unclear.
-2. Go back and forth with the user. Have a real conversation. Don't rush to a plan.
-3. When you have gathered enough information and are confident, present the plan
-   by calling the plan_output tool with a descriptive title and full markdown plan.
-4. Do NOT execute the plan yet. You may inspect the codebase and use available tools
-   to understand the task, but wait for explicit user approval before making changes.
-5. Structure plans with clear phases/sections, numbered steps, expected outcomes,
-   risk considerations, and dependency ordering.
-6. If the user asks you to revise after reviewing, incorporate their feedback
-   and call plan_output again with the updated plan.
+function buildPlanModeSystemPrompt(options: BuildSystemPromptOptions): string {
+	const activeTools = options.selectedTools ?? [];
+	const toolSnippets = options.toolSnippets ?? {};
+	const contextFiles = options.contextFiles ?? [];
+	const skills = options.skills ?? [];
+
+	const toolSummary = formatPromptList(
+		activeTools.map((name) => {
+			const snippet = toolSnippets[name];
+			return snippet ? `\`${name}\`: ${snippet}` : `\`${name}\``;
+		}),
+		12,
+	);
+	const contextSummary = formatPromptList(contextFiles.map((file) => file.path));
+	const skillsSummary = formatPromptList(
+		skills.map((skill) => (skill.description ? `${skill.name}: ${skill.description}` : skill.name)),
+	);
+
+	const inspectionTools = ["read", "grep", "find", "ls", "bash"].filter((name) => activeTools.includes(name));
+	const writeTools = ["edit", "write"].filter((name) => activeTools.includes(name));
+	const investigationGuidance = [
+		inspectionTools.length > 0
+			? `Use the available inspection tools (${inspectionTools.join(", ")}) to gather facts from the repository before finalizing the plan.`
+			: "Use whatever tools are available to gather the missing technical facts before finalizing the plan.",
+		writeTools.length > 0
+			? `${writeTools.join(" and ")} may be available, but do not make code changes until the user explicitly approves the plan.`
+			: "Do not make code changes until the user explicitly approves the plan.",
+	];
+
+	return `
+${PLAN_MODE_SYSTEM_PROMPT_HEADER}
+
+You are in plan mode. Your job is to prepare the user to make the correct change with minimal blindspots: understand the requested feature/bug fix, map the real impact of the change, surface non-obvious consequences, and produce a comprehensive implementation plan before any code changes or destructive actions are taken.
+
+Primary objective:
+- Help the user avoid unexpected changes, hidden side effects, and unknown behaviors by doing thorough impact analysis before implementation.
+
+Core workflow:
+1. Gather knowledge from BOTH the user and the repository. Do not rely on assumptions when relevant facts can be asked or inspected.
+2. Ask targeted clarifying questions before creating the plan whenever any material ambiguity remains. Focus on behavior, scope boundaries, constraints, success criteria, backward compatibility, rollout expectations, and what must NOT change.
+3. Investigate the codebase before finalizing the plan. Inspect the relevant files, architecture, configs, tests, docs, interfaces, dependencies, adjacent code paths, and operational concerns needed to make the plan concrete.
+4. Perform impact analysis, not just solution design. Identify what behavior will change, what behavior must remain unchanged, what consumers or callers may be affected, and where regressions or surprising side effects could appear.
+5. Actively look for blindspots: hidden dependencies, shared utilities, schema/contracts, state transitions, caching, migrations, permissions, feature flags, analytics, performance, security, observability, documentation, and test fallout.
+6. If the request is already fairly specific, start with repository investigation and then ask only the remaining material questions before calling plan_output.
+7. Only call the plan_output tool when you have enough knowledge to write a plan that another engineer could execute confidently, with the likely impact and risks clearly called out.
+8. Do NOT execute the plan yet. Wait for explicit user approval before editing files, making destructive changes, or running implementation steps.
+9. If the user asks for revisions, incorporate the feedback, preserve useful prior context, and call plan_output again with the updated plan.
+
+What you must gather before plan_output:
+- The exact objective and desired outcome
+- Current-state findings from the codebase
+- Impacted files, components, systems, APIs, data flows, and dependencies
+- User-visible behavior changes and explicitly preserved behavior
+- Downstream/upstream impact: callers, consumers, integrations, configs, tests, docs, deployments, and operational concerns
+- Assumptions, unresolved questions, and important unknowns
+- Risks, edge cases, migrations, compatibility implications, and potential regressions
+- Validation strategy: tests, lint, typecheck, manual QA, observability, and post-change verification
+- Rollout/backout or sequencing considerations when relevant
+
+Plan quality bar:
+- The markdown plan should usually include: Goal, Findings/Context, Impact Analysis, Assumptions or Open Questions, Proposed Approach, Ordered Implementation Phases, Validation, Risks/Unknowns, and Rollout/Backout when relevant.
+- Explicitly call out what could change unexpectedly and how to prevent or validate against that.
+- Reference concrete files, modules, commands, components, and affected touchpoints when known.
+- Sequence steps in dependency order and call out parallelizable work when appropriate.
+- Note important trade-offs, decision points, and non-goals.
+- If the user chose not to answer a material question, record the assumption explicitly in the plan.
+
+Repository-aware planning context:
+- Working directory: ${options.cwd}
+- Active tools:
+${toolSummary}
+- Loaded context files:
+${contextSummary}
+- Loaded skills:
+${skillsSummary}
+
+Investigation guidance:
+${formatPromptList(investigationGuidance)}
+
+When you are confident the plan is complete, present it with the plan_output tool.
 `.trim();
+}
 
 type ReviewAction = "approve" | "revise" | "cancel" | "diff" | "summary" | "allSummary" | "qa";
 
@@ -74,13 +148,24 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 
 	// ─── Git Helpers ────────────────────────────────────────
 
-	async function gitExec(dir: string, args: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
-		return pi.exec("git", ["-C", dir, ...args], { timeout: 10_000 });
+	async function gitExec(
+		dir: string,
+		args: string[],
+		options: { allowFailure?: boolean } = {},
+	): Promise<{ stdout: string; stderr: string; code: number }> {
+		const result = await pi.exec("git", ["-C", dir, ...args], { timeout: 10_000 });
+		if (result.code !== 0 && !options.allowFailure) {
+			const details = [result.stderr.trim(), result.stdout.trim()].filter(Boolean).join("\n");
+			throw new Error(details || `git ${args.join(" ")} failed with exit code ${result.code}`);
+		}
+		return result;
 	}
 
 	async function initPlanRepo(dir: string): Promise<void> {
 		await mkdir(dir, { recursive: true });
 		await gitExec(dir, ["init"]);
+		await gitExec(dir, ["config", "user.name", "pi plan mode"]);
+		await gitExec(dir, ["config", "user.email", "plan-mode@pi.local"]);
 		// Seed with an empty commit so HEAD~1 works after the first plan commit
 		await writeFile(join(dir, ".gitkeep"), "", "utf-8");
 		await gitExec(dir, ["add", "."]);
@@ -90,29 +175,30 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 	async function savePlanAndCommit(dir: string, content: string, iteration: number): Promise<void> {
 		await writeFile(join(dir, "plan.md"), content, "utf-8");
 		await gitExec(dir, ["add", "plan.md"]);
+		const stagedDiff = await gitExec(dir, ["diff", "--cached", "--quiet", "--", "plan.md"], {
+			allowFailure: true,
+		});
+		if (stagedDiff.code === 0) return;
+		if (stagedDiff.code !== 1) {
+			const details = [stagedDiff.stderr.trim(), stagedDiff.stdout.trim()].filter(Boolean).join("\n");
+			throw new Error(details || "Unable to determine whether the staged plan changed");
+		}
 		await gitExec(dir, ["commit", "-m", `Plan iteration ${iteration}`]);
 	}
 
 	async function getLastDiff(dir: string): Promise<string> {
-		try {
-			const { stdout } = await gitExec(dir, ["diff", "HEAD~1", "HEAD", "--", "plan.md"]);
-			return stdout;
-		} catch {
-			return "";
-		}
+		const result = await gitExec(dir, ["diff", "HEAD~1", "HEAD", "--", "plan.md"], { allowFailure: true });
+		return result.code === 0 ? result.stdout : "";
 	}
 
 	async function getFullDiff(dir: string): Promise<string> {
-		try {
-			// diff from the very first commit (the seed) to HEAD
-			const { stdout: revList } = await gitExec(dir, ["rev-list", "--max-parents=0", "HEAD"]);
-			const first = revList.trim().split("\n")[0];
-			if (!first) return "";
-			const { stdout } = await gitExec(dir, ["diff", first, "HEAD", "--", "plan.md"]);
-			return stdout;
-		} catch {
-			return "";
-		}
+		// diff from the very first commit (the seed) to HEAD
+		const revList = await gitExec(dir, ["rev-list", "--max-parents=0", "HEAD"], { allowFailure: true });
+		if (revList.code !== 0) return "";
+		const first = revList.stdout.trim().split("\n")[0];
+		if (!first) return "";
+		const diff = await gitExec(dir, ["diff", first, "HEAD", "--", "plan.md"], { allowFailure: true });
+		return diff.code === 0 ? diff.stdout : "";
 	}
 
 	// ─── UI Helpers ─────────────────────────────────────────
@@ -800,20 +886,24 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		name: "plan_output",
 		label: "Plan Output",
 		description:
-			"Present a plan to the user for interactive review. " +
-			"Use this ONLY after you have asked enough clarifying questions and are ready " +
-			"to present a comprehensive plan. The plan must be in markdown format.",
-		promptSnippet: "Present a markdown plan to the user for interactive review and approval",
+			"Present a comprehensive implementation plan with impact analysis to the user for interactive review. " +
+			"Use this ONLY after you have gathered the necessary knowledge from the user and codebase " +
+			"and are ready to present a complete markdown plan that reduces blindspots and unexpected changes.",
+		promptSnippet:
+			"Present a comprehensive markdown implementation plan with impact analysis after gathering the necessary requirement and repository context",
 		promptGuidelines: [
-			"ALWAYS ask clarifying questions before calling plan_output. Never assume requirements.",
-			"Only call plan_output when you have enough information to write a complete plan.",
+			"Before calling plan_output, inspect the relevant code, configs, tests, docs, interfaces, and dependencies when repository knowledge would materially improve the plan.",
+			"Ask targeted clarifying questions about unresolved scope, constraints, success criteria, preserved behavior, compatibility, rollout, and validation requirements before calling plan_output.",
+			"Perform impact analysis: identify affected files, modules, callers, downstream behaviors, hidden dependencies, regressions, and anything that may change unexpectedly.",
+			"Only call plan_output when you have enough information to write a complete, execution-ready plan.",
+			"The plan should include goal, current-state findings, impact analysis, assumptions/open questions, phased implementation steps, validation, and risks; include rollout/backout when relevant.",
 			"If the user requests revisions, update the plan and call plan_output again.",
 		],
 		parameters: Type.Object({
 			title: Type.String({ description: "Short descriptive title for the plan" }),
 			plan: Type.String({
 				description:
-					"Full plan in markdown. Use headings, numbered steps, code blocks, and clear structure.",
+					"Full plan in markdown. Include goal, findings/context, impact analysis, assumptions or open questions, phased steps, validation, risks, and rollout/backout when relevant.",
 			}),
 		}),
 
@@ -831,12 +921,14 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 				};
 			}
 
+			// Keep the latest title visible across revisions
+			planTitle = params.title;
+
 			// First iteration → create the plan git repo
 			if (!planDir) {
 				const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
 				const slug = generateSlug(params.title);
 				planDir = join(PLANS_BASE, `${ts}_${slug}`);
-				planTitle = params.title;
 
 				try {
 					await initPlanRepo(planDir);
@@ -1019,10 +1111,10 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 
 		// Skip assistant messages that contain a plan_output tool call
 		if (msg.role === "assistant") {
-			const hasToolUse = (msg.content ?? []).some(
-				(c) => c.type === "tool_use" && c.name === "plan_output",
+			const hasToolCall = (msg.content ?? []).some(
+				(c) => (c.type === "toolCall" || c.type === "tool_use") && c.name === "plan_output",
 			);
-			if (hasToolUse) return;
+			if (hasToolCall) return;
 		}
 
 		if (msg.role === "user" || msg.role === "assistant") {
@@ -1043,12 +1135,11 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		if (!active) return;
 
 		return {
-			systemPrompt: event.systemPrompt + "\n\n" + PLAN_MODE_SYSTEM_PROMPT,
+			systemPrompt: event.systemPrompt + "\n\n" + buildPlanModeSystemPrompt(event.systemPromptOptions),
 			message: {
 				customType: "plan-mode-context",
 				content:
-					"[PLAN MODE] I will ask clarifying questions before creating a plan. " +
-					"I should wait for approval before executing changes.",
+					"[PLAN MODE] I will gather the missing user and repository context, ask targeted clarifying questions, and wait for approval before executing changes.",
 				display: false,
 			},
 		};

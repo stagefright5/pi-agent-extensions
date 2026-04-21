@@ -9,13 +9,16 @@ Plan Mode switches the agent into a guided planning workflow where it must ask c
 When enabled, this extension:
 
 - leaves the current active tool set unchanged while planning
-- requires the agent to ask clarifying questions before presenting a plan
+- requires the agent to gather missing knowledge from both the user and the codebase before presenting a plan
+- pushes the agent to perform impact analysis so the user can avoid blindspots, unexpected changes, and unknown behaviors
+- uses the latest `before_agent_start.systemPromptOptions` context to tailor planning instructions to the active tools, loaded context files, and loaded skills
 - instructs the agent to wait for approval before executing changes
 - renders plans in an interactive review UI
 - stores each plan iteration in a per-plan git repo
 - shows diffs between revisions
 - generates LLM summaries of changes between iterations or across all iterations
 - keeps a Q&A history for plan discussions
+- ignores modern `toolCall` plan submissions when building the Q&A history
 - does not modify tool activation state when entering or leaving plan mode
 
 ## Activation
@@ -78,7 +81,7 @@ Each plan gets its own timestamped directory and stores the current plan as `pla
 Plan Mode uses pi extension APIs to:
 
 - register the `plan_output` custom tool
-- inject plan-specific system instructions
+- inject plan-specific system instructions using the latest structured system prompt context from pi
 - keep tool activation unchanged while planning
 - store extension state in the session
 - render custom TUI screens for review, diffs, summaries, and Q&A
