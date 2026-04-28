@@ -143,6 +143,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 	let iterations: string[] = []; // full markdown text per iteration
 	let planTitle: string | null = null;
 	let qaMessages: Array<{ role: "user" | "assistant"; content: string }> = [];
+	let isAgentWorking = false;
 
 	const PLANS_BASE = join(homedir(), ".pi", "plans");
 
@@ -206,15 +207,20 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 	function updateUI(ctx: ExtensionContext): void {
 		const t = ctx.ui.theme;
 		if (active) {
-			ctx.ui.setStatus("plan-mode", t.fg("warning", "📋 PLAN"));
+			ctx.ui.setStatus("plan-mode", t.fg("warning", isAgentWorking ? "📋 PLAN …" : "📋 PLAN"));
 
-			if (iterations.length > 0) {
+			if (iterations.length > 0 || isAgentWorking) {
 				const widgetLines: string[] = [];
 				widgetLines.push(
 					t.fg("accent", "📋 Plan Mode") +
 						(planTitle ? t.fg("muted", ` — ${planTitle}`) : "") +
-						t.fg("dim", ` (${iterations.length} iteration${iterations.length !== 1 ? "s" : ""})`),
+						(iterations.length > 0
+							? t.fg("dim", ` (${iterations.length} iteration${iterations.length !== 1 ? "s" : ""})`)
+							: ""),
 				);
+				if (isAgentWorking) {
+					widgetLines.push(t.fg("warning", "  Agent is gathering planning context…"));
+				}
 				const hints: string[] = [];
 				if (iterations.length > 1) {
 					hints.push("ctrl+alt+d diff", "ctrl+alt+s summary", "ctrl+alt+a all changes");
@@ -262,7 +268,9 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		iterations = [];
 		planTitle = null;
 		qaMessages = [];
+		isAgentWorking = false;
 
+		ctx.ui.setWorkingVisible(false);
 		ctx.ui.notify("📋 Plan mode activated. The agent will ask questions before creating a plan.", "info");
 		updateUI(ctx);
 		persistState();
@@ -270,6 +278,8 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 
 	function exitPlanMode(ctx: ExtensionContext, approved = false): void {
 		active = false;
+		isAgentWorking = false;
+		ctx.ui.setWorkingVisible(true);
 		ctx.ui.notify(approved ? "✅ Plan approved! Plan mode deactivated." : "📋 Plan mode deactivated.", "info");
 		updateUI(ctx);
 		persistState();
@@ -1101,6 +1111,26 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		},
 	});
 
+	// ─── Events: Working Row Visibility ─────────────────────
+
+	pi.on("agent_start", async (_event, ctx) => {
+		if (!active) return;
+		isAgentWorking = true;
+		ctx.ui.setWorkingVisible(false);
+		updateUI(ctx);
+	});
+
+	pi.on("agent_end", async (_event, ctx) => {
+		if (!active && !isAgentWorking) return;
+		isAgentWorking = false;
+		updateUI(ctx);
+	});
+
+	pi.on("session_shutdown", async (_event, ctx) => {
+		isAgentWorking = false;
+		ctx.ui.setWorkingVisible(true);
+	});
+
 	// ─── Event: Capture Q&A messages ────────────────────────
 
 	pi.on("message_end", async (event) => {
@@ -1197,6 +1227,8 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			qaMessages = stateEntry.data.qaMessages ?? [];
 		}
 
+		isAgentWorking = false;
+		ctx.ui.setWorkingVisible(!active);
 		updateUI(ctx);
 	});
 }
