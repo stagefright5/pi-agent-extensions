@@ -12,6 +12,7 @@ When enabled, this extension:
 - requires the agent to gather missing knowledge from both the user and the codebase before presenting a plan
 - pushes the agent to perform impact analysis so the user can avoid blindspots, unexpected changes, and unknown behaviors
 - uses the latest `before_agent_start.systemPromptOptions` context to tailor planning instructions to the active tools, loaded context files, and loaded skills
+- hides pi's built-in working row while plan mode is active and shows planning progress in the plan-mode status/widget instead
 - instructs the agent to wait for approval before executing changes
 - renders plans in an interactive review UI
 - stores each plan iteration in a per-plan git repo
