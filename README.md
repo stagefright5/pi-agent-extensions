@@ -9,15 +9,19 @@ Each extension lives in its own directory and should document its behavior local
 ```text
 .
 ├── README.md
-└── plan-mode/
+├── plan-mode/
+│   ├── README.md
+│   ├── index.ts
+│   └── utils.ts
+└── prompt-undo-redo/
     ├── README.md
-    ├── index.ts
-    └── utils.ts
+    └── index.ts
 ```
 
 ## Available extensions
 
 - [`plan-mode/`](./plan-mode/README.md) — interactive planning mode for pi with clarifying questions, plan review, approval, diffs, summaries, and Q&A history.
+- [`prompt-undo-redo/`](./prompt-undo-redo/README.md) — prompt editor undo/redo shortcuts (`Ctrl+Z`, `Ctrl+Shift+Z`, `Ctrl+Y`).
 
 ## Installing an extension
 
