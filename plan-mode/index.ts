@@ -48,7 +48,49 @@ function formatPromptList(items: string[], maxItems = 8): string {
 	return visible.join("\n");
 }
 
-function buildPlanModeSystemPrompt(options: BuildSystemPromptOptions): string {
+type PlanModePromptState = {
+	planPresented: boolean;
+	iterationCount: number;
+	planTitle: string | null;
+	reviewRevisionPending: boolean;
+};
+
+function formatPlanModeState(state: PlanModePromptState | undefined): string {
+	if (!state?.planPresented) {
+		return "- No plan has been presented yet in this plan-mode session.";
+	}
+
+	const lines = [
+		`- A plan has already been presented (${state.iterationCount} iteration${state.iterationCount === 1 ? "" : "s"}).`,
+	];
+	if (state.planTitle) lines.push(`- Current plan title: ${state.planTitle}`);
+	if (state.reviewRevisionPending) {
+		lines.push("- The user requested a revision through the review UI; produce the revised complete plan with plan_output.");
+	} else {
+		lines.push("- The user may ask normal follow-up questions about the plan; answer those in regular assistant text.");
+	}
+	return lines.join("\n");
+}
+
+function isPlanRevisionIntent(text: string): boolean {
+	const normalized = text.toLowerCase().replace(/\s+/g, " ").trim();
+	if (!normalized) return false;
+
+	const explicitRevision =
+		/\b(revise|revision|update|change|modify|edit|adjust|rework|rewrite|regenerate|redo|replan|amend)\b/.test(normalized) ||
+		/\b(add|include|incorporate|remove|exclude|drop|expand|shorten|tighten|simplify)\b/.test(normalized) ||
+		/\b(plan should|new plan|another plan|updated plan|revised plan)\b/.test(normalized);
+
+	if (!explicitRevision) return false;
+
+	const clarificationOnly =
+		/\b(why|what|how|explain|clarify|question|rationale|tell me|help me understand)\b/.test(normalized) &&
+		!/\b(to the plan|in the plan|the plan|plan should|updated plan|revised plan)\b/.test(normalized);
+
+	return !clarificationOnly;
+}
+
+function buildPlanModeSystemPrompt(options: BuildSystemPromptOptions, state?: PlanModePromptState): string {
 	const activeTools = options.selectedTools ?? [];
 	const toolSnippets = options.toolSnippets ?? {};
 	const contextFiles = options.contextFiles ?? [];
@@ -95,6 +137,15 @@ Core workflow:
 7. Only call the plan_output tool when you have enough knowledge to write a plan that another engineer could execute confidently, with the likely impact and risks clearly called out.
 8. Do NOT execute the plan yet. Wait for explicit user approval before editing files, making destructive changes, or running implementation steps.
 9. If the user asks for revisions, incorporate the feedback, preserve useful prior context, and call plan_output again with the updated plan.
+
+Current plan state:
+${formatPlanModeState(state)}
+
+Post-plan conversation routing:
+- After a plan has been presented, treat follow-up questions, clarification requests, rationale questions, trade-off discussions, and "why/how/what does this mean" prompts as normal chat. Answer them directly in regular assistant text; do NOT call plan_output.
+- Only call plan_output again when the user explicitly asks to revise, update, change, regenerate, or replace the plan, or when revision feedback came from the review UI.
+- If the user gives ambiguous feedback after a plan has been presented, ask whether they want the saved plan revised instead of silently overwriting it.
+- Never put a normal clarification answer inside the plan_output 'plan' field, because that replaces the saved plan iteration.
 
 What you must gather before plan_output:
 - The exact objective and desired outcome
@@ -144,6 +195,9 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 	let planTitle: string | null = null;
 	let qaMessages: Array<{ role: "user" | "assistant"; content: string }> = [];
 	let isAgentWorking = false;
+	let lastUserInputText = "";
+	let lastUserInputPlanIteration = -1;
+	let allowNextPlanOutputFromReviewRevision = false;
 
 	const PLANS_BASE = join(homedir(), ".pi", "plans");
 
@@ -269,6 +323,9 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		planTitle = null;
 		qaMessages = [];
 		isAgentWorking = false;
+		lastUserInputText = "";
+		lastUserInputPlanIteration = -1;
+		allowNextPlanOutputFromReviewRevision = false;
 
 		ctx.ui.setWorkingVisible(false);
 		ctx.ui.notify("📋 Plan mode activated. The agent will ask questions before creating a plan.", "info");
@@ -279,6 +336,9 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 	function exitPlanMode(ctx: ExtensionContext, approved = false): void {
 		active = false;
 		isAgentWorking = false;
+		lastUserInputText = "";
+		lastUserInputPlanIteration = -1;
+		allowNextPlanOutputFromReviewRevision = false;
 		ctx.ui.setWorkingVisible(true);
 		ctx.ui.notify(approved ? "✅ Plan approved! Plan mode deactivated." : "📋 Plan mode deactivated.", "info");
 		updateUI(ctx);
@@ -899,7 +959,8 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		description:
 			"Present a comprehensive implementation plan with impact analysis to the user for interactive review. " +
 			"Use this ONLY after you have gathered the necessary knowledge from the user and codebase " +
-			"and are ready to present a complete markdown plan that reduces blindspots and unexpected changes.",
+			"and are ready to present a complete markdown plan that reduces blindspots and unexpected changes. " +
+			"Do not use this for normal chat, explanations, or clarification answers after a plan has already been presented.",
 		promptSnippet:
 			"Present a comprehensive markdown implementation plan with impact analysis after gathering the necessary requirement and repository context",
 		promptGuidelines: [
@@ -907,6 +968,8 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			"Ask targeted clarifying questions about unresolved scope, constraints, success criteria, preserved behavior, compatibility, rollout, and validation requirements before calling plan_output.",
 			"Perform impact analysis: identify affected files, modules, callers, downstream behaviors, hidden dependencies, regressions, and anything that may change unexpectedly.",
 			"Only call plan_output when you have enough information to write a complete, execution-ready plan.",
+			"After a plan has already been presented, answer clarification questions normally in assistant text; do not call plan_output unless the user explicitly requests a revised or replacement plan.",
+			"Never put a one-off explanation or answer inside plan_output's plan field, because that replaces the saved plan iteration.",
 			"The plan should include goal, current-state findings, impact analysis, assumptions/open questions, phased implementation steps, validation, and risks; include rollout/backout when relevant.",
 			"If the user requests revisions, update the plan and call plan_output again.",
 		],
@@ -967,51 +1030,72 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			persistState();
 			updateUI(ctx);
 
-			// Interactive review loop
-			const result = await planReviewLoop(ctx, params.plan, iteration);
+			const presentedPlan = params.plan;
+			const presentedPlanDir = planDir;
 
-			switch (result.action) {
-				case "approve":
-					exitPlanMode(ctx, true);
-					return {
-						content: [
-							{
-								type: "text",
-								text:
-									"✅ Plan approved by the user.\n" +
-									"Execute the approved plan step by step. Here is the plan:\n\n" +
-									params.plan,
-							},
-						],
-						details: { approved: true, iteration, planDir },
-					};
+			const sendReviewFollowUp = (content: string): void => {
+				try {
+					if (ctx.isIdle()) {
+						pi.sendUserMessage(content);
+					} else {
+						pi.sendUserMessage(content, { deliverAs: "followUp" });
+					}
+				} catch (err) {
+					ctx.ui.notify(`Unable to send plan review follow-up: ${err}`, "error");
+				}
+			};
 
-				case "revise":
-					return {
-						content: [
-							{
-								type: "text",
-								text:
-									`The user wants changes to the plan.\n\nUser feedback:\n${result.feedback}\n\n` +
-									"Update the plan based on this feedback and present the revised version by calling plan_output again.",
-							},
-						],
-						details: { revised: true, feedback: result.feedback, iteration },
-					};
+			const runReview = async (): Promise<void> => {
+				try {
+					const result = await planReviewLoop(ctx, presentedPlan, iteration);
 
-				case "cancel":
-					return {
-						content: [
-							{
-								type: "text",
-								text:
-									"The user closed the plan review without approving or requesting revisions. " +
-									"Continue the conversation — ask if they want to discuss further or have additional questions.",
-							},
-						],
-						details: { cancelled: true, iteration },
-					};
-			}
+					switch (result.action) {
+						case "approve":
+							allowNextPlanOutputFromReviewRevision = false;
+							exitPlanMode(ctx, true);
+							sendReviewFollowUp(
+								"✅ I approve this plan. Execute the approved plan step by step. Here is the plan:\n\n" +
+									presentedPlan,
+							);
+							break;
+
+						case "revise":
+							allowNextPlanOutputFromReviewRevision = true;
+							sendReviewFollowUp(
+								`Please revise the plan based on this review feedback and present the revised version by calling plan_output.\n\nFeedback:\n${result.feedback}`,
+							);
+							break;
+
+						case "cancel":
+							allowNextPlanOutputFromReviewRevision = false;
+							ctx.ui.notify(
+								"Plan review closed. Ask a follow-up question normally, or explicitly request a revision to update the plan.",
+								"info",
+							);
+							updateUI(ctx);
+							break;
+					}
+				} catch (err) {
+					ctx.ui.notify(`Plan review failed: ${err}`, "error");
+				}
+			};
+
+			setTimeout(() => {
+				void runReview();
+			}, 0);
+
+			return {
+				content: [
+					{
+						type: "text",
+						text:
+							"Plan presented to the user for asynchronous review. " +
+							"Do not continue until the user approves, requests revisions, or asks a follow-up question.",
+					},
+				],
+				details: { presented: true, iteration, planDir: presentedPlanDir },
+				terminate: true,
+			};
 		},
 
 		// ── Custom rendering in the message stream ──
@@ -1111,6 +1195,34 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		},
 	});
 
+	// ─── Events: Post-plan routing guard ─────────────────────
+
+	pi.on("input", async (event) => {
+		if (!active || event.source === "extension") return;
+		lastUserInputText = event.text;
+		lastUserInputPlanIteration = iterations.length;
+	});
+
+	pi.on("tool_call", async (event) => {
+		if (!active || event.toolName !== "plan_output" || iterations.length === 0) return;
+
+		if (allowNextPlanOutputFromReviewRevision) {
+			allowNextPlanOutputFromReviewRevision = false;
+			return;
+		}
+
+		const latestUserInputIsAfterCurrentPlan = lastUserInputPlanIteration === iterations.length;
+		if (latestUserInputIsAfterCurrentPlan && isPlanRevisionIntent(lastUserInputText)) return;
+
+		return {
+			block: true,
+			reason:
+				"Plan mode: plan_output is only for presenting a new or revised complete plan. " +
+				"The latest user message appears to be a clarification or follow-up question, so answer it normally in assistant text without changing the saved plan. " +
+				"If the user explicitly wants a revised plan, ask them to request a revision/update.",
+		};
+	});
+
 	// ─── Events: Working Row Visibility ─────────────────────
 
 	pi.on("agent_start", async (_event, ctx) => {
@@ -1165,12 +1277,20 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 	pi.on("before_agent_start", async (event) => {
 		if (!active) return;
 
+		const promptState: PlanModePromptState = {
+			planPresented: iterations.length > 0,
+			iterationCount: iterations.length,
+			planTitle,
+			reviewRevisionPending: allowNextPlanOutputFromReviewRevision,
+		};
+
 		return {
-			systemPrompt: event.systemPrompt + "\n\n" + buildPlanModeSystemPrompt(event.systemPromptOptions),
+			systemPrompt: event.systemPrompt + "\n\n" + buildPlanModeSystemPrompt(event.systemPromptOptions, promptState),
 			message: {
 				customType: "plan-mode-context",
 				content:
-					"[PLAN MODE] I will gather the missing user and repository context, ask targeted clarifying questions, and wait for approval before executing changes.",
+					"[PLAN MODE] I will gather missing user and repository context before the first plan. " +
+					"After a plan is presented, I will answer clarification questions normally and only call plan_output for explicit plan revisions.",
 				display: false,
 			},
 		};
@@ -1228,6 +1348,9 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		}
 
 		isAgentWorking = false;
+		lastUserInputText = "";
+		lastUserInputPlanIteration = -1;
+		allowNextPlanOutputFromReviewRevision = false;
 		ctx.ui.setWorkingVisible(!active);
 		updateUI(ctx);
 	});
