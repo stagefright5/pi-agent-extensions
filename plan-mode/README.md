@@ -14,11 +14,13 @@ When enabled, this extension:
 - uses the latest `before_agent_start.systemPromptOptions` context to tailor planning instructions to the active tools, loaded context files, and loaded skills
 - hides pi's built-in working row while plan mode is active and shows planning progress in the plan-mode status/widget instead
 - instructs the agent to wait for approval before executing changes
-- renders plans in an interactive review UI
+- renders plans in an interactive review UI without keeping the `plan_output` tool running while you review
 - stores each plan iteration in a per-plan git repo
 - shows diffs between revisions
 - generates LLM summaries of changes between iterations or across all iterations
 - keeps a Q&A history for plan discussions
+- answers post-plan clarification questions normally instead of replacing the saved plan
+- guards `plan_output` after a plan is presented so it is only used for explicit revisions/replacements
 - ignores modern `toolCall` plan submissions when building the Q&A history
 - does not modify tool activation state when entering or leaving plan mode
 
