@@ -13,7 +13,6 @@
 import { CustomEditor, type ExtensionAPI, type KeybindingsManager } from "@earendil-works/pi-coding-agent";
 import {
 	decodeKittyPrintable,
-	getKeybindings,
 	Key,
 	matchesKey,
 	truncateToWidth,
@@ -79,9 +78,11 @@ class UndoRedoEditor extends CustomEditor {
 	private undoHistory: Snapshot[] = [];
 	private redoHistory: Snapshot[] = [];
 	private lastEditWasTyping = false;
+	private readonly appKeybindings: KeybindingsManager;
 
 	constructor(tui: TUI, theme: EditorTheme, keybindings: KeybindingsManager, options?: EditorOptions) {
 		super(tui, theme, keybindings, options);
+		this.appKeybindings = keybindings;
 	}
 
 	override handleInput(data: string): void {
@@ -246,8 +247,7 @@ class UndoRedoEditor extends CustomEditor {
 	}
 
 	private isUndoKey(data: string): boolean {
-		const keybindings = getKeybindings();
-		return keybindings.matches(data, "tui.editor.undo") || matchesKey(data, Key.ctrl("z"));
+		return this.appKeybindings.matches(data, "tui.editor.undo") || matchesKey(data, Key.ctrl("z"));
 	}
 
 	private isRedoKey(data: string): boolean {
@@ -255,7 +255,7 @@ class UndoRedoEditor extends CustomEditor {
 	}
 
 	private isSubmitKey(data: string): boolean {
-		return getKeybindings().matches(data, "tui.input.submit");
+		return this.appKeybindings.matches(data, "tui.input.submit");
 	}
 
 	private isPlainPrintable(data: string): boolean {
@@ -265,12 +265,12 @@ class UndoRedoEditor extends CustomEditor {
 
 export default function promptUndoRedoExtension(pi: ExtensionAPI): void {
 	pi.on("session_start", (_event, ctx) => {
-		if (!ctx.hasUI) return;
+		if (ctx.mode !== "tui") return;
 		ctx.ui.setEditorComponent((tui, theme, keybindings) => new UndoRedoEditor(tui, theme, keybindings));
 	});
 
 	pi.on("session_shutdown", (_event, ctx) => {
-		if (!ctx.hasUI) return;
+		if (ctx.mode !== "tui") return;
 		ctx.ui.setEditorComponent(undefined);
 	});
 }

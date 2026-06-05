@@ -982,10 +982,10 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		}),
 
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-			if (!ctx.hasUI) {
+			if (ctx.mode !== "tui") {
 				return {
-					content: [{ type: "text", text: "Error: plan review requires interactive mode." }],
-					details: {},
+					content: [{ type: "text", text: "Error: plan review requires TUI interactive mode." }],
+					details: { mode: ctx.mode },
 				};
 			}
 			if (signal?.aborted) {
@@ -1199,6 +1199,13 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 
 	pi.on("input", async (event) => {
 		if (!active || event.source === "extension") return;
+
+		// Mid-stream steering is part of the current agent turn, not a new
+		// post-plan routing signal. Do not let it overwrite the input used by
+		// the plan_output guard to decide whether a later plan replacement is
+		// an explicit user-requested revision.
+		if (event.streamingBehavior === "steer") return;
+
 		lastUserInputText = event.text;
 		lastUserInputPlanIteration = iterations.length;
 	});
