@@ -28,12 +28,23 @@
 import type { BuildSystemPromptOptions, ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { BorderedLoader, DynamicBorder, getMarkdownTheme } from "@earendil-works/pi-coding-agent";
 import { complete } from "@earendil-works/pi-ai";
-import { Container, Key, Markdown, matchesKey, Spacer, Text, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import {
+	Container,
+	Key,
+	Markdown,
+	matchesKey,
+	Spacer,
+	Text,
+	truncateToWidth,
+	type TUI,
+	visibleWidth,
+	wrapTextWithAnsi,
+} from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { generateSlug } from "./utils.js";
+import { generateSlug } from "./utils.ts";
 
 // ─── Constants ──────────────────────────────────────────────
 
@@ -50,6 +61,18 @@ const SYMBOL = {
 	warning: "△",
 };
 
+function isTui(ctx: ExtensionContext): boolean {
+	return ctx.mode === "tui";
+}
+
+function notifyRequiresTui(ctx: ExtensionContext, feature: string): void {
+	ctx.ui.notify(`${feature} requires TUI interactive mode.`, "error");
+}
+
+function getTerminalRows(): number {
+	return process.stdout.rows || 24;
+}
+
 function formatPromptList(items: string[], maxItems = 8): string {
 	if (items.length === 0) return "- none";
 	const visible = items.slice(0, maxItems).map((item) => `- ${item}`);
@@ -64,6 +87,15 @@ type PlanModePromptState = {
 	iterationCount: number;
 	planTitle: string | null;
 	revisionPending: boolean;
+};
+
+type PersistedPlanModeState = {
+	active?: boolean;
+	planDir?: string | null;
+	iterations?: string[];
+	planTitle?: string | null;
+	qaMessages?: Array<{ role: "user" | "assistant"; content: string }>;
+	revisionPending?: boolean;
 };
 
 function formatPlanModeState(state: PlanModePromptState | undefined): string {
@@ -408,16 +440,16 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		}
 	}
 
-	function enableMouseWheel(tui: Container & { terminal?: { write(data: string): void } }): () => void {
+	function enableMouseWheel(tui: TUI): () => void {
 		// Enable basic mouse tracking + SGR extended coordinates so wheel events
 		// arrive as escape sequences like ESC [ < 64 ; x ; y M.
-		tui.terminal?.write("\x1b[?1000h\x1b[?1006h");
+		tui.terminal.write("\x1b[?1000h\x1b[?1006h");
 
 		let cleanedUp = false;
 		return () => {
 			if (cleanedUp) return;
 			cleanedUp = true;
-			tui.terminal?.write("\x1b[?1000l\x1b[?1006l");
+			tui.terminal.write("\x1b[?1000l\x1b[?1006l");
 		};
 	}
 
@@ -484,9 +516,61 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		});
 	}
 
+	function sendFollowUpOrImmediate(ctx: ExtensionContext, content: string, errorLabel: string): void {
+		try {
+			if (ctx.isIdle()) {
+				pi.sendUserMessage(content);
+			} else {
+				pi.sendUserMessage(content, { deliverAs: "followUp" });
+			}
+		} catch (err) {
+			ctx.ui.notify(`${errorLabel}: ${err}`, "error");
+		}
+	}
+
+	function resetTransientState(): void {
+		isAgentWorking = false;
+		lastUserInputText = "";
+		lastUserInputPlanIteration = -1;
+		allowNextPlanOutputFromReviewRevision = false;
+		revisionResubmitPromptQueued = false;
+	}
+
+	function restoreStateFromSession(ctx: ExtensionContext): void {
+		const stateEntry = ctx.sessionManager
+			.getBranch()
+			.filter(
+				(e: { type: string; customType?: string }) =>
+					e.type === "custom" && e.customType === "plan-mode-interactive",
+			)
+			.pop() as { data?: PersistedPlanModeState } | undefined;
+
+		if (stateEntry?.data) {
+			active = stateEntry.data.active ?? false;
+			planDir = stateEntry.data.planDir ?? null;
+			iterations = stateEntry.data.iterations ?? [];
+			planTitle = stateEntry.data.planTitle ?? null;
+			qaMessages = stateEntry.data.qaMessages ?? [];
+			revisionPending = stateEntry.data.revisionPending ?? false;
+		} else {
+			active = false;
+			planDir = null;
+			iterations = [];
+			planTitle = null;
+			qaMessages = [];
+			revisionPending = false;
+		}
+
+		resetTransientState();
+	}
+
 	// ─── Diff UI ────────────────────────────────────────────
 
 	async function showDiffUI(ctx: ExtensionContext): Promise<void> {
+		if (!isTui(ctx)) {
+			notifyRequiresTui(ctx, "Plan diff");
+			return;
+		}
 		if (!planDir || iterations.length < 2) {
 			ctx.ui.notify("Need at least 2 iterations to show a diff.", "warning");
 			return;
@@ -528,7 +612,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 							cachedWidth = width;
 						}
 
-						const modalHeight = Math.max(10, Math.floor((process.stdout.rows || 24) * 0.85));
+						const modalHeight = Math.max(10, Math.floor(getTerminalRows() * 0.85));
 						const headerFooterLines = 7;
 						const viewportHeight = Math.max(5, modalHeight - headerFooterLines);
 						const maxScroll = Math.max(0, cachedDiffLines.length - viewportHeight);
@@ -586,7 +670,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 						cachedWidth = null;
 					},
 					handleInput(data: string) {
-						const modalHeight = Math.max(10, Math.floor((process.stdout.rows || 24) * 0.85));
+						const modalHeight = Math.max(10, Math.floor(getTerminalRows() * 0.85));
 						const viewportHeight = Math.max(5, modalHeight - 7);
 						const maxScroll = cachedDiffLines ? Math.max(0, cachedDiffLines.length - viewportHeight) : 0;
 						const wheelDelta = getMouseWheelDelta(data);
@@ -638,6 +722,10 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 	// ─── Summary UI ─────────────────────────────────────────
 
 	async function showSummaryUI(ctx: ExtensionContext, allChanges: boolean): Promise<void> {
+		if (!isTui(ctx)) {
+			notifyRequiresTui(ctx, allChanges ? "All-changes summary" : "Plan change summary");
+			return;
+		}
 		if (iterations.length < 2) {
 			ctx.ui.notify("Need at least 2 iterations to generate a summary.", "warning");
 			return;
@@ -751,6 +839,10 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 	// ─── Q&A History UI ─────────────────────────────────────
 
 	async function showQAUI(ctx: ExtensionContext): Promise<void> {
+		if (!isTui(ctx)) {
+			notifyRequiresTui(ctx, "Q&A history");
+			return;
+		}
 		if (qaMessages.length === 0) {
 			ctx.ui.notify("No Q&A history available.", "info");
 			return;
@@ -783,7 +875,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 						cachedWidth = width;
 					}
 
-					const termHeight = process.stdout.rows || 24;
+					const termHeight = getTerminalRows();
 					const headerFooterLines = 7;
 					const viewportHeight = Math.max(5, termHeight - headerFooterLines);
 					const maxScroll = Math.max(0, cachedMdLines.length - viewportHeight);
@@ -837,7 +929,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 				},
 
 				handleInput(data: string) {
-					const termHeight = process.stdout.rows || 24;
+					const termHeight = getTerminalRows();
 					const viewportHeight = Math.max(5, termHeight - 7);
 					const maxScroll = cachedMdLines ? Math.max(0, cachedMdLines.length - viewportHeight) : 0;
 					const wheelDelta = getMouseWheelDelta(data);
@@ -880,6 +972,10 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 	// ─── Plan Review UI (scrollable markdown) ───────────────
 
 	async function showPlanReview(ctx: ExtensionContext, plan: string, iteration: number): Promise<ReviewAction> {
+		if (!isTui(ctx)) {
+			notifyRequiresTui(ctx, "Plan review");
+			return "cancel";
+		}
 		return ctx.ui.custom<ReviewAction>((tui, theme, _kb, done) => {
 			const cleanupMouse = enableMouseWheel(tui);
 			const finish = (action: ReviewAction) => {
@@ -900,7 +996,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 						cachedWidth = width;
 					}
 
-					const modalHeight = Math.max(10, Math.floor((process.stdout.rows || 24) * 0.85));
+					const modalHeight = Math.max(10, Math.floor(getTerminalRows() * 0.85));
 					const headerFooterLines = 8;
 					const viewportHeight = Math.max(5, modalHeight - headerFooterLines);
 					const maxScroll = Math.max(0, cachedMdLines.length - viewportHeight);
@@ -967,7 +1063,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 				},
 
 				handleInput(data: string) {
-					const modalHeight = Math.max(10, Math.floor((process.stdout.rows || 24) * 0.85));
+					const modalHeight = Math.max(10, Math.floor(getTerminalRows() * 0.85));
 					const viewportHeight = Math.max(5, modalHeight - 8);
 					const maxScroll = cachedMdLines ? Math.max(0, cachedMdLines.length - viewportHeight) : 0;
 					const wheelDelta = getMouseWheelDelta(data);
@@ -1172,15 +1268,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			const presentedPlanDir = planDir;
 
 			const sendReviewFollowUp = (content: string): void => {
-				try {
-					if (ctx.isIdle()) {
-						pi.sendUserMessage(content);
-					} else {
-						pi.sendUserMessage(content, { deliverAs: "followUp" });
-					}
-				} catch (err) {
-					ctx.ui.notify(`Unable to send plan review follow-up: ${err}`, "error");
-				}
+				sendFollowUpOrImmediate(ctx, content, "Unable to send plan review follow-up");
 			};
 
 			const runReview = async (): Promise<void> => {
@@ -1250,21 +1338,14 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		},
 
 		renderResult(result, _options, theme, _context) {
-			const details = result.details as
-				| { approved?: boolean; revised?: boolean; cancelled?: boolean; iteration?: number }
-				| undefined;
+			const details = result.details as { presented?: boolean; iteration?: number; planDir?: string | null } | undefined;
 			if (!details) {
 				const first = result.content[0];
 				return new Text(first?.type === "text" ? truncateToWidth(first.text, 80) : "", 0, 0);
 			}
-			if (details.approved) {
-				return new Text(theme.fg("success", `${SYMBOL.approved} Plan approved (iteration ${details.iteration})`), 0, 0);
-			}
-			if (details.revised) {
-				return new Text(theme.fg("warning", `${SYMBOL.revision} Revision requested (iteration ${details.iteration})`), 0, 0);
-			}
-			if (details.cancelled) {
-				return new Text(theme.fg("dim", `${SYMBOL.closed} Review closed (iteration ${details.iteration})`), 0, 0);
+			if (details.presented) {
+				const iterationText = details.iteration ? ` (iteration ${details.iteration})` : "";
+				return new Text(theme.fg("muted", `${SYMBOL.plan} Plan presented for review${iterationText}`), 0, 0);
 			}
 			return new Text(theme.fg("muted", "Plan presented"), 0, 0);
 		},
@@ -1427,13 +1508,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 				revisionResubmitPromptQueued = true;
 				setTimeout(() => {
 					try {
-						if (ctx.isIdle()) {
-							pi.sendUserMessage(reminder);
-						} else {
-							pi.sendUserMessage(reminder, { deliverAs: "followUp" });
-						}
-					} catch (err) {
-						ctx.ui.notify(`Unable to request plan_output resubmission: ${err}`, "error");
+						sendFollowUpOrImmediate(ctx, reminder, "Unable to request plan_output resubmission");
 					} finally {
 						revisionResubmitPromptQueued = false;
 					}
@@ -1503,7 +1578,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		};
 	});
 
-	// ─── Event: Restore state on session start/resume ───────
+	// ─── Event: Restore state on session start/resume/tree navigation ───────
 
 	pi.on("session_start", async (_event, ctx) => {
 		// Check --plan flag
@@ -1512,47 +1587,13 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			return;
 		}
 
-		// Restore from persisted state
-		const entries = ctx.sessionManager.getEntries();
-		const stateEntry = entries
-			.filter(
-				(e: { type: string; customType?: string }) =>
-					e.type === "custom" && e.customType === "plan-mode-interactive",
-			)
-			.pop() as
-			| {
-					data?: {
-						active?: boolean;
-						planDir?: string | null;
-						iterations?: string[];
-						planTitle?: string | null;
-						qaMessages?: Array<{ role: "user" | "assistant"; content: string }>;
-						revisionPending?: boolean;
-					};
-			  }
-			| undefined;
+		restoreStateFromSession(ctx);
+		ctx.ui.setWorkingVisible(!active);
+		updateUI(ctx);
+	});
 
-		if (stateEntry?.data) {
-			active = stateEntry.data.active ?? false;
-			planDir = stateEntry.data.planDir ?? null;
-			iterations = stateEntry.data.iterations ?? [];
-			planTitle = stateEntry.data.planTitle ?? null;
-			qaMessages = stateEntry.data.qaMessages ?? [];
-			revisionPending = stateEntry.data.revisionPending ?? false;
-		} else {
-			active = false;
-			planDir = null;
-			iterations = [];
-			planTitle = null;
-			qaMessages = [];
-			revisionPending = false;
-		}
-
-		isAgentWorking = false;
-		lastUserInputText = "";
-		lastUserInputPlanIteration = -1;
-		allowNextPlanOutputFromReviewRevision = false;
-		revisionResubmitPromptQueued = false;
+	pi.on("session_tree", async (_event, ctx) => {
+		restoreStateFromSession(ctx);
 		ctx.ui.setWorkingVisible(!active);
 		updateUI(ctx);
 	});

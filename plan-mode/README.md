@@ -1,8 +1,8 @@
 # Plan Mode
 
-Interactive planning mode for pi.
+Interactive planning mode for pi, updated for the current pi 0.80.x extension and TUI APIs.
 
-Plan Mode switches the agent into a guided planning workflow where it must ask clarifying questions, build a plan, and wait for approval before executing the plan.
+Plan Mode switches the agent into a guided planning workflow where it must ask clarifying questions, inspect the codebase when useful, produce an impact-aware implementation plan, and wait for approval before executing the plan.
 
 ## What it does
 
@@ -11,21 +11,20 @@ When enabled, this extension:
 - leaves the current active tool set unchanged while planning
 - requires the agent to gather missing knowledge from both the user and the codebase before presenting a plan
 - pushes the agent to perform impact analysis so the user can avoid blindspots, unexpected changes, and unknown behaviors
-- uses the latest `before_agent_start.systemPromptOptions` context to tailor planning instructions to the active tools, loaded context files, and loaded skills
+- uses `before_agent_start.systemPromptOptions` to tailor planning instructions to active tools, loaded context files, and loaded skills
 - hides pi's built-in working row while plan mode is active and shows planning progress in the plan-mode status/widget instead
 - instructs the agent to wait for approval before executing changes
-- renders plans in an overlay review UI without keeping the `plan_output` tool running while you review
+- renders plans in a TUI overlay review UI without keeping the `plan_output` tool running while you review
 - renders a highlighted plan box in the main chat buffer when the review overlay is closed without approval or revision
 - keeps that chat-buffer plan copy display-only and filters it out of LLM context to avoid duplicating stale plans
-- stores each plan iteration in a per-plan git repo
+- stores each plan iteration in a per-plan git repo under `~/.pi/plans/`
 - shows diffs between revisions
 - generates LLM summaries of changes between iterations or across all iterations
 - keeps a Q&A history for plan discussions
 - answers post-plan clarification questions normally instead of replacing the saved plan
 - keeps a pending revision state so the agent can clarify/investigate during revisions but must submit the revised complete plan through `plan_output`
 - guards `plan_output` after a plan is presented so it is only used for explicit revisions/replacements
-- ignores modern `toolCall` plan submissions when building the Q&A history
-- does not modify tool activation state when entering or leaving plan mode
+- restores persisted state from the active session branch so tree navigation follows branch-local plan state
 
 ## Activation
 
@@ -83,15 +82,20 @@ Plan iterations are saved in a dedicated git repo under:
 
 Each plan gets its own timestamped directory and stores the current plan as `plan.md`, with git commits for every revision.
 
+Session state is stored with `pi.appendEntry()` and restored from the current session branch on startup, reload, resume, and tree navigation.
+
 ## How it integrates with pi
 
-Plan Mode uses pi extension APIs to:
+Plan Mode uses current pi extension APIs to:
 
-- register the `plan_output` custom tool
-- inject plan-specific system instructions using the latest structured system prompt context from pi
+- register the `plan_output` custom tool with prompt metadata and custom rendering
+- inject plan-specific system instructions using structured system prompt context
 - keep tool activation unchanged while planning
 - store extension state in the session
-- render custom TUI screens for review, diffs, summaries, and Q&A
+- render TUI overlay screens for review, diffs, summaries, and Q&A
+- render display-only custom messages for closed review plans
+
+The interactive review, diff, summary, and Q&A screens require TUI mode. In non-TUI modes, the extension reports that those features require interactive mode.
 
 ## Installation
 

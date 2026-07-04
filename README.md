@@ -2,7 +2,9 @@
 
 This repository is a small workspace for custom [pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) extensions.
 
-Each extension lives in its own directory and should document its behavior locally.
+The maintained extensions here target the current pi 0.80.x extension APIs and are kept as lightweight auto-discovered TypeScript scripts. No local package/workspace setup is required.
+
+Each extension lives in its own directory and documents its behavior locally.
 
 ## Structure
 
@@ -20,8 +22,10 @@ Each extension lives in its own directory and should document its behavior local
 
 ## Available extensions
 
-- [`plan-mode/`](./plan-mode/README.md) — interactive planning mode for pi with clarifying questions, plan review, approval, diffs, summaries, and Q&A history.
-- [`prompt-undo-redo/`](./prompt-undo-redo/README.md) — prompt editor undo/redo shortcuts (`Ctrl+Z`, `Ctrl+Shift+Z`, `Ctrl+Y`).
+- [`plan-mode/`](./plan-mode/README.md) — interactive planning mode for pi with clarifying questions, plan review, approval, diffs, summaries, Q&A history, and branch-aware state restoration.
+- [`prompt-undo-redo/`](./prompt-undo-redo/README.md) — prompt editor undo/redo shortcuts (`Ctrl+Z`, `Ctrl+Shift+Z`, `Ctrl+Y`) with cursor-restoring snapshots.
+
+`herdr-agent-state.ts` is intentionally not covered by this modernization pass.
 
 ## Installing an extension
 
@@ -36,7 +40,18 @@ So each directory in this repo is intended to be loadable as a pi extension.
 
 After adding or updating an extension, restart pi or run `/reload`.
 
+## Current API patterns used
+
+These extensions use modern pi APIs such as:
+
+- `ctx.ui.setEditorComponent()` / `ctx.ui.getEditorComponent()` for custom editor replacement and composition
+- `CustomEditor` for app-level editor keybinding support
+- `ctx.ui.custom(..., { overlay, overlayOptions })` for TUI overlays
+- `before_agent_start` with `event.systemPromptOptions` for context-aware system prompt customization
+- `pi.registerTool()` with prompt metadata and custom renderers
+- `pi.appendEntry()` plus session reconstruction for persistence
+
 ## Notes
 
 - Root-level docs stay generic.
-- Extension-specific usage, shortcuts, and behavior live in that extension's own `README.md`.
+- Extension-specific usage, shortcuts, and behavior live in each extension's own `README.md`.
