@@ -10,7 +10,12 @@
  * autocomplete, prompt history, paste handling, image paste, etc.
  */
 
-import { CustomEditor, type ExtensionAPI, type KeybindingsManager } from "@earendil-works/pi-coding-agent";
+import {
+	CustomEditor,
+	type EditorFactory,
+	type ExtensionAPI,
+	type KeybindingsManager,
+} from "@earendil-works/pi-coding-agent";
 import {
 	decodeKittyPrintable,
 	Key,
@@ -72,6 +77,60 @@ function decodePrintableInput(data: string): string | undefined {
 	}
 
 	return decodeKittyPrintable(data) ?? decodeModifyOtherKeysPrintable(data);
+}
+
+type EditorInternals = {
+	state?: { lines: string[]; cursorLine: number; cursorCol: number };
+	scrollOffset?: number;
+	historyIndex?: number;
+	lastAction?: unknown;
+	preferredVisualCol?: number | null;
+	snappedFromCursorCol?: number | null;
+	undoStack?: { clear?: () => void };
+	cancelAutocomplete?: () => void;
+	onChange?: (text: string) => void;
+	tui?: { requestRender?: () => void };
+};
+
+/**
+ * Restore text and cursor as one snapshot.
+ *
+ * pi-tui currently exposes `getCursor()` but no public `setCursor()` or
+ * complete editor snapshot-restore API. To preserve cursor-restoring undo/redo,
+ * this shim keeps all private Editor-state access in one defensive place. If a
+ * future pi-tui release changes these internals, callers fall back to public
+ * `setText()` behavior instead of throwing from input handling.
+ */
+function restoreEditorSnapshotViaInternalState(editor: CustomEditor, snapshot: Snapshot): boolean {
+	try {
+		const internal = editor as unknown as EditorInternals;
+		const state = internal.state;
+		if (!state || !Array.isArray(state.lines)) return false;
+		if (typeof state.cursorLine !== "number" || typeof state.cursorCol !== "number") return false;
+
+		internal.cancelAutocomplete?.();
+
+		const lines = snapshot.text.split("\n");
+		state.lines = lines.length > 0 ? lines : [""];
+		state.cursorLine = Math.max(0, Math.min(snapshot.cursor.line, state.lines.length - 1));
+		const currentLine = state.lines[state.cursorLine] ?? "";
+		state.cursorCol = Math.max(0, Math.min(snapshot.cursor.col, currentLine.length));
+
+		internal.historyIndex = -1;
+		internal.lastAction = null;
+		internal.preferredVisualCol = null;
+		internal.snappedFromCursorCol = null;
+		internal.scrollOffset = 0;
+		// Keep pi's built-in one-way undo stack from diverging from this
+		// extension's undo/redo history after a manual snapshot restore.
+		internal.undoStack?.clear?.();
+
+		internal.onChange?.(editor.getText());
+		internal.tui?.requestRender?.();
+		return true;
+	} catch {
+		return false;
+	}
 }
 
 class UndoRedoEditor extends CustomEditor {
@@ -206,38 +265,11 @@ class UndoRedoEditor extends CustomEditor {
 	}
 
 	private restoreSnapshot(snapshot: Snapshot): void {
-		const editor = this as unknown as {
-			state: { lines: string[]; cursorLine: number; cursorCol: number };
-			scrollOffset?: number;
-			historyIndex?: number;
-			lastAction?: unknown;
-			preferredVisualCol?: number | null;
-			snappedFromCursorCol?: number | null;
-			undoStack?: { clear?: () => void };
-			cancelAutocomplete?: () => void;
-			onChange?: (text: string) => void;
-			tui?: { requestRender?: () => void };
-		};
+		if (restoreEditorSnapshotViaInternalState(this, snapshot)) return;
 
-		editor.cancelAutocomplete?.();
-
-		const lines = snapshot.text.split("\n");
-		editor.state.lines = lines.length > 0 ? lines : [""];
-		editor.state.cursorLine = Math.max(0, Math.min(snapshot.cursor.line, editor.state.lines.length - 1));
-		const currentLine = editor.state.lines[editor.state.cursorLine] ?? "";
-		editor.state.cursorCol = Math.max(0, Math.min(snapshot.cursor.col, currentLine.length));
-
-		editor.historyIndex = -1;
-		editor.lastAction = null;
-		editor.preferredVisualCol = null;
-		editor.snappedFromCursorCol = null;
-		editor.scrollOffset = 0;
-		// Keep pi's built-in one-way undo stack from diverging from this extension's
-		// undo/redo history after we restore a snapshot manually.
-		editor.undoStack?.clear?.();
-
-		editor.onChange?.(this.getText());
-		editor.tui?.requestRender?.();
+		// Defensive fallback for future pi-tui internals: text is restored through
+		// the public API, but cursor restoration may degrade to pi-tui defaults.
+		super.setText(snapshot.text);
 	}
 
 	private clearPromptEditHistory(): void {
@@ -264,13 +296,23 @@ class UndoRedoEditor extends CustomEditor {
 }
 
 export default function promptUndoRedoExtension(pi: ExtensionAPI): void {
+	let previousEditorFactory: EditorFactory | undefined;
+	let installedEditorFactory: EditorFactory | undefined;
+
 	pi.on("session_start", (_event, ctx) => {
 		if (ctx.mode !== "tui") return;
-		ctx.ui.setEditorComponent((tui, theme, keybindings) => new UndoRedoEditor(tui, theme, keybindings));
+
+		previousEditorFactory = ctx.ui.getEditorComponent();
+		installedEditorFactory = (tui, theme, keybindings) => new UndoRedoEditor(tui, theme, keybindings);
+		ctx.ui.setEditorComponent(installedEditorFactory);
 	});
 
 	pi.on("session_shutdown", (_event, ctx) => {
 		if (ctx.mode !== "tui") return;
-		ctx.ui.setEditorComponent(undefined);
+		if (installedEditorFactory && ctx.ui.getEditorComponent() === installedEditorFactory) {
+			ctx.ui.setEditorComponent(previousEditorFactory);
+		}
+		previousEditorFactory = undefined;
+		installedEditorFactory = undefined;
 	});
 }
