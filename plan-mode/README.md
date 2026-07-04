@@ -14,12 +14,15 @@ When enabled, this extension:
 - uses the latest `before_agent_start.systemPromptOptions` context to tailor planning instructions to the active tools, loaded context files, and loaded skills
 - hides pi's built-in working row while plan mode is active and shows planning progress in the plan-mode status/widget instead
 - instructs the agent to wait for approval before executing changes
-- renders plans in an interactive review UI without keeping the `plan_output` tool running while you review
+- renders plans in an overlay review UI without keeping the `plan_output` tool running while you review
+- renders a highlighted plan box in the main chat buffer when the review overlay is closed without approval or revision
+- keeps that chat-buffer plan copy display-only and filters it out of LLM context to avoid duplicating stale plans
 - stores each plan iteration in a per-plan git repo
 - shows diffs between revisions
 - generates LLM summaries of changes between iterations or across all iterations
 - keeps a Q&A history for plan discussions
 - answers post-plan clarification questions normally instead of replacing the saved plan
+- keeps a pending revision state so the agent can clarify/investigate during revisions but must submit the revised complete plan through `plan_output`
 - guards `plan_output` after a plan is presented so it is only used for explicit revisions/replacements
 - ignores modern `toolCall` plan submissions when building the Q&A history
 - does not modify tool activation state when entering or leaving plan mode
@@ -38,9 +41,10 @@ You can enable Plan Mode in any of these ways:
 2. Ask the agent for help on a task.
 3. The agent explores the codebase, asks clarifying questions, and prepares a plan.
 4. Once ready, it presents a structured plan through the `plan_output` tool.
-5. Review the plan in the TUI.
-6. Approve it or request revisions.
-7. After approval, plan mode exits and the agent can execute the approved plan.
+5. Review the plan in the TUI overlay.
+6. Approve it, request revisions, or press `Esc` to close the overlay and continue chatting with the plan rendered in the main chat buffer.
+7. During revision, the agent may inspect more context, use web search if available, and ask/answer clarification questions in normal chat; when ready it must present the revised complete plan with `plan_output` again.
+8. After approval, plan mode exits and the agent can execute the approved plan.
 
 ## Review UI shortcuts
 

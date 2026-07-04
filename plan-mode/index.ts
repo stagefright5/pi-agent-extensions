@@ -38,6 +38,17 @@ import { generateSlug } from "./utils.js";
 // ─── Constants ──────────────────────────────────────────────
 
 const PLAN_MODE_SYSTEM_PROMPT_HEADER = `[PLAN MODE ACTIVE — Guided planning workflow]`;
+const PLAN_RENDER_MESSAGE_TYPE = "plan-mode-rendered-plan";
+const SYMBOL = {
+	plan: "▣",
+	approved: "√",
+	revision: "↻",
+	closed: "□",
+	diff: "∆",
+	summary: "≡",
+	qa: "§",
+	warning: "△",
+};
 
 function formatPromptList(items: string[], maxItems = 8): string {
 	if (items.length === 0) return "- none";
@@ -52,7 +63,7 @@ type PlanModePromptState = {
 	planPresented: boolean;
 	iterationCount: number;
 	planTitle: string | null;
-	reviewRevisionPending: boolean;
+	revisionPending: boolean;
 };
 
 function formatPlanModeState(state: PlanModePromptState | undefined): string {
@@ -64,8 +75,8 @@ function formatPlanModeState(state: PlanModePromptState | undefined): string {
 		`- A plan has already been presented (${state.iterationCount} iteration${state.iterationCount === 1 ? "" : "s"}).`,
 	];
 	if (state.planTitle) lines.push(`- Current plan title: ${state.planTitle}`);
-	if (state.reviewRevisionPending) {
-		lines.push("- The user requested a revision through the review UI; produce the revised complete plan with plan_output.");
+	if (state.revisionPending) {
+		lines.push("- A plan revision is pending. You may investigate, use tools, and ask concise clarifying questions normally, but when the revised complete plan is ready you MUST present it with plan_output, not assistant text.");
 	} else {
 		lines.push("- The user may ask normal follow-up questions about the plan; answer those in regular assistant text.");
 	}
@@ -88,6 +99,76 @@ function isPlanRevisionIntent(text: string): boolean {
 		!/\b(to the plan|in the plan|the plan|plan should|updated plan|revised plan)\b/.test(normalized);
 
 	return !clarificationOnly;
+}
+
+function assistantTextLooksLikePlan(text: string): boolean {
+	const trimmed = text.trim();
+	if (trimmed.length < 500) return false;
+
+	const normalized = trimmed.toLowerCase();
+	if (/\b(here(?:'s| is) (?:the )?(?:(?:revised|updated)\s+)?(?:implementation\s+)?plan)\b/.test(normalized)) return true;
+	if (/\b(?:revised|updated) (?:implementation )?plan\b/.test(normalized) && /\n\s*#{1,3}\s+/.test(trimmed)) return true;
+
+	const sectionHeadings = [
+		/^\s*#{1,3}\s+goal\b/im,
+		/^\s*#{1,3}\s+(findings|context|current-state findings)\b/im,
+		/^\s*#{1,3}\s+impact analysis\b/im,
+		/^\s*#{1,3}\s+(proposed approach|approach)\b/im,
+		/^\s*#{1,3}\s+(implementation|phases|ordered implementation phases)\b/im,
+		/^\s*#{1,3}\s+validation\b/im,
+		/^\s*#{1,3}\s+(risks|unknowns|risks\/unknowns)\b/im,
+		/^\s*#{1,3}\s+(rollout|backout|rollout\/backout)\b/im,
+	];
+	const matchingSections = sectionHeadings.filter((pattern) => pattern.test(trimmed)).length;
+	return matchingSections >= 3;
+}
+
+function createPlanMessageComponent(plan: string, title: string | null, iteration: number, theme: ExtensionContext["ui"]["theme"]) {
+	const md = new Markdown(plan, 1, 0, getMarkdownTheme());
+	let cachedLines: string[] | null = null;
+	let cachedWidth: number | null = null;
+
+	return {
+		render(width: number): string[] {
+			const frameWidth = Math.max(20, width);
+			const innerWidth = Math.max(10, frameWidth - 4);
+			if (!cachedLines || cachedWidth !== frameWidth) {
+				cachedLines = md.render(innerWidth);
+				cachedWidth = frameWidth;
+			}
+
+			const framedLine = (content: string): string => {
+				const truncated = truncateToWidth(content, innerWidth);
+				return (
+					theme.fg("accent", "│ ") +
+					truncated +
+					" ".repeat(Math.max(0, innerWidth - visibleWidth(truncated))) +
+					theme.fg("accent", " │")
+				);
+			};
+
+			const header =
+				theme.fg("accent", theme.bold("Plan")) +
+				theme.fg("muted", `  Iteration ${iteration}`) +
+				(title ? theme.fg("dim", `  ${title}`) : "");
+			const lines = [
+				theme.fg("accent", `╭${"─".repeat(Math.max(0, frameWidth - 2))}╮`),
+				framedLine(header),
+				theme.fg("accent", `├${"─".repeat(Math.max(0, frameWidth - 2))}┤`),
+			];
+
+			for (const line of cachedLines) {
+				lines.push(framedLine(line));
+			}
+			lines.push(theme.fg("accent", `╰${"─".repeat(Math.max(0, frameWidth - 2))}╯`));
+			return lines;
+		},
+		invalidate() {
+			cachedLines = null;
+			cachedWidth = null;
+			md.invalidate();
+		},
+	};
 }
 
 function buildPlanModeSystemPrompt(options: BuildSystemPromptOptions, state?: PlanModePromptState): string {
@@ -144,6 +225,7 @@ ${formatPlanModeState(state)}
 Post-plan conversation routing:
 - After a plan has been presented, treat follow-up questions, clarification requests, rationale questions, trade-off discussions, and "why/how/what does this mean" prompts as normal chat. Answer them directly in regular assistant text; do NOT call plan_output.
 - Only call plan_output again when the user explicitly asks to revise, update, change, regenerate, or replace the plan, or when revision feedback came from the review UI.
+- While a plan revision is pending, you may ask clarification questions and discuss trade-offs in normal assistant text, but do NOT present the revised plan in assistant text. When the revised plan is ready, call plan_output.
 - If the user gives ambiguous feedback after a plan has been presented, ask whether they want the saved plan revised instead of silently overwriting it.
 - Never put a normal clarification answer inside the plan_output 'plan' field, because that replaces the saved plan iteration.
 
@@ -198,8 +280,29 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 	let lastUserInputText = "";
 	let lastUserInputPlanIteration = -1;
 	let allowNextPlanOutputFromReviewRevision = false;
+	let revisionPending = false;
+	let revisionResubmitPromptQueued = false;
 
 	const PLANS_BASE = join(homedir(), ".pi", "plans");
+
+	pi.registerMessageRenderer(PLAN_RENDER_MESSAGE_TYPE, (message, _options, theme) => {
+		const details = message.details as { plan?: string; title?: string | null; iteration?: number } | undefined;
+		const plan = details?.plan ?? String(message.content ?? "");
+		return createPlanMessageComponent(plan, details?.title ?? null, details?.iteration ?? 0, theme);
+	});
+
+	function renderPlanInMainBuffer(ctx: ExtensionContext, plan: string, iteration: number): void {
+		try {
+			pi.sendMessage({
+				customType: PLAN_RENDER_MESSAGE_TYPE,
+				content: `Plan iteration ${iteration} rendered in chat for review.`,
+				display: true,
+				details: { plan, title: planTitle, iteration },
+			});
+		} catch (err) {
+			ctx.ui.notify(`Unable to render plan in chat: ${err}`, "error");
+		}
+	}
 
 	// ─── Git Helpers ────────────────────────────────────────
 
@@ -261,12 +364,12 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 	function updateUI(ctx: ExtensionContext): void {
 		const t = ctx.ui.theme;
 		if (active) {
-			ctx.ui.setStatus("plan-mode", t.fg("warning", isAgentWorking ? "📋 PLAN …" : "📋 PLAN"));
+			ctx.ui.setStatus("plan-mode", t.fg("warning", isAgentWorking ? `${SYMBOL.plan} PLAN …` : `${SYMBOL.plan} PLAN`));
 
 			if (iterations.length > 0 || isAgentWorking) {
 				const widgetLines: string[] = [];
 				widgetLines.push(
-					t.fg("accent", "📋 Plan Mode") +
+					t.fg("accent", `${SYMBOL.plan} Plan Mode`) +
 						(planTitle ? t.fg("muted", ` — ${planTitle}`) : "") +
 						(iterations.length > 0
 							? t.fg("dim", ` (${iterations.length} iteration${iterations.length !== 1 ? "s" : ""})`)
@@ -326,9 +429,11 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		lastUserInputText = "";
 		lastUserInputPlanIteration = -1;
 		allowNextPlanOutputFromReviewRevision = false;
+		revisionPending = false;
+		revisionResubmitPromptQueued = false;
 
 		ctx.ui.setWorkingVisible(false);
-		ctx.ui.notify("📋 Plan mode activated. The agent will ask questions before creating a plan.", "info");
+		ctx.ui.notify(`${SYMBOL.plan} Plan mode activated. The agent will ask questions before creating a plan.`, "info");
 		updateUI(ctx);
 		persistState();
 	}
@@ -339,8 +444,15 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		lastUserInputText = "";
 		lastUserInputPlanIteration = -1;
 		allowNextPlanOutputFromReviewRevision = false;
+		revisionPending = false;
+		revisionResubmitPromptQueued = false;
 		ctx.ui.setWorkingVisible(true);
-		ctx.ui.notify(approved ? "✅ Plan approved! Plan mode deactivated." : "📋 Plan mode deactivated.", "info");
+		ctx.ui.notify(
+			approved
+				? `${SYMBOL.approved} Plan approved. Plan mode deactivated.`
+				: `${SYMBOL.plan} Plan mode deactivated.`,
+			"info",
+		);
 		updateUI(ctx);
 		persistState();
 	}
@@ -354,6 +466,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			iterations,
 			planTitle,
 			qaMessages,
+			revisionPending,
 		});
 	}
 
@@ -412,7 +525,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 						lines.push(
 							truncateToWidth(
 								theme.fg("accent", "│ ") +
-									theme.fg("accent", theme.bold(`📋 Diff: Iteration ${iterations.length - 1} → ${iterations.length}`)) +
+									theme.fg("accent", theme.bold(`${SYMBOL.diff} Diff: Iteration ${iterations.length - 1} → ${iterations.length}`)) +
 									(planTitle ? `  ${theme.fg("dim", planTitle)}` : "") +
 									theme.fg("accent", " │"),
 								width,
@@ -599,8 +712,8 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 						"accent",
 						theme.bold(
 							allChanges
-								? `  📊 Summary of All Plan Changes (${iterations.length} iterations)`
-								: `  📊 Changes: v${iterations.length - 1} → v${iterations.length}`,
+								? `  ${SYMBOL.summary} Summary of All Plan Changes (${iterations.length} iterations)`
+								: `  ${SYMBOL.summary} Changes: v${iterations.length - 1} → v${iterations.length}`,
 						),
 					),
 					0,
@@ -632,7 +745,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		// Build markdown from Q&A messages
 		const mdContent = qaMessages
 			.map((msg) => {
-				const header = msg.role === "assistant" ? "### 🤖 Agent" : "### 👤 You";
+				const header = msg.role === "assistant" ? "### Agent" : "### You";
 				return `${header}\n\n${msg.content}`;
 			})
 			.join("\n\n---\n\n");
@@ -668,7 +781,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 					lines.push(theme.fg("accent", "─".repeat(width)));
 					lines.push(
 						truncateToWidth(
-							`  ${theme.fg("accent", theme.bold("💬 Q&A History"))}` +
+							`  ${theme.fg("accent", theme.bold(`${SYMBOL.qa} Q&A History`))}` +
 								`  ${theme.fg("muted", `${qaMessages.length} message${qaMessages.length !== 1 ? "s" : ""}`)}` +
 								(planTitle ? `  ${theme.fg("dim", planTitle)}` : ""),
 							width,
@@ -773,9 +886,9 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 						cachedWidth = width;
 					}
 
-					const termHeight = process.stdout.rows || 24;
+					const modalHeight = Math.max(10, Math.floor((process.stdout.rows || 24) * 0.85));
 					const headerFooterLines = 8;
-					const viewportHeight = Math.max(5, termHeight - headerFooterLines);
+					const viewportHeight = Math.max(5, modalHeight - headerFooterLines);
 					const maxScroll = Math.max(0, cachedMdLines.length - viewportHeight);
 					if (scrollOffset > maxScroll) scrollOffset = maxScroll;
 
@@ -785,7 +898,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 					lines.push(theme.fg("accent", "─".repeat(width)));
 					lines.push(
 						truncateToWidth(
-							`  ${theme.fg("accent", theme.bold("📋 Plan Review"))}` +
+							`  ${theme.fg("accent", theme.bold(`${SYMBOL.plan} Plan Review`))}` +
 								`  ${theme.fg("muted", `Iteration ${iteration}`)}` +
 								(planTitle ? `  ${theme.fg("dim", planTitle)}` : ""),
 							width,
@@ -840,8 +953,8 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 				},
 
 				handleInput(data: string) {
-					const termHeight = process.stdout.rows || 24;
-					const viewportHeight = Math.max(5, termHeight - 8);
+					const modalHeight = Math.max(10, Math.floor((process.stdout.rows || 24) * 0.85));
+					const viewportHeight = Math.max(5, modalHeight - 8);
 					const maxScroll = cachedMdLines ? Math.max(0, cachedMdLines.length - viewportHeight) : 0;
 					const wheelDelta = getMouseWheelDelta(data);
 
@@ -903,6 +1016,15 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 					}
 				},
 			};
+		}, {
+			overlay: true,
+			overlayOptions: {
+				anchor: "center",
+				width: "90%",
+				minWidth: 60,
+				maxHeight: "90%",
+				margin: 1,
+			},
 		});
 	}
 
@@ -1027,6 +1149,8 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 				};
 			}
 
+			revisionPending = false;
+			revisionResubmitPromptQueued = false;
 			persistState();
 			updateUI(ctx);
 
@@ -1052,15 +1176,18 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 					switch (result.action) {
 						case "approve":
 							allowNextPlanOutputFromReviewRevision = false;
+							revisionPending = false;
 							exitPlanMode(ctx, true);
 							sendReviewFollowUp(
-								"✅ I approve this plan. Execute the approved plan step by step. Here is the plan:\n\n" +
+								"I approve this plan. Execute the approved plan step by step. Here is the plan:\n\n" +
 									presentedPlan,
 							);
 							break;
 
 						case "revise":
 							allowNextPlanOutputFromReviewRevision = true;
+							revisionPending = true;
+							persistState();
 							sendReviewFollowUp(
 								`Please revise the plan based on this review feedback and present the revised version by calling plan_output.\n\nFeedback:\n${result.feedback}`,
 							);
@@ -1068,8 +1195,9 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 
 						case "cancel":
 							allowNextPlanOutputFromReviewRevision = false;
+							renderPlanInMainBuffer(ctx, presentedPlan, iteration);
 							ctx.ui.notify(
-								"Plan review closed. Ask a follow-up question normally, or explicitly request a revision to update the plan.",
+								"Plan review closed. The plan was rendered in the chat buffer for reference. Ask a follow-up question normally, or explicitly request a revision to update the plan.",
 								"info",
 							);
 							updateUI(ctx);
@@ -1116,13 +1244,13 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 				return new Text(first?.type === "text" ? truncateToWidth(first.text, 80) : "", 0, 0);
 			}
 			if (details.approved) {
-				return new Text(theme.fg("success", `✅ Plan approved (iteration ${details.iteration})`), 0, 0);
+				return new Text(theme.fg("success", `${SYMBOL.approved} Plan approved (iteration ${details.iteration})`), 0, 0);
 			}
 			if (details.revised) {
-				return new Text(theme.fg("warning", `✏️  Revision requested (iteration ${details.iteration})`), 0, 0);
+				return new Text(theme.fg("warning", `${SYMBOL.revision} Revision requested (iteration ${details.iteration})`), 0, 0);
 			}
 			if (details.cancelled) {
-				return new Text(theme.fg("dim", `⏸  Review closed (iteration ${details.iteration})`), 0, 0);
+				return new Text(theme.fg("dim", `${SYMBOL.closed} Review closed (iteration ${details.iteration})`), 0, 0);
 			}
 			return new Text(theme.fg("muted", "Plan presented"), 0, 0);
 		},
@@ -1208,12 +1336,17 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 
 		lastUserInputText = event.text;
 		lastUserInputPlanIteration = iterations.length;
+
+		if (iterations.length > 0 && isPlanRevisionIntent(event.text)) {
+			revisionPending = true;
+			persistState();
+		}
 	});
 
 	pi.on("tool_call", async (event) => {
 		if (!active || event.toolName !== "plan_output" || iterations.length === 0) return;
 
-		if (allowNextPlanOutputFromReviewRevision) {
+		if (allowNextPlanOutputFromReviewRevision || revisionPending) {
 			allowNextPlanOutputFromReviewRevision = false;
 			return;
 		}
@@ -1252,30 +1385,64 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 
 	// ─── Event: Capture Q&A messages ────────────────────────
 
-	pi.on("message_end", async (event) => {
+	pi.on("message_end", async (event, ctx) => {
 		if (!active) return;
 		const msg = event.message as {
 			role?: string;
 			content?: Array<{ type: string; text?: string; name?: string }>;
 		};
 
-		// Skip assistant messages that contain a plan_output tool call
-		if (msg.role === "assistant") {
-			const hasToolCall = (msg.content ?? []).some(
+		const hasPlanOutputToolCall =
+			msg.role === "assistant" &&
+			(msg.content ?? []).some(
 				(c) => (c.type === "toolCall" || c.type === "tool_use") && c.name === "plan_output",
 			);
-			if (hasToolCall) return;
+
+		// Skip assistant messages that contain a plan_output tool call.
+		if (hasPlanOutputToolCall) return;
+
+		const text = (msg.content ?? [])
+			.filter((c) => c.type === "text")
+			.map((c) => c.text ?? "")
+			.join("\n");
+
+		if (revisionPending && msg.role === "assistant" && text.trim() && assistantTextLooksLikePlan(text)) {
+			const reminder =
+				"Plan mode revision is still pending. Present the revised complete plan now by calling plan_output. " +
+				"Do not put the revised plan in normal assistant text. If more information is needed, ask a concise clarification question instead.";
+
+			if (!revisionResubmitPromptQueued) {
+				revisionResubmitPromptQueued = true;
+				setTimeout(() => {
+					try {
+						if (ctx.isIdle()) {
+							pi.sendUserMessage(reminder);
+						} else {
+							pi.sendUserMessage(reminder, { deliverAs: "followUp" });
+						}
+					} catch (err) {
+						ctx.ui.notify(`Unable to request plan_output resubmission: ${err}`, "error");
+					} finally {
+						revisionResubmitPromptQueued = false;
+					}
+				}, 0);
+			}
+
+			const replacementText =
+				`${SYMBOL.warning} Plan mode revision is pending. The revised plan must be presented through the plan review UI with plan_output, not as normal chat. Requesting resubmission now…`;
+			qaMessages.push({ role: "assistant", content: replacementText });
+			persistState();
+			return {
+				message: {
+					...event.message,
+					content: [{ type: "text", text: replacementText }],
+				},
+			};
 		}
 
-		if (msg.role === "user" || msg.role === "assistant") {
-			const text = (msg.content ?? [])
-				.filter((c) => c.type === "text")
-				.map((c) => c.text ?? "")
-				.join("\n");
-			if (text.trim()) {
-				qaMessages.push({ role: msg.role as "user" | "assistant", content: text });
-				persistState();
-			}
+		if ((msg.role === "user" || msg.role === "assistant") && text.trim()) {
+			qaMessages.push({ role: msg.role as "user" | "assistant", content: text });
+			persistState();
 		}
 	});
 
@@ -1288,7 +1455,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			planPresented: iterations.length > 0,
 			iterationCount: iterations.length,
 			planTitle,
-			reviewRevisionPending: allowNextPlanOutputFromReviewRevision,
+			revisionPending,
 		};
 
 		return {
@@ -1297,7 +1464,8 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 				customType: "plan-mode-context",
 				content:
 					"[PLAN MODE] I will gather missing user and repository context before the first plan. " +
-					"After a plan is presented, I will answer clarification questions normally and only call plan_output for explicit plan revisions.",
+					"After a plan is presented, I will answer clarification questions normally and only call plan_output for explicit plan revisions. " +
+					"When a revision is pending, I will use normal chat only for clarification and will submit the revised plan with plan_output.",
 				display: false,
 			},
 		};
@@ -1306,10 +1474,15 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 	// ─── Event: Filter stale plan-mode context ──────────────
 
 	pi.on("context", async (event) => {
-		if (active) return; // keep context while planning
+		const withoutUiOnlyPlanMessages = event.messages.filter((m) => {
+			const msg = m as { customType?: string; role?: string; content?: unknown };
+			return msg.customType !== PLAN_RENDER_MESSAGE_TYPE;
+		});
+
+		if (active) return { messages: withoutUiOnlyPlanMessages }; // keep plan-mode context while planning
 
 		return {
-			messages: event.messages.filter((m) => {
+			messages: withoutUiOnlyPlanMessages.filter((m) => {
 				const msg = m as { customType?: string; role?: string; content?: unknown };
 				// Drop injected plan-mode context messages
 				if (msg.customType === "plan-mode-context") return false;
@@ -1342,6 +1515,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 						iterations?: string[];
 						planTitle?: string | null;
 						qaMessages?: Array<{ role: "user" | "assistant"; content: string }>;
+						revisionPending?: boolean;
 					};
 			  }
 			| undefined;
@@ -1352,12 +1526,21 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			iterations = stateEntry.data.iterations ?? [];
 			planTitle = stateEntry.data.planTitle ?? null;
 			qaMessages = stateEntry.data.qaMessages ?? [];
+			revisionPending = stateEntry.data.revisionPending ?? false;
+		} else {
+			active = false;
+			planDir = null;
+			iterations = [];
+			planTitle = null;
+			qaMessages = [];
+			revisionPending = false;
 		}
 
 		isAgentWorking = false;
 		lastUserInputText = "";
 		lastUserInputPlanIteration = -1;
 		allowNextPlanOutputFromReviewRevision = false;
+		revisionResubmitPromptQueued = false;
 		ctx.ui.setWorkingVisible(!active);
 		updateUI(ctx);
 	});
