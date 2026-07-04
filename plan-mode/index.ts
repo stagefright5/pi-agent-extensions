@@ -101,6 +101,20 @@ function isPlanRevisionIntent(text: string): boolean {
 	return !clarificationOnly;
 }
 
+type MessageContentPart = { type?: string; text?: string; name?: string };
+
+function getMessageContentParts(content: unknown): MessageContentPart[] {
+	return Array.isArray(content) ? (content.filter((part) => part && typeof part === "object") as MessageContentPart[]) : [];
+}
+
+function getMessageText(content: unknown): string {
+	if (typeof content === "string") return content;
+	return getMessageContentParts(content)
+		.filter((part) => part.type === "text")
+		.map((part) => part.text ?? "")
+		.join("\n");
+}
+
 function assistantTextLooksLikePlan(text: string): boolean {
 	const trimmed = text.trim();
 	if (trimmed.length < 500) return false;
@@ -1389,22 +1403,20 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		if (!active) return;
 		const msg = event.message as {
 			role?: string;
-			content?: Array<{ type: string; text?: string; name?: string }>;
+			content?: unknown;
 		};
+		const contentParts = getMessageContentParts(msg.content);
 
 		const hasPlanOutputToolCall =
 			msg.role === "assistant" &&
-			(msg.content ?? []).some(
+			contentParts.some(
 				(c) => (c.type === "toolCall" || c.type === "tool_use") && c.name === "plan_output",
 			);
 
 		// Skip assistant messages that contain a plan_output tool call.
 		if (hasPlanOutputToolCall) return;
 
-		const text = (msg.content ?? [])
-			.filter((c) => c.type === "text")
-			.map((c) => c.text ?? "")
-			.join("\n");
+		const text = getMessageText(msg.content);
 
 		if (revisionPending && msg.role === "assistant" && text.trim() && assistantTextLooksLikePlan(text)) {
 			const reminder =
