@@ -2,7 +2,7 @@
  * Plan Mode Extension
  *
  * Interactive planning mode that activates with Alt+P or /plan.
- * Forces the agent to ask clarifying questions before creating plans.
+ * Guides the agent to resolve material ambiguity before creating plans.
  * Plans are rendered in markdown, tracked in a per-plan git repo,
  * and tool availability is preserved while the agent prepares a plan.
  *
@@ -25,7 +25,7 @@
  *   ctrl+alt+q  — show Q&A history
  */
 
-import type { BuildSystemPromptOptions, ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { BorderedLoader, DynamicBorder, getMarkdownTheme } from "@earendil-works/pi-coding-agent";
 import { complete } from "@earendil-works/pi-ai";
 import {
@@ -71,15 +71,6 @@ function notifyRequiresTui(ctx: ExtensionContext, feature: string): void {
 
 function getTerminalRows(): number {
 	return process.stdout.rows || 24;
-}
-
-function formatPromptList(items: string[], maxItems = 8): string {
-	if (items.length === 0) return "- none";
-	const visible = items.slice(0, maxItems).map((item) => `- ${item}`);
-	if (items.length > maxItems) {
-		visible.push(`- ... and ${items.length - maxItems} more`);
-	}
-	return visible.join("\n");
 }
 
 type PlanModePromptState = {
@@ -217,96 +208,35 @@ function createPlanMessageComponent(plan: string, title: string | null, iteratio
 	};
 }
 
-function buildPlanModeSystemPrompt(options: BuildSystemPromptOptions, state?: PlanModePromptState): string {
-	const activeTools = options.selectedTools ?? [];
-	const toolSnippets = options.toolSnippets ?? {};
-	const contextFiles = options.contextFiles ?? [];
-	const skills = options.skills ?? [];
-
-	const toolSummary = formatPromptList(
-		activeTools.map((name) => {
-			const snippet = toolSnippets[name];
-			return snippet ? `\`${name}\`: ${snippet}` : `\`${name}\``;
-		}),
-		12,
-	);
-	const contextSummary = formatPromptList(contextFiles.map((file) => file.path));
-	const skillsSummary = formatPromptList(
-		skills.map((skill) => (skill.description ? `${skill.name}: ${skill.description}` : skill.name)),
-	);
-
-	const inspectionTools = ["read", "grep", "find", "ls", "bash"].filter((name) => activeTools.includes(name));
-	const writeTools = ["edit", "write"].filter((name) => activeTools.includes(name));
-	const investigationGuidance = [
-		inspectionTools.length > 0
-			? `Use the available inspection tools (${inspectionTools.join(", ")}) to gather facts from the repository before finalizing the plan.`
-			: "Use whatever tools are available to gather the missing technical facts before finalizing the plan.",
-		writeTools.length > 0
-			? `${writeTools.join(" and ")} may be available, but do not make code changes until the user explicitly approves the plan.`
-			: "Do not make code changes until the user explicitly approves the plan.",
-	];
-
+function buildPlanModeSystemPrompt(state?: PlanModePromptState): string {
 	return `
 ${PLAN_MODE_SYSTEM_PROMPT_HEADER}
 
-You are in plan mode. Your job is to prepare the user to make the correct change with minimal blindspots: understand the requested feature/bug fix, map the real impact of the change, surface non-obvious consequences, and produce a comprehensive implementation plan before any code changes or destructive actions are taken.
-
-Primary objective:
-- Help the user avoid unexpected changes, hidden side effects, and unknown behaviors by doing thorough impact analysis before implementation.
-
-Core workflow:
-1. Gather knowledge from BOTH the user and the repository. Do not rely on assumptions when relevant facts can be asked or inspected.
-2. Ask targeted clarifying questions before creating the plan whenever any material ambiguity remains. Focus on behavior, scope boundaries, constraints, success criteria, backward compatibility, rollout expectations, and what must NOT change.
-3. Investigate the codebase before finalizing the plan. Inspect the relevant files, architecture, configs, tests, docs, interfaces, dependencies, adjacent code paths, and operational concerns needed to make the plan concrete.
-4. Perform impact analysis, not just solution design. Identify what behavior will change, what behavior must remain unchanged, what consumers or callers may be affected, and where regressions or surprising side effects could appear.
-5. Actively look for blindspots: hidden dependencies, shared utilities, schema/contracts, state transitions, caching, migrations, permissions, feature flags, analytics, performance, security, observability, documentation, and test fallout.
-6. If the request is already fairly specific, start with repository investigation and then ask only the remaining material questions before calling plan_output.
-7. Only call the plan_output tool when you have enough knowledge to write a plan that another engineer could execute confidently, with the likely impact and risks clearly called out.
-8. Do NOT execute the plan yet. Wait for explicit user approval before editing files, making destructive changes, or running implementation steps.
-9. If the user asks for revisions, incorporate the feedback, preserve useful prior context, and call plan_output again with the updated plan.
+Destination:
+Produce a reviewable, execution-ready plan that defines the intended outcome, scope, affected surfaces, material risks, and validation. Describe the destination, constraints, and meaningful sequencing rather than prescribing every low-level edit or command.
 
 Current plan state:
 ${formatPlanModeState(state)}
 
-Post-plan conversation routing:
-- After a plan has been presented, treat follow-up questions, clarification requests, rationale questions, trade-off discussions, and "why/how/what does this mean" prompts as normal chat. Answer them directly in regular assistant text; do NOT call plan_output.
-- Only call plan_output again when the user explicitly asks to revise, update, change, regenerate, or replace the plan, or when revision feedback came from the review UI.
-- While a plan revision is pending, you may ask clarification questions and discuss trade-offs in normal assistant text, but do NOT present the revised plan in assistant text. When the revised plan is ready, call plan_output.
-- If the user gives ambiguous feedback after a plan has been presented, ask whether they want the saved plan revised instead of silently overwriting it.
-- Never put a normal clarification answer inside the plan_output 'plan' field, because that replaces the saved plan iteration.
+Decision rules:
+- Investigate the repository, relevant documentation, or external sources when the evidence could materially change the plan's correctness, scope, impact, or assumptions. Avoid unrelated exploration.
+- You may autonomously perform read-only research and run low-risk validation that tests planning assumptions. Prefer the least invasive method and do not intentionally modify source files or tracked project state.
+- Ask a targeted question when a material ambiguity cannot be resolved from available evidence and the answer would change the destination, scope, compatibility, risk, or validation. Otherwise proceed and state the assumption.
+- Distinguish verified findings from assumptions and unresolved unknowns. Continue until another engineer could implement confidently; exhaustive certainty is not required.
 
-What you must gather before plan_output:
-- The exact objective and desired outcome
-- Current-state findings from the codebase
-- Impacted files, components, systems, APIs, data flows, and dependencies
-- User-visible behavior changes and explicitly preserved behavior
-- Downstream/upstream impact: callers, consumers, integrations, configs, tests, docs, deployments, and operational concerns
-- Assumptions, unresolved questions, and important unknowns
-- Risks, edge cases, migrations, compatibility implications, and potential regressions
-- Validation strategy: tests, lint, typecheck, manual QA, observability, and post-change verification
-- Rollout/backout or sequencing considerations when relevant
+Autonomy and approval boundary:
+- Before approval, do not implement the plan, edit project files, or perform destructive, irreversible, production, or external mutations.
+- Approval of the reviewed plan authorizes its implementation, subject to normal safety and permission constraints.
+- When the plan is ready, present it with plan_output and stop for user review.
 
-Plan quality bar:
-- The markdown plan should usually include: Goal, Findings/Context, Impact Analysis, Assumptions or Open Questions, Proposed Approach, Ordered Implementation Phases, Validation, Risks/Unknowns, and Rollout/Backout when relevant.
-- Explicitly call out what could change unexpectedly and how to prevent or validate against that.
-- Reference concrete files, modules, commands, components, and affected touchpoints when known.
-- Sequence steps in dependency order and call out parallelizable work when appropriate.
-- Note important trade-offs, decision points, and non-goals.
-- If the user chose not to answer a material question, record the assumption explicitly in the plan.
+Post-plan routing:
+- Answer follow-up questions and discuss rationale or trade-offs in normal assistant text without replacing the saved plan.
+- Use plan_output again only for an explicit plan revision or replacement, including revision feedback from the review UI.
+- If revision intent is ambiguous, clarify whether the user wants the saved plan changed.
+- While a revision is pending, use normal chat for questions and discussion, but present the completed revised plan through plan_output rather than assistant text.
 
-Repository-aware planning context:
-- Working directory: ${options.cwd}
-- Active tools:
-${toolSummary}
-- Loaded context files:
-${contextSummary}
-- Loaded skills:
-${skillsSummary}
-
-Investigation guidance:
-${formatPromptList(investigationGuidance)}
-
-When you are confident the plan is complete, present it with the plan_output tool.
+Plan content:
+Use an organization suited to the task. Cover the desired outcome and success criteria, evidence about the current state, impact and preserved behavior, assumptions or open questions, implementation phases, validation, and material risks. Include compatibility, migration, rollout, or backout considerations when relevant. Name concrete affected files and interfaces when known, and omit sections that do not apply.
 `.trim();
 }
 
@@ -479,7 +409,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		revisionResubmitPromptQueued = false;
 
 		ctx.ui.setWorkingVisible(false);
-		ctx.ui.notify(`${SYMBOL.plan} Plan mode activated. The agent will ask questions before creating a plan.`, "info");
+		ctx.ui.notify(`${SYMBOL.plan} Plan mode activated. The agent will gather material evidence before presenting a plan.`, "info");
 		updateUI(ctx);
 		persistState();
 	}
@@ -1189,27 +1119,14 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		name: "plan_output",
 		label: "Plan Output",
 		description:
-			"Present a comprehensive implementation plan with impact analysis to the user for interactive review. " +
-			"Use this ONLY after you have gathered the necessary knowledge from the user and codebase " +
-			"and are ready to present a complete markdown plan that reduces blindspots and unexpected changes. " +
-			"Do not use this for normal chat, explanations, or clarification answers after a plan has already been presented.",
-		promptSnippet:
-			"Present a comprehensive markdown implementation plan with impact analysis after gathering the necessary requirement and repository context",
-		promptGuidelines: [
-			"Before calling plan_output, inspect the relevant code, configs, tests, docs, interfaces, and dependencies when repository knowledge would materially improve the plan.",
-			"Ask targeted clarifying questions about unresolved scope, constraints, success criteria, preserved behavior, compatibility, rollout, and validation requirements before calling plan_output.",
-			"Perform impact analysis: identify affected files, modules, callers, downstream behaviors, hidden dependencies, regressions, and anything that may change unexpectedly.",
-			"Only call plan_output when you have enough information to write a complete, execution-ready plan.",
-			"After a plan has already been presented, answer clarification questions normally in assistant text; do not call plan_output unless the user explicitly requests a revised or replacement plan.",
-			"Never put a one-off explanation or answer inside plan_output's plan field, because that replaces the saved plan iteration.",
-			"The plan should include goal, current-state findings, impact analysis, assumptions/open questions, phased implementation steps, validation, and risks; include rollout/backout when relevant.",
-			"If the user requests revisions, update the plan and call plan_output again.",
-		],
+			"Present a complete implementation plan for interactive review when planning evidence is sufficient. " +
+			"Use again only when the user requests a revision or replacement.",
+		promptSnippet: "Present the completed implementation plan for interactive review",
 		parameters: Type.Object({
 			title: Type.String({ description: "Short descriptive title for the plan" }),
 			plan: Type.String({
 				description:
-					"Full plan in markdown. Include goal, findings/context, impact analysis, assumptions or open questions, phased steps, validation, risks, and rollout/backout when relevant.",
+					"Full markdown plan covering outcome, evidence, impact, assumptions, implementation phases, validation, and material risks; include compatibility and rollout/backout when relevant.",
 			}),
 		}),
 
@@ -1360,7 +1277,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 	});
 
 	pi.registerCommand("plan", {
-		description: "Toggle plan mode (guided planning with clarifying questions)",
+		description: "Toggle plan mode (evidence-guided planning and review)",
 		handler: async (_args, ctx) => {
 			if (active) {
 				exitPlanMode(ctx);
@@ -1546,15 +1463,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		};
 
 		return {
-			systemPrompt: event.systemPrompt + "\n\n" + buildPlanModeSystemPrompt(event.systemPromptOptions, promptState),
-			message: {
-				customType: "plan-mode-context",
-				content:
-					"[PLAN MODE] I will gather missing user and repository context before the first plan. " +
-					"After a plan is presented, I will answer clarification questions normally and only call plan_output for explicit plan revisions. " +
-					"When a revision is pending, I will use normal chat only for clarification and will submit the revised plan with plan_output.",
-				display: false,
-			},
+			systemPrompt: event.systemPrompt + "\n\n" + buildPlanModeSystemPrompt(promptState),
 		};
 	});
 
