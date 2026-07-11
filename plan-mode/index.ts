@@ -920,51 +920,68 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 
 			return {
 				render(width: number): string[] {
-					// Render full markdown (cached until width changes)
-					if (!cachedMdLines || cachedWidth !== width) {
-						cachedMdLines = md.render(width);
-						cachedWidth = width;
+					const frameWidth = Math.max(20, width);
+					const innerWidth = Math.max(10, frameWidth - 4);
+
+					// Render full markdown inside the border (cached until inner width changes)
+					if (!cachedMdLines || cachedWidth !== innerWidth) {
+						cachedMdLines = md.render(innerWidth);
+						cachedWidth = innerWidth;
 					}
+					const mdLines = cachedMdLines ?? [];
 
 					const modalHeight = Math.max(10, Math.floor(getTerminalRows() * 0.85));
 					const headerFooterLines = 8;
 					const viewportHeight = Math.max(5, modalHeight - headerFooterLines);
-					const maxScroll = Math.max(0, cachedMdLines.length - viewportHeight);
+					const maxScroll = Math.max(0, mdLines.length - viewportHeight);
 					if (scrollOffset > maxScroll) scrollOffset = maxScroll;
+
+					const framedLine = (content = ""): string => {
+						const truncated = truncateToWidth(content, innerWidth, "");
+						return (
+							theme.fg("accent", "│ ") +
+							truncated +
+							" ".repeat(Math.max(0, innerWidth - visibleWidth(truncated))) +
+							theme.fg("accent", " │")
+						);
+					};
+					const divider = (left: string, right: string): string =>
+						theme.fg("accent", `${left}${"─".repeat(Math.max(0, frameWidth - 2))}${right}`);
 
 					const lines: string[] = [];
 
 					// ── Header ──
-					lines.push(theme.fg("accent", "─".repeat(width)));
+					lines.push(divider("╭", "╮"));
 					lines.push(
-						truncateToWidth(
-							`  ${theme.fg("accent", theme.bold(`${SYMBOL.plan} Plan Review`))}` +
+						framedLine(
+							theme.fg("accent", theme.bold(`${SYMBOL.plan} Plan Review`)) +
 								`  ${theme.fg("muted", `Iteration ${iteration}`)}` +
 								(planTitle ? `  ${theme.fg("dim", planTitle)}` : ""),
-							width,
 						),
 					);
-					lines.push(theme.fg("accent", "─".repeat(width)));
+					lines.push(divider("├", "┤"));
 
 					// ── Scrollable plan content ──
-					const visible = cachedMdLines.slice(scrollOffset, scrollOffset + viewportHeight);
-					lines.push(...visible);
+					const visible = mdLines.slice(scrollOffset, scrollOffset + viewportHeight);
+					for (const line of visible) {
+						lines.push(framedLine(line));
+					}
 
 					// pad if content is shorter than viewport
 					for (let i = visible.length; i < viewportHeight; i++) {
-						lines.push("");
+						lines.push(framedLine());
 					}
 
 					// ── Scroll indicator ──
-					if (cachedMdLines.length > viewportHeight) {
+					if (mdLines.length > viewportHeight) {
 						const pct = maxScroll > 0 ? Math.round((scrollOffset / maxScroll) * 100) : 100;
-						lines.push(
-							theme.fg("dim", `  ─── ${pct}% (${cachedMdLines.length} lines) ───`),
-						);
+						lines.push(framedLine(theme.fg("dim", `─── ${pct}% (${mdLines.length} lines) ───`)));
+					} else {
+						lines.push(framedLine());
 					}
 
 					// ── Footer actions ──
-					lines.push("");
+					lines.push(divider("├", "┤"));
 					const actions: string[] = [
 						`${theme.fg("success", "a")} approve`,
 						`${theme.fg("warning", "r")} revise`,
@@ -978,11 +995,9 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 					}
 					actions.push(`${theme.fg("accent", "q")} Q&A`);
 					actions.push(`${theme.fg("dim", "esc")} back`);
-					lines.push(truncateToWidth(`  ${actions.join("  │  ")}`, width));
-					lines.push(
-						truncateToWidth(`  ${theme.fg("dim", "↑↓/j/k scroll  PgUp/PgDn page  mouse wheel scroll")}`, width),
-					);
-					lines.push(theme.fg("accent", "─".repeat(width)));
+					lines.push(framedLine(actions.join("  │  ")));
+					lines.push(framedLine(theme.fg("dim", "↑↓/j/k scroll  PgUp/PgDn page  mouse wheel scroll")));
+					lines.push(divider("╰", "╯"));
 
 					return lines;
 				},
