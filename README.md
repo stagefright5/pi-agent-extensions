@@ -15,6 +15,9 @@ Each extension lives in its own directory and documents its behavior locally.
 │   ├── README.md
 │   ├── index.ts
 │   └── utils.ts
+├── prompt-history-search/
+│   ├── README.md
+│   └── index.ts
 └── prompt-undo-redo/
     ├── README.md
     └── index.ts
@@ -23,6 +26,7 @@ Each extension lives in its own directory and documents its behavior locally.
 ## Available extensions
 
 - [`plan-mode/`](./plan-mode/README.md) — interactive planning mode for pi with clarifying questions, plan review, approval, diffs, summaries, Q&A history, and branch-aware state restoration.
+- [`prompt-history-search/`](./prompt-history-search/README.md) — global reverse search (`Alt+R`) over user prompts from all saved sessions and projects.
 - [`prompt-undo-redo/`](./prompt-undo-redo/README.md) — prompt editor undo/redo shortcuts (`Ctrl+Z`, `Ctrl+Shift+Z`, `Ctrl+Y`) with cursor-restoring snapshots.
 
 `herdr-agent-state.ts` is intentionally not covered by this modernization pass.
