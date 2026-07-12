@@ -99,7 +99,7 @@ function formatPlanModeState(state: PlanModePromptState | undefined): string {
 	];
 	if (state.planTitle) lines.push(`- Current plan title: ${state.planTitle}`);
 	if (state.revisionPending) {
-		lines.push("- A plan revision is pending. You may investigate, use tools, and ask concise clarifying questions normally, but when the revised complete plan is ready you MUST present it with plan_output, not assistant text.");
+		lines.push("- A plan revision is pending. Revision is a discussion phase, not a requirement to call plan_output immediately. You may respond in normal assistant text, investigate, use tools, and ask concise clarifying questions. If the feedback leaves a material choice unclear, ask the user before revising. Call plan_output only when the complete revised plan is ready; do not put that plan in assistant text.");
 	} else {
 		lines.push("- The user may ask normal follow-up questions about the plan; answer those in regular assistant text.");
 	}
@@ -233,7 +233,8 @@ Post-plan routing:
 - Answer follow-up questions and discuss rationale or trade-offs in normal assistant text without replacing the saved plan.
 - Use plan_output again only for an explicit plan revision or replacement, including revision feedback from the review UI.
 - If revision intent is ambiguous, clarify whether the user wants the saved plan changed.
-- While a revision is pending, use normal chat for questions and discussion, but present the completed revised plan through plan_output rather than assistant text.
+- Revision feedback starts a revision discussion; it does not require an immediate plan_output call. Respond in normal assistant text when useful, and ask for clarification before revising if a material choice remains unclear.
+- While a revision is pending, call plan_output only after the complete revised plan is ready; present that plan through plan_output rather than assistant text.
 
 Plan content:
 Use an organization suited to the task. Cover the desired outcome and success criteria, evidence about the current state, impact and preserved behavior, assumptions or open questions, implementation phases, validation, and material risks. Include compatibility, migration, rollout, or backout considerations when relevant. Name concrete affected files and interfaces when known, and omit sections that do not apply.
@@ -1223,7 +1224,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 							revisionPending = true;
 							persistState();
 							sendReviewFollowUp(
-								`Please revise the plan based on this review feedback and present the revised version by calling plan_output.\n\nFeedback:\n${result.feedback}`,
+								`This feedback starts a plan revision discussion; do not call plan_output immediately unless the complete revision is already clear. You may respond in normal assistant text, ask me clarifying questions, or investigate further. If any material choice is unclear, ask before revising. Once the complete revised plan is ready, present it by calling plan_output.\n\nFeedback:\n${result.feedback}`,
 							);
 							break;
 

@@ -23,7 +23,7 @@ When enabled, this extension:
 - generates LLM summaries of changes between iterations or across all iterations
 - keeps a Q&A history for plan discussions
 - answers post-plan clarification questions normally instead of replacing the saved plan
-- keeps a pending revision state so the agent can clarify/investigate during revisions but must submit the revised complete plan through `plan_output`
+- treats revision as a discussion phase where the agent can reply normally, clarify, or investigate instead of calling `plan_output` immediately; the completed revised plan must still use `plan_output`
 - guards `plan_output` after a plan is presented so it is only used for explicit revisions/replacements
 - restores persisted state from the active session branch so tree navigation follows branch-local plan state
 
@@ -43,7 +43,7 @@ You can enable Plan Mode in any of these ways:
 4. Once ready, it presents a structured plan through the `plan_output` tool.
 5. Review the plan in the TUI overlay.
 6. Approve it, request revisions, or press `Esc` to close the overlay and continue chatting with the plan rendered in the main chat buffer.
-7. During revision, the agent may inspect more context, use web search if available, and ask/answer clarification questions in normal chat; when ready it must present the revised complete plan with `plan_output` again.
+7. During revision, feedback starts a discussion rather than forcing an immediate `plan_output` call. The agent may inspect more context, use web search if available, reply normally, and ask clarification questions; only when the complete revision is ready must it use `plan_output` again.
 8. After approval, plan mode exits and the agent can execute the approved plan.
 
 ## Review UI shortcuts
