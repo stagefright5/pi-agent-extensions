@@ -9,6 +9,8 @@
  * Shortcuts (in plan review UI):
  *   a        — approve plan
  *   r        — revise (opens editor for feedback)
+ *   c        — copy the full markdown plan
+ *   drag     — select and copy rendered plan text within the dialog
  *   d        — show diff between current and previous iteration
  *   s        — generate LLM summary of changes (prev → current)
  *   S        — generate LLM summary of ALL changes across iterations
@@ -23,16 +25,18 @@
  *   ctrl+alt+s  — show change summary
  *   ctrl+alt+a  — show all-changes summary
  *   ctrl+alt+q  — show Q&A history
+ *   ctrl+alt+o  — reopen the latest plan review
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { BorderedLoader, DynamicBorder, getMarkdownTheme } from "@earendil-works/pi-coding-agent";
+import { BorderedLoader, copyToClipboard, DynamicBorder, getMarkdownTheme } from "@earendil-works/pi-coding-agent";
 import { complete } from "@earendil-works/pi-ai";
 import {
 	Container,
 	Key,
 	Markdown,
 	matchesKey,
+	sliceByColumn,
 	Spacer,
 	Text,
 	truncateToWidth,
@@ -44,6 +48,7 @@ import { Type } from "typebox";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { stripVTControlCharacters } from "node:util";
 import { generateSlug } from "./utils.ts";
 
 // ─── Constants ──────────────────────────────────────────────
@@ -160,7 +165,13 @@ function assistantTextLooksLikePlan(text: string): boolean {
 	return matchingSections >= 3;
 }
 
-function createPlanMessageComponent(plan: string, title: string | null, iteration: number, theme: ExtensionContext["ui"]["theme"]) {
+function createPlanMessageComponent(
+	plan: string,
+	title: string | null,
+	iteration: number,
+	planPath: string | null,
+	theme: ExtensionContext["ui"]["theme"],
+) {
 	const md = new Markdown(plan, 1, 0, getMarkdownTheme());
 	let cachedLines: string[] | null = null;
 	let cachedWidth: number | null = null;
@@ -191,6 +202,7 @@ function createPlanMessageComponent(plan: string, title: string | null, iteratio
 			const lines = [
 				theme.fg("accent", `╭${"─".repeat(Math.max(0, frameWidth - 2))}╮`),
 				framedLine(header),
+				...(planPath ? [framedLine(theme.fg("dim", planPath))] : []),
 				theme.fg("accent", `├${"─".repeat(Math.max(0, frameWidth - 2))}┤`),
 			];
 
@@ -259,13 +271,30 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 	let allowNextPlanOutputFromReviewRevision = false;
 	let revisionPending = false;
 	let revisionResubmitPromptQueued = false;
+	let isPlanReviewOpen = false;
+	let latestPlanReviewQueued = false;
 
 	const PLANS_BASE = join(homedir(), ".pi", "plans");
 
+	function getPlanFileDisplayPath(): string | null {
+		if (!planDir) return null;
+		const absolutePath = join(planDir, "plan.md");
+		const home = homedir();
+		return absolutePath === home ? "~" : absolutePath.startsWith(`${home}/`) ? `~/${absolutePath.slice(home.length + 1)}` : absolutePath;
+	}
+
 	pi.registerMessageRenderer(PLAN_RENDER_MESSAGE_TYPE, (message, _options, theme) => {
-		const details = message.details as { plan?: string; title?: string | null; iteration?: number } | undefined;
+		const details = message.details as
+			| { plan?: string; title?: string | null; iteration?: number; planPath?: string | null }
+			| undefined;
 		const plan = details?.plan ?? String(message.content ?? "");
-		return createPlanMessageComponent(plan, details?.title ?? null, details?.iteration ?? 0, theme);
+		return createPlanMessageComponent(
+			plan,
+			details?.title ?? null,
+			details?.iteration ?? 0,
+			details?.planPath ?? null,
+			theme,
+		);
 	});
 
 	function renderPlanInMainBuffer(ctx: ExtensionContext, plan: string, iteration: number): void {
@@ -274,7 +303,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 				customType: PLAN_RENDER_MESSAGE_TYPE,
 				content: `Plan iteration ${iteration} rendered in chat for review.`,
 				display: true,
-				details: { plan, title: planTitle, iteration },
+				details: { plan, title: planTitle, iteration, planPath: getPlanFileDisplayPath() },
 			});
 		} catch (err) {
 			ctx.ui.notify(`Unable to render plan in chat: ${err}`, "error");
@@ -371,27 +400,41 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		}
 	}
 
+	type SgrMouseEvent = {
+		code: number;
+		x: number;
+		y: number;
+		released: boolean;
+	};
+
 	function enableMouseWheel(tui: TUI): () => void {
-		// Enable basic mouse tracking + SGR extended coordinates so wheel events
-		// arrive as escape sequences like ESC [ < 64 ; x ; y M.
-		tui.terminal.write("\x1b[?1000h\x1b[?1006h");
+		// Button-event tracking keeps wheel scrolling and reports left-button drag
+		// events so the plan review can provide selection clipped to its content.
+		tui.terminal.write("\x1b[?1002h\x1b[?1006h");
 
 		let cleanedUp = false;
 		return () => {
 			if (cleanedUp) return;
 			cleanedUp = true;
-			tui.terminal.write("\x1b[?1000l\x1b[?1006l");
+			tui.terminal.write("\x1b[?1002l\x1b[?1006l");
 		};
 	}
 
-	function getMouseWheelDelta(data: string): -1 | 1 | null {
-		// SGR mouse reporting: ESC [ < code ; col ; row M
-		const match = data.match(/^\x1b\[<(\d+);\d+;\d+[mM]$/);
+	function parseSgrMouseEvent(data: string): SgrMouseEvent | null {
+		const match = data.match(/^\x1b\[<(\d+);(\d+);(\d+)([mM])$/);
 		if (!match) return null;
 
 		const code = Number.parseInt(match[1] ?? "", 10);
-		if (Number.isNaN(code) || (code & 64) === 0) return null;
-		return (code & 1) === 0 ? -1 : 1;
+		const x = Number.parseInt(match[2] ?? "", 10) - 1;
+		const y = Number.parseInt(match[3] ?? "", 10) - 1;
+		if ([code, x, y].some(Number.isNaN)) return null;
+		return { code, x, y, released: match[4] === "m" };
+	}
+
+	function getMouseWheelDelta(data: string): -1 | 1 | null {
+		const event = parseSgrMouseEvent(data);
+		if (!event || (event.code & 64) === 0) return null;
+		return (event.code & 1) === 0 ? -1 : 1;
 	}
 
 	// ─── Enter / Exit ───────────────────────────────────────
@@ -408,6 +451,8 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		allowNextPlanOutputFromReviewRevision = false;
 		revisionPending = false;
 		revisionResubmitPromptQueued = false;
+		isPlanReviewOpen = false;
+		latestPlanReviewQueued = false;
 
 		ctx.ui.setWorkingVisible(false);
 		ctx.ui.notify(`${SYMBOL.plan} Plan mode activated. The agent will gather material evidence before presenting a plan.`, "info");
@@ -465,6 +510,8 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		lastUserInputPlanIteration = -1;
 		allowNextPlanOutputFromReviewRevision = false;
 		revisionResubmitPromptQueued = false;
+		isPlanReviewOpen = false;
+		latestPlanReviewQueued = false;
 	}
 
 	function restoreStateFromSession(ctx: ExtensionContext): void {
@@ -907,9 +954,16 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			notifyRequiresTui(ctx, "Plan review");
 			return "cancel";
 		}
+		const planFilePath = getPlanFileDisplayPath();
 		return ctx.ui.custom<ReviewAction>((tui, theme, _kb, done) => {
+			type SelectionPoint = { line: number; col: number };
+
 			const cleanupMouse = enableMouseWheel(tui);
+			let copyStatusTimer: ReturnType<typeof setTimeout> | null = null;
+			let closed = false;
 			const finish = (action: ReviewAction) => {
+				closed = true;
+				if (copyStatusTimer) clearTimeout(copyStatusTimer);
 				cleanupMouse();
 				done(action);
 			};
@@ -918,10 +972,105 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			let scrollOffset = 0;
 			let cachedMdLines: string[] | null = null;
 			let cachedWidth: number | null = null;
+			let lastFrameWidth = 0;
+			let selectionAnchor: SelectionPoint | null = null;
+			let selectionFocus: SelectionPoint | null = null;
+			let isSelecting = false;
+			let copyStatus: string | null = null;
+
+			const comparePoints = (a: SelectionPoint, b: SelectionPoint): number =>
+				a.line === b.line ? a.col - b.col : a.line - b.line;
+
+			const getNormalizedSelection = (): { start: SelectionPoint; end: SelectionPoint } | null => {
+				if (!selectionAnchor || !selectionFocus || comparePoints(selectionAnchor, selectionFocus) === 0) return null;
+				return comparePoints(selectionAnchor, selectionFocus) < 0
+					? { start: selectionAnchor, end: selectionFocus }
+					: { start: selectionFocus, end: selectionAnchor };
+			};
+
+			const showCopyStatus = (status: string): void => {
+				if (closed) return;
+				copyStatus = status;
+				if (copyStatusTimer) clearTimeout(copyStatusTimer);
+				copyStatusTimer = setTimeout(() => {
+					copyStatus = null;
+					copyStatusTimer = null;
+					tui.requestRender();
+				}, 1800);
+				tui.requestRender();
+			};
+
+			const copyText = (text: string, successMessage: string): void => {
+				void copyToClipboard(text)
+					.then(() => showCopyStatus(successMessage))
+					.catch((err) => showCopyStatus(`Copy failed: ${err instanceof Error ? err.message : String(err)}`));
+			};
+
+			const copySelection = (): void => {
+				const selection = getNormalizedSelection();
+				if (!selection || !cachedMdLines) return;
+
+				const selectedLines: string[] = [];
+				for (let lineIndex = selection.start.line; lineIndex <= selection.end.line; lineIndex++) {
+					const line = cachedMdLines[lineIndex] ?? "";
+					const from = lineIndex === selection.start.line ? selection.start.col : 0;
+					const to = lineIndex === selection.end.line ? selection.end.col : visibleWidth(line);
+					selectedLines.push(stripVTControlCharacters(sliceByColumn(line, from, Math.max(0, to - from))).trimEnd());
+				}
+
+				const selectedText = selectedLines.join("\n");
+				if (selectedText) copyText(selectedText, "Copied selection");
+			};
+
+			const highlightSelection = (line: string, lineIndex: number): string => {
+				const selection = getNormalizedSelection();
+				if (!selection || lineIndex < selection.start.line || lineIndex > selection.end.line) return line;
+
+				const lineWidth = visibleWidth(line);
+				const from = lineIndex === selection.start.line ? selection.start.col : 0;
+				const to = lineIndex === selection.end.line ? selection.end.col : lineWidth;
+				if (to <= from) return line;
+
+				const before = sliceByColumn(line, 0, from);
+				const selected = sliceByColumn(line, from, to - from).replace(/\x1b\[0m/g, "$&\x1b[7m");
+				const after = sliceByColumn(line, to, Math.max(0, lineWidth - to));
+				return `${before}\x1b[7m${selected}\x1b[27m${after}`;
+			};
+
+			const getSelectionPoint = (mouse: SgrMouseEvent, clampToContent: boolean): SelectionPoint | null => {
+				if (!lastFrameWidth || !cachedMdLines) return null;
+
+				const termWidth = tui.terminal.columns;
+				const termHeight = tui.terminal.rows;
+				const modalHeight = Math.max(10, Math.floor(termHeight * 0.85));
+				const viewportHeight = Math.max(5, modalHeight - 9);
+				const overlayHeight = viewportHeight + 9;
+				const overlayLeft = 1 + Math.floor((Math.max(1, termWidth - 2) - lastFrameWidth) / 2);
+				const overlayTop = 1 + Math.floor((Math.max(1, termHeight - 2) - overlayHeight) / 2);
+				const contentLeft = overlayLeft + 2;
+				const contentTop = overlayTop + 4;
+				const contentRight = contentLeft + Math.max(0, lastFrameWidth - 4);
+				const contentBottom = contentTop + viewportHeight - 1;
+
+				if (
+					!clampToContent &&
+					(mouse.x < contentLeft || mouse.x > contentRight || mouse.y < contentTop || mouse.y > contentBottom)
+				) {
+					return null;
+				}
+
+				const x = Math.max(contentLeft, Math.min(contentRight, mouse.x));
+				const y = Math.max(contentTop, Math.min(contentBottom, mouse.y));
+				return {
+					line: Math.min(cachedMdLines.length - 1, scrollOffset + y - contentTop),
+					col: Math.max(0, Math.min(lastFrameWidth - 4, x - contentLeft)),
+				};
+			};
 
 			return {
 				render(width: number): string[] {
 					const frameWidth = Math.max(20, width);
+					lastFrameWidth = frameWidth;
 					const innerWidth = Math.max(10, frameWidth - 4);
 
 					// Render full markdown inside the border (cached until inner width changes)
@@ -932,7 +1081,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 					const mdLines = cachedMdLines ?? [];
 
 					const modalHeight = Math.max(10, Math.floor(getTerminalRows() * 0.85));
-					const headerFooterLines = 8;
+					const headerFooterLines = 9;
 					const viewportHeight = Math.max(5, modalHeight - headerFooterLines);
 					const maxScroll = Math.max(0, mdLines.length - viewportHeight);
 					if (scrollOffset > maxScroll) scrollOffset = maxScroll;
@@ -960,12 +1109,14 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 								(planTitle ? `  ${theme.fg("dim", planTitle)}` : ""),
 						),
 					);
+					lines.push(framedLine(theme.fg("dim", planFilePath ?? "Plan file unavailable")));
 					lines.push(divider("├", "┤"));
 
 					// ── Scrollable plan content ──
 					const visible = mdLines.slice(scrollOffset, scrollOffset + viewportHeight);
-					for (const line of visible) {
-						lines.push(framedLine(line));
+					for (let visibleIndex = 0; visibleIndex < visible.length; visibleIndex++) {
+						const line = visible[visibleIndex] ?? "";
+						lines.push(framedLine(highlightSelection(line, scrollOffset + visibleIndex)));
 					}
 
 					// pad if content is shorter than viewport
@@ -986,6 +1137,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 					const actions: string[] = [
 						`${theme.fg("success", "a")} approve`,
 						`${theme.fg("warning", "r")} revise`,
+						`${theme.fg("accent", "c")} copy plan`,
 					];
 					if (iteration > 1) {
 						actions.push(
@@ -997,7 +1149,10 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 					actions.push(`${theme.fg("accent", "q")} Q&A`);
 					actions.push(`${theme.fg("dim", "esc")} back`);
 					lines.push(framedLine(actions.join("  │  ")));
-					lines.push(framedLine(theme.fg("dim", "↑↓/j/k scroll  PgUp/PgDn page  mouse wheel scroll")));
+					const interactionHint = copyStatus
+						? theme.fg(copyStatus.startsWith("Copy failed") ? "error" : "success", copyStatus)
+						: theme.fg("dim", "↑↓/j/k scroll  PgUp/PgDn page  wheel scroll  drag select + copy");
+					lines.push(framedLine(interactionHint));
 					lines.push(divider("╰", "╯"));
 
 					return lines;
@@ -1010,9 +1165,43 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 
 				handleInput(data: string) {
 					const modalHeight = Math.max(10, Math.floor(getTerminalRows() * 0.85));
-					const viewportHeight = Math.max(5, modalHeight - 8);
+					const viewportHeight = Math.max(5, modalHeight - 9);
 					const maxScroll = cachedMdLines ? Math.max(0, cachedMdLines.length - viewportHeight) : 0;
+					const mouseEvent = parseSgrMouseEvent(data);
 					const wheelDelta = getMouseWheelDelta(data);
+
+					// ── Mouse selection, clipped to the plan content ──
+					if (mouseEvent && wheelDelta === null) {
+						const isLeftButton = (mouseEvent.code & 3) === 0;
+						const isMotion = (mouseEvent.code & 32) !== 0;
+
+						if (mouseEvent.released && isSelecting) {
+							selectionFocus = getSelectionPoint(mouseEvent, true) ?? selectionFocus;
+							isSelecting = false;
+							tui.requestRender();
+							copySelection();
+							return;
+						}
+
+						if (!mouseEvent.released && isLeftButton && !isMotion) {
+							const point = getSelectionPoint(mouseEvent, false);
+							if (point) {
+								selectionAnchor = point;
+								selectionFocus = point;
+								isSelecting = true;
+								tui.requestRender();
+							}
+							return;
+						}
+
+						if (!mouseEvent.released && isLeftButton && isMotion && isSelecting) {
+							selectionFocus = getSelectionPoint(mouseEvent, true) ?? selectionFocus;
+							tui.requestRender();
+							return;
+						}
+
+						return;
+					}
 
 					// ── Scrolling ──
 					if (wheelDelta !== null) {
@@ -1042,6 +1231,10 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 					}
 
 					// ── Actions ──
+					if (data === "c") {
+						copyText(plan, "Copied full plan");
+						return;
+					}
 					if (data === "a") {
 						finish("approve");
 						return;
@@ -1129,6 +1322,99 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		}
 	}
 
+	async function openPlanReview(
+		ctx: ExtensionContext,
+		plan: string,
+		iteration: number,
+		options: { queueIfOpen?: boolean } = {},
+	): Promise<void> {
+		if (!isTui(ctx)) {
+			notifyRequiresTui(ctx, "Plan review");
+			return;
+		}
+		if (isPlanReviewOpen) {
+			if (options.queueIfOpen) {
+				latestPlanReviewQueued = true;
+			} else {
+				ctx.ui.notify("The plan review is already open.", "info");
+			}
+			return;
+		}
+
+		isPlanReviewOpen = true;
+		try {
+			const result = await planReviewLoop(ctx, plan, iteration);
+
+			// A revision can finish in the background while an older iteration is
+			// reopened. Never approve or revise a stale plan accidentally.
+			if (iteration !== iterations.length && result.action !== "cancel") {
+				ctx.ui.notify("A newer plan iteration is available. Reopen the review to act on the latest plan.", "warning");
+				return;
+			}
+
+			switch (result.action) {
+				case "approve":
+					allowNextPlanOutputFromReviewRevision = false;
+					revisionPending = false;
+					exitPlanMode(ctx, true);
+					sendFollowUpOrImmediate(
+						ctx,
+						"I approve this plan. Execute the approved plan step by step. Here is the plan:\n\n" + plan,
+						"Unable to send plan approval follow-up",
+					);
+					break;
+
+				case "revise":
+					allowNextPlanOutputFromReviewRevision = true;
+					revisionPending = true;
+					persistState();
+					sendFollowUpOrImmediate(
+						ctx,
+						`This feedback starts a plan revision discussion; do not call plan_output immediately unless the complete revision is already clear. You may respond in normal assistant text, ask me clarifying questions, or investigate further. If any material choice is unclear, ask before revising. Once the complete revised plan is ready, present it by calling plan_output.\n\nFeedback:\n${result.feedback}`,
+						"Unable to send plan revision follow-up",
+					);
+					break;
+
+				case "cancel":
+					allowNextPlanOutputFromReviewRevision = false;
+					renderPlanInMainBuffer(ctx, plan, iteration);
+					ctx.ui.notify(
+						"Plan review closed. Use /plan-review or Ctrl+Alt+O to reopen it, ask a follow-up question normally, or explicitly request a revision.",
+						"info",
+					);
+					updateUI(ctx);
+					break;
+			}
+		} catch (err) {
+			ctx.ui.notify(`Plan review failed: ${err}`, "error");
+		} finally {
+			isPlanReviewOpen = false;
+			if (latestPlanReviewQueued) {
+				latestPlanReviewQueued = false;
+				if (active && iterations.length > 0) {
+					const latestIteration = iterations.length;
+					const latestPlan = iterations[latestIteration - 1] ?? "";
+					setTimeout(() => {
+						void openPlanReview(ctx, latestPlan, latestIteration);
+					}, 0);
+				}
+			}
+		}
+	}
+
+	async function reopenLatestPlanReview(ctx: ExtensionContext): Promise<void> {
+		if (!active) {
+			ctx.ui.notify("Plan mode is not active, so there is no active plan review to reopen.", "warning");
+			return;
+		}
+		if (iterations.length === 0) {
+			ctx.ui.notify("No plan has been presented yet.", "warning");
+			return;
+		}
+
+		await openPlanReview(ctx, iterations[iterations.length - 1] ?? "", iterations.length);
+	}
+
 	// ─── plan_output Tool ───────────────────────────────────
 
 	pi.registerTool({
@@ -1200,51 +1486,8 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			const presentedPlan = params.plan;
 			const presentedPlanDir = planDir;
 
-			const sendReviewFollowUp = (content: string): void => {
-				sendFollowUpOrImmediate(ctx, content, "Unable to send plan review follow-up");
-			};
-
-			const runReview = async (): Promise<void> => {
-				try {
-					const result = await planReviewLoop(ctx, presentedPlan, iteration);
-
-					switch (result.action) {
-						case "approve":
-							allowNextPlanOutputFromReviewRevision = false;
-							revisionPending = false;
-							exitPlanMode(ctx, true);
-							sendReviewFollowUp(
-								"I approve this plan. Execute the approved plan step by step. Here is the plan:\n\n" +
-									presentedPlan,
-							);
-							break;
-
-						case "revise":
-							allowNextPlanOutputFromReviewRevision = true;
-							revisionPending = true;
-							persistState();
-							sendReviewFollowUp(
-								`This feedback starts a plan revision discussion; do not call plan_output immediately unless the complete revision is already clear. You may respond in normal assistant text, ask me clarifying questions, or investigate further. If any material choice is unclear, ask before revising. Once the complete revised plan is ready, present it by calling plan_output.\n\nFeedback:\n${result.feedback}`,
-							);
-							break;
-
-						case "cancel":
-							allowNextPlanOutputFromReviewRevision = false;
-							renderPlanInMainBuffer(ctx, presentedPlan, iteration);
-							ctx.ui.notify(
-								"Plan review closed. The plan was rendered in the chat buffer for reference. Ask a follow-up question normally, or explicitly request a revision to update the plan.",
-								"info",
-							);
-							updateUI(ctx);
-							break;
-					}
-				} catch (err) {
-					ctx.ui.notify(`Plan review failed: ${err}`, "error");
-				}
-			};
-
 			setTimeout(() => {
-				void runReview();
+				void openPlanReview(ctx, presentedPlan, iteration, { queueIfOpen: true });
 			}, 0);
 
 			return {
@@ -1303,6 +1546,13 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		},
 	});
 
+	pi.registerCommand("plan-review", {
+		description: "Reopen the latest plan review",
+		handler: async (_args, ctx) => {
+			await reopenLatestPlanReview(ctx);
+		},
+	});
+
 	// ─── Keyboard Shortcuts ─────────────────────────────────
 
 	pi.registerShortcut(Key.alt("p"), {
@@ -1313,6 +1563,13 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			} else {
 				enterPlanMode(ctx);
 			}
+		},
+	});
+
+	pi.registerShortcut(Key.ctrlAlt("o"), {
+		description: "Reopen the latest plan review",
+		handler: async (ctx) => {
+			await reopenLatestPlanReview(ctx);
 		},
 	});
 
