@@ -16,6 +16,8 @@ When enabled, this extension:
 - hides pi's built-in working row while plan mode is active and shows planning progress in the plan-mode status/widget instead
 - defines the approval boundary: no implementation or destructive, irreversible, production, or external mutation before approval; approval authorizes the reviewed plan subject to normal safety constraints
 - renders plans in a TUI overlay review UI without keeping the `plan_output` tool running while you review
+- shows the `~/…/plan.md` file location in both the review-dialog header and the escaped plan header
+- copies the complete raw markdown plan with `c`, and supports mouse selection of rendered text clipped to the plan area (the selection is copied on release)
 - renders a highlighted plan box in the main chat buffer when the review overlay is closed without approval or revision
 - keeps that chat-buffer plan copy display-only and filters it out of LLM context to avoid duplicating stale plans
 - stores each plan iteration in a per-plan git repo under `~/.pi/plans/`
@@ -32,7 +34,9 @@ When enabled, this extension:
 You can enable Plan Mode in any of these ways:
 
 - `/plan` — toggle plan mode
+- `/plan-review` — reopen the latest presented plan while plan mode remains active
 - `Alt+P` — toggle plan mode
+- `Ctrl+Alt+O` — reopen the latest presented plan
 - `pi --plan` — start a session with plan mode enabled
 
 ## Workflow
@@ -42,7 +46,7 @@ You can enable Plan Mode in any of these ways:
 3. The agent gathers material evidence, asks only necessary clarifying questions, and prepares a plan.
 4. Once ready, it presents a structured plan through the `plan_output` tool.
 5. Review the plan in the TUI overlay.
-6. Approve it, request revisions, or press `Esc` to close the overlay and continue chatting with the plan rendered in the main chat buffer.
+6. Approve it, request revisions, or press `Esc` to close the overlay and continue chatting with the plan rendered in the main chat buffer. Reopen the latest plan at any time with `/plan-review` or `Ctrl+Alt+O` while plan mode remains active.
 7. During revision, feedback starts a discussion rather than forcing an immediate `plan_output` call. The agent may inspect more context, use web search if available, reply normally, and ask clarification questions; only when the complete revision is ready must it use `plan_output` again.
 8. After approval, plan mode exits and the agent can execute the approved plan.
 
@@ -52,6 +56,8 @@ Inside the plan review screen:
 
 - `a` — approve plan
 - `r` — request revisions
+- `c` — copy the complete raw markdown plan
+- mouse drag — select rendered plan text within the dialog; dragging outside is clipped to the plan area and the selection is copied on release
 - `d` — show diff from previous iteration
 - `s` — summarize changes from previous iteration
 - `S` — summarize all changes across iterations
@@ -67,6 +73,7 @@ Inside the plan review screen:
 - `Ctrl+Alt+S` — show change summary
 - `Ctrl+Alt+A` — show all-changes summary
 - `Ctrl+Alt+Q` — show Q&A history
+- `Ctrl+Alt+O` — reopen the latest plan review
 
 ## Files
 
