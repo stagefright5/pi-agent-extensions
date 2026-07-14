@@ -387,7 +387,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 					hints.push("ctrl+alt+d diff", "ctrl+alt+s summary", "ctrl+alt+a all changes");
 				}
 				hints.push("ctrl+alt+q Q&A");
-				status += t.fg("dim", `  ${hints.join("  │  ")}`);
+				status += t.fg("dim", ` ${hints.join(" │ ")}`);
 			}
 
 			ctx.ui.setStatus("plan-mode", status);
