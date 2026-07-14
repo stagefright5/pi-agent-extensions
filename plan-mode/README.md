@@ -13,7 +13,7 @@ When enabled, this extension:
 - allows autonomous read-only research and low-risk validation of planning assumptions without intentionally changing source files or tracked project state
 - focuses plans on the destination, constraints, affected surfaces, risks, and validation rather than prescribing every low-level edit
 - injects concise, state-aware planning instructions for each turn while plan mode is active
-- hides pi's built-in working row while plan mode is active and shows planning progress in the plan-mode status/widget instead
+- hides pi's built-in working row while plan mode is active and publishes planning progress, plan metadata, and shortcuts through its footer status
 - defines the approval boundary: no implementation or destructive, irreversible, production, or external mutation before approval; approval authorizes the reviewed plan subject to normal safety constraints
 - renders plans in a TUI overlay review UI without keeping the `plan_output` tool running while you review
 - shows the `~/…/plan.md` file location in both the review-dialog header and the escaped plan header
@@ -102,6 +102,7 @@ Plan Mode uses current pi extension APIs to:
 - store extension state in the session
 - render TUI overlay screens for review, diffs, summaries, and Q&A
 - render display-only custom messages for closed review plans
+- publish compact active-state details through `ctx.ui.setStatus()` for pi's footer or a custom status-bar extension
 
 The interactive review, diff, summary, and Q&A screens require TUI mode. In non-TUI modes, the extension reports that those features require interactive mode.
 

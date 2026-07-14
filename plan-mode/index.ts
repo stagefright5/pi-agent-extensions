@@ -369,34 +369,30 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 
 	function updateUI(ctx: ExtensionContext): void {
 		const t = ctx.ui.theme;
+		ctx.ui.setWidget("plan-mode", undefined);
+
 		if (active) {
-			ctx.ui.setStatus("plan-mode", t.fg("warning", isAgentWorking ? `${SYMBOL.plan} PLAN …` : `${SYMBOL.plan} PLAN`));
+			let status = t.fg("warning", `${SYMBOL.plan} Planning`);
+			if (planTitle) status += t.fg("muted", ` ${planTitle}`);
+			if (iterations.length > 0) {
+				status += t.fg(
+					"dim",
+					` (${iterations.length} iteration${iterations.length !== 1 ? "s" : ""})`,
+				);
+			}
 
 			if (iterations.length > 0 || isAgentWorking) {
-				const widgetLines: string[] = [];
-				widgetLines.push(
-					t.fg("accent", `${SYMBOL.plan} Plan Mode`) +
-						(planTitle ? t.fg("muted", ` — ${planTitle}`) : "") +
-						(iterations.length > 0
-							? t.fg("dim", ` (${iterations.length} iteration${iterations.length !== 1 ? "s" : ""})`)
-							: ""),
-				);
-				if (isAgentWorking) {
-					widgetLines.push(t.fg("warning", "  Agent is gathering planning context…"));
-				}
 				const hints: string[] = [];
 				if (iterations.length > 1) {
 					hints.push("ctrl+alt+d diff", "ctrl+alt+s summary", "ctrl+alt+a all changes");
 				}
 				hints.push("ctrl+alt+q Q&A");
-				widgetLines.push(t.fg("dim", `  ${hints.join("  │  ")}`));
-				ctx.ui.setWidget("plan-mode", widgetLines);
-			} else {
-				ctx.ui.setWidget("plan-mode", undefined);
+				status += t.fg("dim", `  ${hints.join("  │  ")}`);
 			}
+
+			ctx.ui.setStatus("plan-mode", status);
 		} else {
 			ctx.ui.setStatus("plan-mode", undefined);
-			ctx.ui.setWidget("plan-mode", undefined);
 		}
 	}
 
