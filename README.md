@@ -1,16 +1,77 @@
-# pi Extensions
+# pi Agent Extensions
 
-This repository is a small workspace for custom [pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent) extensions.
+A collection of custom extensions for [pi](https://github.com/earendil-works/pi-mono/tree/main/packages/coding-agent), maintained on GitHub at [`stagefright5/pi-agent-extensions`](https://github.com/stagefright5/pi-agent-extensions).
 
-The maintained extensions here target the current pi 0.80.x extension APIs and are kept as lightweight auto-discovered TypeScript scripts. No local package/workspace setup is required.
+The extensions are maintained against pi **0.80.7** (the 0.80.x API line), use pi's auto-discovered TypeScript extension format, and do not require a local build or package installation. This repository is laid out for direct clone or copy installation; it is not currently published as a pi package for `pi install`.
 
-Each extension lives in its own directory and documents its behavior locally.
+> [!WARNING]
+> pi extensions execute with your user account's full system permissions. Review the source before installing or updating any extension.
 
-## Structure
+## Extensions
+
+| Extension | Purpose | Primary interface |
+| --- | --- | --- |
+| [Plan Mode](./plan-mode/README.md) | Evidence-guided planning with interactive review, revisions, diffs, summaries, Q&A history, and branch-aware persistence | `/plan`, `Alt+P` |
+| [Global Prompt History Search](./prompt-history-search/README.md) | Fuzzy reverse search across prompts in all saved pi sessions | `Alt+R`, `/prompt-history` |
+| [Prompt Undo/Redo](./prompt-undo-redo/README.md) | Cursor-restoring undo and redo for the prompt editor | `Ctrl+Z`, `Ctrl+Shift+Z`, `Ctrl+Y` |
+| [Compact Status Bar](./status-bar/README.md) | One-line footer with cwd, Git branch, context usage, cost, and extension statuses | Automatic in TUI mode |
+| [Provider URL Logger](./log-provider-url.md) | Appends the selected provider, model, and base URL for provider requests to a local log | Automatic |
+
+Most interactive features require pi's TUI mode. See each extension's documentation for requirements, stored data, and limitations.
+
+## Install the complete collection
+
+The simplest installation is to clone this repository directly into pi's global extension directory:
+
+```bash
+git clone https://github.com/stagefright5/pi-agent-extensions.git ~/.pi/agent/extensions
+```
+
+The destination must not already contain files. Back up or move an existing `~/.pi/agent/extensions` directory before cloning.
+
+Restart pi after installation, or run `/reload` from an existing session.
+
+### Update
+
+```bash
+git -C ~/.pi/agent/extensions pull --ff-only
+```
+
+Then run `/reload` or restart pi.
+
+### Install only selected extensions
+
+Clone the repository elsewhere, then copy the desired file or directory into an auto-discovered extension location:
+
+```bash
+git clone https://github.com/stagefright5/pi-agent-extensions.git ~/src/pi-agent-extensions
+mkdir -p ~/.pi/agent/extensions
+
+# Directory extension
+cp -R ~/src/pi-agent-extensions/plan-mode ~/.pi/agent/extensions/
+
+# Single-file extension
+cp ~/src/pi-agent-extensions/log-provider-url.ts ~/.pi/agent/extensions/
+```
+
+For project-local installation, copy into `.pi/extensions/` instead. Project-local extensions are loaded only after the project is trusted.
+
+## Auto-discovery layout
+
+pi loads extension entry points from:
+
+- `~/.pi/agent/extensions/*.ts`
+- `~/.pi/agent/extensions/*/index.ts`
+- `.pi/extensions/*.ts`
+- `.pi/extensions/*/index.ts`
+
+This repository follows that layout directly:
 
 ```text
 .
 ├── README.md
+├── log-provider-url.md
+├── log-provider-url.ts
 ├── plan-mode/
 │   ├── README.md
 │   ├── index.ts
@@ -26,40 +87,25 @@ Each extension lives in its own directory and documents its behavior locally.
     └── index.ts
 ```
 
-## Available extensions
+## Local data and privacy
 
-- [`plan-mode/`](./plan-mode/README.md) — interactive planning mode for pi with clarifying questions, plan review, approval, diffs, summaries, Q&A history, and branch-aware state restoration.
-- [`prompt-history-search/`](./prompt-history-search/README.md) — global reverse search (`Alt+R`) over user prompts from all saved sessions and projects.
-- [`prompt-undo-redo/`](./prompt-undo-redo/README.md) — prompt editor undo/redo shortcuts (`Ctrl+Z`, `Ctrl+Shift+Z`, `Ctrl+Y`) with cursor-restoring snapshots.
-- [`status-bar/`](./status-bar/README.md) — compact one-line footer showing cwd, context usage, cost, and extension statuses.
+The collection operates locally, but some extensions read or write user data:
 
-`herdr-agent-state.ts` is intentionally not covered by this modernization pass.
+- Plan Mode stores plans and revision history under `~/.pi/plans/`; its optional summaries use the active model provider.
+- Prompt History Search reads saved pi sessions across projects into an in-memory index.
+- Provider URL Logger appends endpoint metadata to `~/.pi/agent/provider-urls.log` without rotation.
 
-## Installing an extension
+No extension in this repository intentionally uploads its own index or log. Normal agent requests and Plan Mode's generated change summaries still use the configured model provider.
 
-pi auto-discovers extensions from these locations:
+## Development
 
-- `~/.pi/agent/extensions/*.ts`
-- `~/.pi/agent/extensions/*/index.ts`
-- `.pi/extensions/*.ts`
-- `.pi/extensions/*/index.ts`
+No repository-local build step is required. Edit the TypeScript sources and run `/reload` to reload extensions, skills, prompts, themes, and context files.
 
-So each directory in this repo is intended to be loadable as a pi extension.
+The implementation uses current pi APIs including:
 
-After adding or updating an extension, restart pi or run `/reload`.
+- lifecycle hooks such as `before_agent_start`, `before_provider_request`, and session events
+- `ctx.ui.custom()` overlays, custom editors, and custom footers
+- commands, flags, shortcuts, tools, custom renderers, and extension status entries
+- `pi.appendEntry()` with active-branch reconstruction for persisted state
 
-## Current API patterns used
-
-These extensions use modern pi APIs such as:
-
-- `ctx.ui.setEditorComponent()` / `ctx.ui.getEditorComponent()` for custom editor replacement and composition
-- `CustomEditor` for app-level editor keybinding support
-- `ctx.ui.custom(..., { overlay, overlayOptions })` for TUI overlays
-- `before_agent_start` with `event.systemPromptOptions` for context-aware system prompt customization
-- `pi.registerTool()` with prompt metadata and custom renderers
-- `pi.appendEntry()` plus session reconstruction for persistence
-
-## Notes
-
-- Root-level docs stay generic.
-- Extension-specific usage, shortcuts, and behavior live in each extension's own `README.md`.
+Extension-specific behavior, shortcuts, storage, and caveats are documented in the linked pages above.
