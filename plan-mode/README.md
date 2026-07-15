@@ -1,117 +1,126 @@
 # Plan Mode
 
-Interactive planning mode for pi, updated for the current pi 0.80.x extension and TUI APIs.
+Interactive, evidence-guided planning for pi 0.80.7 and the 0.80.x API line, with review, approval, revision history, diffs, summaries, and Q&A.
 
-Plan Mode switches the agent into a guided planning workflow where it resolves material ambiguity, gathers relevant evidence, produces an impact-aware implementation plan, and waits for approval before executing the plan.
+[Back to the extension collection](../README.md)
 
-## What it does
+Plan Mode guides the agent to resolve material ambiguity, inspect relevant evidence, produce an execution-ready implementation plan, and wait for approval before implementation.
 
-When enabled, this extension:
+## Start and reopen
 
-- leaves the current active tool set unchanged while planning
-- directs the agent to gather evidence or ask targeted questions when unresolved facts could materially change the plan
-- allows autonomous read-only research and low-risk validation of planning assumptions without intentionally changing source files or tracked project state
-- focuses plans on the destination, constraints, affected surfaces, risks, and validation rather than prescribing every low-level edit
-- injects concise, state-aware planning instructions for each turn while plan mode is active
-- hides pi's built-in working row while plan mode is active and publishes planning progress, plan metadata, and shortcuts through its footer status
-- defines the approval boundary: no implementation or destructive, irreversible, production, or external mutation before approval; approval authorizes the reviewed plan subject to normal safety constraints
-- renders plans in a TUI overlay review UI without keeping the `plan_output` tool running while you review
-- shows the `~/…/plan.md` file location in both the review-dialog header and the escaped plan header
-- copies the complete raw markdown plan with `c`, and supports mouse selection of rendered text clipped to the plan area (the selection is copied on release)
-- renders a highlighted plan box in the main chat buffer when the review overlay is closed without approval or revision
-- keeps that chat-buffer plan copy display-only and filters it out of LLM context to avoid duplicating stale plans
-- stores each plan iteration in a per-plan git repo under `~/.pi/plans/`
-- shows diffs between revisions
-- generates LLM summaries of changes between iterations or across all iterations
-- keeps a Q&A history for plan discussions
-- answers post-plan clarification questions normally instead of replacing the saved plan
-- treats revision as a discussion phase where the agent can reply normally, clarify, or investigate instead of calling `plan_output` immediately; the completed revised plan must still use `plan_output`
-- guards `plan_output` after a plan is presented so it is only used for explicit revisions/replacements
-- restores persisted state from the active session branch so tree navigation follows branch-local plan state
+- `/plan` — toggle Plan Mode
+- `Alt+P` — toggle Plan Mode
+- `pi --plan` — start a session with Plan Mode enabled
+- `/plan-review` — reopen the latest presented plan while Plan Mode is active
+- `Ctrl+Alt+O` — reopen the latest presented plan while Plan Mode is active
 
-## Activation
-
-You can enable Plan Mode in any of these ways:
-
-- `/plan` — toggle plan mode
-- `/plan-review` — reopen the latest presented plan while plan mode remains active
-- `Alt+P` — toggle plan mode
-- `Ctrl+Alt+O` — reopen the latest presented plan
-- `pi --plan` — start a session with plan mode enabled
+Activating Plan Mode starts a fresh planning state in the current session. Deactivating it clears the active workflow but does not delete saved plan files.
 
 ## Workflow
 
-1. Enable Plan Mode.
-2. Ask the agent for help on a task.
-3. The agent gathers material evidence, asks only necessary clarifying questions, and prepares a plan.
-4. Once ready, it presents a structured plan through the `plan_output` tool.
-5. Review the plan in the TUI overlay.
-6. Approve it, request revisions, or press `Esc` to close the overlay and continue chatting with the plan rendered in the main chat buffer. Reopen the latest plan at any time with `/plan-review` or `Ctrl+Alt+O` while plan mode remains active.
-7. During revision, feedback starts a discussion rather than forcing an immediate `plan_output` call. The agent may inspect more context, use web search if available, reply normally, and ask clarification questions; only when the complete revision is ready must it use `plan_output` again.
-8. After approval, plan mode exits and the agent can execute the approved plan.
+1. Enable Plan Mode and describe the task.
+2. The agent inspects relevant repository context or external documentation and asks only questions whose answers could materially change the plan.
+3. The agent presents the complete plan through the `plan_output` tool.
+4. Plan Mode saves `plan.md`, commits the iteration to a dedicated local Git repository, and opens an asynchronous TUI review overlay.
+5. Approve the plan, request a revision, inspect its history, or close the overlay to continue discussing it.
+6. Approval exits Plan Mode and queues a user message instructing the agent to execute the approved plan.
+7. Revision feedback starts a discussion phase. The agent may answer normally, investigate, or ask clarifying questions; it presents the complete replacement only when ready by calling `plan_output` again.
 
-## Review UI shortcuts
+Closing review with `Escape` renders a display-only copy of the plan in the main chat buffer. Use `/plan-review` or `Ctrl+Alt+O` to reopen the actionable review overlay.
 
-Inside the plan review screen:
+## Planning and approval boundary
 
-- `a` — approve plan
-- `r` — request revisions
-- `c` — copy the complete raw markdown plan
-- mouse drag — select rendered plan text within the dialog; dragging outside is clipped to the plan area and the selection is copied on release
-- `d` — show diff from previous iteration
-- `s` — summarize changes from previous iteration
-- `S` — summarize all changes across iterations
+While active, Plan Mode instructs the agent to:
+
+- gather evidence that can materially affect correctness, scope, impact, assumptions, or validation
+- perform only read-only research and low-risk validation before approval
+- identify intended outcomes, constraints, affected surfaces, preserved behavior, risks, and validation
+- distinguish verified findings from assumptions and unresolved unknowns
+- avoid implementation and destructive, irreversible, production, or external mutations before approval
+- preserve the current active tool set instead of switching to a hard-coded read-only tool list
+
+> [!IMPORTANT]
+> The pre-approval boundary is enforced primarily through system instructions, not an operating-system sandbox or a hard block on mutating tools. Review tool calls as you normally would.
+
+After a plan is presented, ordinary questions are answered in regular assistant text. A routing guard blocks accidental reuse of `plan_output` when the latest user message looks like clarification rather than an explicit revision request.
+
+## Review shortcuts
+
+Inside the plan review overlay:
+
+- `a` — approve the plan
+- `r` — open an editor for revision feedback
+- `c` — copy the complete raw Markdown plan
+- mouse drag — select rendered plan text; selection is clipped to the plan area and copied on release
+- `d` — show the diff from the previous iteration
+- `s` — generate a model summary of changes from the previous iteration
+- `S` — generate a model summary of all changes across iterations
 - `q` — show Q&A history
-- `↑` / `↓` / `j` / `k` — scroll
-- `PgUp` / `PgDn` — page scroll
-- `Esc` — close review and continue the conversation
+- `Up` / `Down` / `j` / `k` — scroll
+- `Page Up` / `Page Down` — page scroll
+- mouse wheel — scroll
+- `Escape` — close review and continue the conversation
 
-## Global shortcuts while plan mode is active
+Diff and summary actions become available after at least two iterations.
 
-- `Alt+P` — toggle plan mode
-- `Ctrl+Alt+D` — show plan diff
-- `Ctrl+Alt+S` — show change summary
-- `Ctrl+Alt+A` — show all-changes summary
+## Global shortcuts
+
+These shortcuts are useful while Plan Mode is active outside the review overlay:
+
+- `Ctrl+Alt+D` — show the latest plan diff
+- `Ctrl+Alt+S` — summarize the latest changes
+- `Ctrl+Alt+A` — summarize all changes
 - `Ctrl+Alt+Q` — show Q&A history
 - `Ctrl+Alt+O` — reopen the latest plan review
 
-## Files
+## Persistence and files
 
-- [`index.ts`](./index.ts) — extension entry point, UI, tool registration, state management, and event hooks
-- [`utils.ts`](./utils.ts) — slug generation helpers
-
-## Persistence
-
-Plan iterations are saved in a dedicated git repo under:
+Each plan is stored under:
 
 ```text
-~/.pi/plans/
+~/.pi/plans/<timestamp>_<title-slug>/plan.md
 ```
 
-Each plan gets its own timestamped directory and stores the current plan as `plan.md`, with git commits for every revision.
+The containing directory is a dedicated Git repository. It has a seed commit followed by a commit for every changed plan iteration, enabling revision diffs. Identical plan content is not committed again.
 
-Session state is stored with `pi.appendEntry()` and restored from the current session branch on startup, reload, resume, and tree navigation.
+Plan Mode also persists the following branch-local state through `pi.appendEntry()`:
 
-## How it integrates with pi
+- whether the mode is active
+- plan directory and all iteration text
+- current title
+- Q&A messages
+- whether a revision is pending
 
-Plan Mode uses current pi extension APIs to:
+State is reconstructed from the active session branch on startup, reload, resume, fork, and tree navigation, so navigating the session tree follows that branch's latest Plan Mode state.
 
-- register the `plan_output` custom tool with prompt metadata and custom rendering
-- inject plan-specific system instructions using structured system prompt context
-- keep tool activation unchanged while planning
-- store extension state in the session
-- render TUI overlay screens for review, diffs, summaries, and Q&A
-- render display-only custom messages for closed review plans
-- publish compact active-state details through `ctx.ui.setStatus()` for pi's footer or a custom status-bar extension
+The display-only plan message created after closing review is filtered out of model context to avoid duplicating stale plans.
 
-The interactive review, diff, summary, and Q&A screens require TUI mode. In non-TUI modes, the extension reports that those features require interactive mode.
+## Model and data usage
+
+- Normal planning uses the current agent model as usual.
+- Change summaries call the currently selected model directly and require an available API key. The relevant plan versions are sent to that provider.
+- Q&A history stores textual user and assistant messages captured while Plan Mode is active in the pi session.
+- Plans remain on local disk until you remove their directories.
+
+## Requirements and limitations
+
+- Interactive review, diffs, summaries, Q&A, clipboard copy, and revision editing require TUI mode.
+- Git must be installed and available on `PATH` so Plan Mode can initialize and commit its local plan repositories.
+- Summary generation requires a selected model and valid credentials.
+- Clipboard copy depends on pi's clipboard support and the host environment.
+- Plan Mode hides pi's normal working row while active and publishes progress through `ctx.ui.setStatus()`; the bundled Compact Status Bar displays that status.
+
+## Files
+
+- [`index.ts`](./index.ts) — extension entry point, planning prompt, tool and event registration, persistence, and TUI screens
+- [`utils.ts`](./utils.ts) — plan-title slug generation
 
 ## Installation
 
-Place this directory where pi can auto-discover it, for example:
+Install the [complete collection](../README.md#install-the-complete-collection), or copy this directory to:
 
 ```text
 ~/.pi/agent/extensions/plan-mode/
 ```
 
-pi will load `index.ts` automatically. After changes, run `/reload` or restart pi.
+Run `/reload` or restart pi after installation.

@@ -1,40 +1,65 @@
 # Global Prompt History Search
 
-Adds shell-style reverse search for user prompts saved across all Pi sessions and projects.
+Adds shell-style reverse search across textual user prompts saved in all pi sessions and projects.
+
+[Back to the extension collection](../README.md)
 
 ## Usage
 
-- Press `Alt+R` from the normal prompt editor.
-- Or run `/prompt-history [initial query]`.
-- Type to filter prompts.
-- Press `Alt+R` or `Down` to select an older match.
-- Press `Up` to select a newer match.
-- Press `Page Up` / `Page Down` to move by a page.
-- Press `Enter` to copy the selected prompt into the current editor.
-- Press `Escape` or `Ctrl+C` to cancel and preserve the existing draft.
+Open the picker in TUI mode:
 
-Selecting a prompt does **not** submit it and does not switch to its source session.
+- `Alt+R` — open search using the current editor draft as the initial query
+- `/prompt-history [initial query]` — open search with an optional explicit query
+
+Inside the picker:
+
+- type to filter prompts
+- `Alt+R` or `Down` — select an older match
+- `Up` — select a newer match
+- `Page Up` / `Page Down` — move by one visible page
+- `Enter` — restore the selected prompt into the editor
+- `Escape` or `Ctrl+C` — cancel and preserve the existing draft
+
+Restoring a prompt does **not** submit it or switch to its source session.
 
 ## Search scope
 
-The index includes textual user messages from every session returned by Pi's global session listing, including messages retained on alternate branches. Image-only prompts are skipped. Results are newest-first and include date, session name or ID, and working-directory context.
+The index includes textual user messages from every session returned by pi's global session listing, including messages retained on alternate branches. Image-only prompts and empty text are skipped.
 
-Search is case-insensitive and supports fuzzy token matching. When opened with `Alt+R`, the current editor draft seeds the search query. `/prompt-history some text` uses `some text` as the initial query.
+Results are newest-first and show:
 
-Session prompts can contain sensitive information from unrelated projects. The extension reads and searches them locally only; it does not send the index to a model or remote service.
+- prompt preview
+- date and time
+- session name and file ID
+- source working directory
+
+Matching is case-insensitive. Every whitespace-separated query token must either be a substring of the searchable prompt metadata or satisfy pi-tui's fuzzy matcher.
 
 ## Performance and resilience
 
-Pi's global session listing scans the saved sessions on each invocation. Extracted prompt records are cached in memory by session path and modification time, so the extension only reparses changed session contents. Deleted sessions are removed from the cache.
+pi's global session listing scans saved sessions whenever the picker opens. Parsed prompts are cached in memory by session path and modification time, so unchanged session files are not reparsed during the current pi process. Deleted sessions are removed from the cache.
 
-Unreadable files are skipped. Partially malformed JSONL files contribute any readable prompts and produce a warning in the picker instead of aborting the entire search.
+Unreadable files are skipped. Partially malformed JSONL files contribute any entries pi can parse and produce a warning in the picker instead of aborting the entire search.
+
+Large session collections can make the first search slower. The extension shows an `Indexing prompt history…` footer status while building the index.
+
+## Privacy
+
+The extension reads prompts from unrelated projects and sessions. It keeps the index in process memory and does not intentionally send the index, queries, or selected prompts to a model or remote service. A restored prompt is sent normally only if you later submit it.
+
+Anyone with access to your terminal can use the picker to inspect saved prompts, so treat the search UI as sensitive.
+
+## Requirements and conflicts
+
+- Interactive TUI mode is required; the custom picker is unavailable in RPC, JSON, and print modes.
+- `Alt+R` must not be claimed by a later-loaded shortcut extension.
 
 ## Installation
 
-Place this directory at:
+Install the [complete collection](../README.md#install-the-complete-collection), or copy this directory to:
 
 ```text
 ~/.pi/agent/extensions/prompt-history-search/
 ```
 
-Then run `/reload` or restart Pi.
+Run `/reload` or restart pi after installation.

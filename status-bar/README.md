@@ -1,28 +1,46 @@
 # Compact Status Bar
 
-Replaces pi's multi-line built-in footer with a single global status line:
+Replaces pi's built-in multi-line footer with a compact, single-line status bar in TUI mode.
+
+[Back to the extension collection](../README.md)
+
+## Display
 
 ```text
-cwd | context percentage/total window | cost | extension statuses
+cwd (git-branch) | context percentage/window | cost | extension statuses
 ```
 
-The status bar deliberately omits cumulative input/output/cache metrics and the model name. It keeps:
+The footer includes:
 
-- the working directory and Git branch
-- current context-window usage
-- cumulative session cost
-- active states published by extensions through `ctx.ui.setStatus()`
+- the current working directory, shortened to `~` when it is inside the home directory
+- the current Git branch, when available
+- estimated context usage and total model context window
+- cumulative assistant-message cost for the session
+- active statuses published by extensions through `ctx.ui.setStatus()`
 
-Context usage turns yellow above 70% and red above 90%. The complete line is truncated to the terminal width.
+It deliberately omits the model name and cumulative input, output, and cache-token metrics. Extension statuses are sorted by status ID, sanitized to one line, and appended after the built-in fields.
 
-Plan Mode publishes its active state, current plan title, iteration count, and relevant shortcuts into the extension-status section.
+## Colors and width
+
+- normal context usage is dimmed
+- usage above 70% is shown as a warning
+- usage above 90% is shown as an error
+- the complete footer is truncated with an ellipsis to fit the terminal width
+
+Plan Mode uses the extension-status area to show its active state, plan title, iteration count, and relevant shortcuts.
+
+## Scope and lifecycle
+
+The extension runs only when `ctx.mode === "tui"`. It installs the custom footer when a session starts and restores pi's default footer when that session shuts down or extensions reload.
+
+Because pi supports only one custom footer at a time, another footer extension loaded later can replace this one.
 
 ## Installation
 
-Place this directory at:
+Install the [complete collection](../README.md#install-the-complete-collection), or copy this directory to:
 
 ```text
 ~/.pi/agent/extensions/status-bar/
 ```
 
-Pi auto-discovers `index.ts`. Run `/reload` or restart pi after changes.
+Run `/reload` or restart pi after installation.
