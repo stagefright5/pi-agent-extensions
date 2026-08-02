@@ -13,6 +13,7 @@ The extensions are maintained against pi **0.80.7** (the 0.80.x API line), use p
 | --- | --- | --- |
 | [Plan Mode](./plan-mode/README.md) | Evidence-guided planning with interactive review, revisions, diffs, summaries, Q&A history, and branch-aware persistence | `/plan`, `Alt+P` |
 | [Global Prompt History Search](./prompt-history-search/README.md) | Fuzzy reverse search across prompts in all saved pi sessions | `Alt+R`, `/prompt-history` |
+| [Tool Output Browser](./tool-output-browser/README.md) | Select and inspect one full stored tool result without expanding every transcript row | `/tool-output` |
 | [Prompt Undo/Redo](./prompt-undo-redo/README.md) | Cursor-restoring undo and redo for the prompt editor | `Ctrl+Z`, `Ctrl+Shift+Z`, `Ctrl+Y` |
 | [Compact Status Bar](./status-bar/README.md) | One-line footer with cwd, Git branch, context usage, cost, and extension statuses | Automatic in TUI mode |
 | [Provider URL Logger](./log-provider-url.md) | Appends the selected provider, model, and base URL for provider requests to a local log | Automatic |
@@ -77,6 +78,9 @@ This repository follows that layout directly:
 │   ├── index.ts
 │   └── utils.ts
 ├── prompt-history-search/
+│   ├── README.md
+│   └── index.ts
+├── tool-output-browser/
 │   ├── README.md
 │   └── index.ts
 ├── prompt-undo-redo/
