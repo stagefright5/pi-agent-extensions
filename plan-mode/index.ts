@@ -30,7 +30,6 @@
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { BorderedLoader, copyToClipboard, DynamicBorder, getMarkdownTheme } from "@earendil-works/pi-coding-agent";
-import { complete } from "@earendil-works/pi-ai";
 import {
 	Container,
 	Key,
@@ -710,12 +709,6 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			ctx.ui.notify("No model available for summary generation.", "error");
 			return;
 		}
-		const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
-		if (!auth?.ok || !auth.apiKey) {
-			ctx.ui.notify("No API key available for summary generation.", "error");
-			return;
-		}
-
 		// Generate with a loading spinner
 		const summary = await ctx.ui.custom<string | null>((tui, theme, _kb, done) => {
 			const loader = new BorderedLoader(
@@ -742,7 +735,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 							`### Previous Version\n${prev}\n\n### Current Version\n${curr}`;
 					}
 
-					const response = await complete(
+					const response = await ctx.modelRegistry.complete(
 						model,
 						{
 							messages: [
@@ -753,11 +746,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 								},
 							],
 						},
-						{
-							apiKey: auth.apiKey,
-							headers: auth.headers,
-							signal: loader.signal,
-						},
+						{ signal: loader.signal },
 					);
 
 					const text = response.content
