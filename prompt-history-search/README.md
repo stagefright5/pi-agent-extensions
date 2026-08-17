@@ -1,6 +1,6 @@
 # Global Prompt History Search
 
-Adds shell-style reverse search across textual user prompts saved in all pi sessions and projects.
+Adds shell-style reverse search across textual user prompts from a local persisted prompt index.
 
 [Back to the extension collection](../README.md)
 
@@ -14,9 +14,12 @@ Open the picker in TUI mode:
 Inside the picker:
 
 - type to filter prompts
-- `Alt+R` or `Down` — select an older match
-- `Up` — select a newer match
+- matching text is highlighted in each prompt preview
+- `Alt+R` or `Down` — select the next match
+- `Up` — select the previous match
 - `Page Up` / `Page Down` — move by one visible page
+- `Right Arrow` — expand the full selected prompt
+- `Left Arrow` — collapse the expanded prompt
 - `Enter` — restore the selected prompt into the editor
 - `Escape` or `Ctrl+C` — cancel and preserve the existing draft
 
@@ -24,30 +27,38 @@ Restoring a prompt does **not** submit it or switch to its source session.
 
 ## Search scope
 
-The index includes textual user messages from every session returned by pi's global session listing, including messages retained on alternate branches. Image-only prompts and empty text are skipped.
+The persisted index contains textual user prompts from the last 30 days. New prompts are added as the user sends them. Slash-style inputs are skipped so extension commands and built-in commands are not indexed as prompts.
 
-Results are newest-first and show:
+On first `Alt+R`, if the index has not yet been bootstrapped from saved sessions, the extension performs a one-time 30-day backfill from local pi session JSONL files and persists the result. Later searches load the persisted index directly instead of scanning all sessions.
+
+Image-only prompts and empty text are skipped. With an active query, results are ranked by best match first, with newer prompts used as the tie-breaker. With an empty query, results remain newest-first. Results show:
 
 - prompt preview
 - date and time
 - session name and file ID
 - source working directory
 
-Matching is case-insensitive. Every whitespace-separated query token must either be a substring of the searchable prompt metadata or satisfy pi-tui's fuzzy matcher.
+Matching is case-insensitive and applies only to the user prompt text. Every whitespace-separated query token must either be a substring of the prompt text or satisfy pi-tui's fuzzy matcher. Ranking favors exact phrase matches, then substring token matches, then fuzzy token matches. Prompt previews are excerpted around the first match so highlighted matching text is visible instead of being hidden behind ellipses.
 
-## Performance and resilience
+## Persistence, retention, and performance
 
-pi's global session listing scans saved sessions whenever the picker opens. Parsed prompts are cached in memory by session path and modification time, so unchanged session files are not reparsed during the current pi process. Deleted sessions are removed from the cache.
+The index is stored locally at:
+
+```text
+~/.pi/agent/prompt-history-search/index.json
+```
+
+Entries older than 30 days are purged whenever the index is loaded or updated.
+
+The normal search path only reads the persisted JSON index, so `Alt+R` should be fast after the one-time bootstrap. The bootstrap scanner reads local session files directly with limited concurrency and caches parsed sessions in memory by path and modification time for the current pi process.
 
 Unreadable files are skipped. Partially malformed JSONL files contribute any entries pi can parse and produce a warning in the picker instead of aborting the entire search.
 
-Large session collections can make the first search slower. The extension shows an `Indexing prompt history…` footer status while building the index.
-
 ## Privacy
 
-The extension reads prompts from unrelated projects and sessions. It keeps the index in process memory and does not intentionally send the index, queries, or selected prompts to a model or remote service. A restored prompt is sent normally only if you later submit it.
+The extension reads prompts from unrelated projects and sessions during the one-time bootstrap. It keeps the index locally and does not intentionally send the index, queries, or selected prompts to a model or remote service. A restored prompt is sent normally only if you later submit it.
 
-Anyone with access to your terminal can use the picker to inspect saved prompts, so treat the search UI as sensitive.
+Anyone with access to your terminal or local index file can inspect saved prompts, so treat the search UI and persisted index as sensitive.
 
 ## Requirements and conflicts
 
