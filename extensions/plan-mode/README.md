@@ -1,8 +1,8 @@
 # Plan Mode
 
-Interactive, evidence-guided planning for pi 0.80.7 and the 0.80.x API line, with review, approval, revision history, diffs, summaries, and Q&A.
+Interactive, evidence-guided planning for pi 0.84.2 and the 0.84.x API line, with review, approval, revision history, diffs, summaries, and Q&A.
 
-[Back to the extension collection](../README.md)
+[Back to the extension workspace](../../README.md)
 
 Plan Mode guides the agent to resolve material ambiguity, inspect relevant evidence, produce an execution-ready implementation plan, and wait for approval before implementation.
 
@@ -117,10 +117,10 @@ The display-only plan message created after closing review is filtered out of mo
 
 ## Installation
 
-Install the [complete collection](../README.md#install-the-complete-collection), or copy this directory to:
+Install the standalone package:
 
-```text
-~/.pi/agent/extensions/plan-mode/
+```bash
+pi install npm:@stagefright5/pi-plan-mode
 ```
 
-Run `/reload` or restart pi after installation.
+For source development, load this directory with `pi -e ./extensions/plan-mode` or expose it through the workspace's development symlink. Run `/reload` after source changes.

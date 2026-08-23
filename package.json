@@ -1,0 +1,31 @@
+{
+  "name": "pi-agent-extensions-workspace",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Workspace for independently published pi extensions and skills",
+  "type": "module",
+  "packageManager": "pnpm@11.22.0",
+  "scripts": {
+    "test": "pnpm -r --if-present test",
+    "pack:check": "pnpm -r --filter './extensions/*' pack --dry-run",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "changeset publish"
+  },
+  "devDependencies": {
+    "@changesets/cli": "^3.0.1"
+  },
+  "pi": {
+    "extensions": [
+      "./extensions/plan-mode/index.ts",
+      "./extensions/prompt-history-search/index.ts",
+      "./extensions/prompt-truly-mine/index.ts",
+      "./extensions/provider-url-logger/index.ts",
+      "./extensions/status-bar/index.ts",
+      "./extensions/tool-output-browser/index.ts"
+    ],
+    "skills": [
+      "./extensions/jenkins-cli-operations/SKILL.md"
+    ]
+  }
+}

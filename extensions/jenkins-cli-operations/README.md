@@ -1,8 +1,10 @@
 # Jenkins CLI Operations
 
-Pi extension wrapper for the bundled `jenkins-cli-operations` Agent Skill.
+Standalone Pi package for the bundled `jenkins-cli-operations` Agent Skill.
 
-The extension exposes `SKILL.md` through pi's `resources_discover` hook. After `/reload` or restart, invoke it with:
+[Back to the extension workspace](../../README.md)
+
+The npm package exposes `SKILL.md` directly through its Pi manifest. The colocated `index.ts` wrapper exposes the same skill when this source directory is loaded through Pi's extension auto-discovery. After `/reload` or restart, invoke it with:
 
 ```text
 /skill:jenkins-cli-operations
@@ -26,6 +28,16 @@ The generic wrapper intentionally supports every upstream Jenkins CLI command wi
 - Java compatible with the Jenkins controller
 - Official `jenkins-cli.jar` or a `jenkins-cli` launcher on `PATH`
 - Jenkins network access and credentials
+
+## Installation
+
+Install the standalone package:
+
+```bash
+pi install npm:@stagefright5/pi-jenkins-cli-operations
+```
+
+For source development, load this directory with `pi -e ./extensions/jenkins-cli-operations` or expose it through the workspace's development symlink.
 
 ## Tests
 

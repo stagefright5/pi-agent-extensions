@@ -1,126 +1,118 @@
 # pi Agent Extensions
 
-A collection of custom extensions for [pi](https://github.com/earendil-works/pi-mono/tree/main/packages/coding-agent), maintained on GitHub at [`stagefright5/pi-agent-extensions`](https://github.com/stagefright5/pi-agent-extensions).
+A pnpm workspace containing independently publishable packages for [pi](https://github.com/earendil-works/pi-mono/tree/main/packages/coding-agent), maintained on GitHub at [`stagefright5/pi-agent-extensions`](https://github.com/stagefright5/pi-agent-extensions).
 
-The extensions are maintained against pi **0.84.2** (the 0.84.x API line), use pi's auto-discovered TypeScript extension format, and do not require a local build or package installation. This repository is laid out for direct clone or copy installation; it is not currently published as a pi package for `pi install`.
+The packages are maintained against pi **0.84.2** and use pi's TypeScript extension format without a build step.
 
 > [!WARNING]
-> pi extensions execute with your user account's full system permissions. Review the source before installing or updating any extension.
+> Pi extensions execute with your user account's full system permissions. Review the source before installing or updating any extension or skill.
 
-## Extensions
+## Packages
 
-| Extension | Purpose | Primary interface |
-| --- | --- | --- |
-| [Jenkins CLI Operations](./jenkins-cli-operations/README.md) | Configures and operates Jenkins through guarded build helpers and the official CLI | `/skill:jenkins-cli-operations` |
-| [Plan Mode](./plan-mode/README.md) | Evidence-guided planning with interactive review, revisions, diffs, summaries, Q&A history, and branch-aware persistence | `/plan`, `Alt+P` |
-| [Global Prompt History Search](./prompt-history-search/README.md) | Fuzzy reverse search across prompts in all saved pi sessions | `Alt+R`, `/prompt-history` |
-| [Tool Output Browser](./tool-output-browser/README.md) | Select and inspect one full stored tool result without expanding every transcript row | `/tool-output` |
-| [Prompt Truly Mine](./prompt-truly-mine/README.md) | Inline skill/prompt context tags with cursor-restoring undo and redo | inline `/`, `Ctrl+Z`, `Ctrl+Shift+Z`, `Ctrl+Y` |
-| [Compact Status Bar](./status-bar/README.md) | One-line footer with cwd, Git branch, context usage, cost, and extension statuses | Automatic in TUI mode |
-| [Provider URL Logger](./log-provider-url.md) | Appends the selected provider, model, and base URL for provider requests to a local log | Automatic |
+| Workspace | npm package | Purpose | Primary interface |
+| --- | --- | --- | --- |
+| [Jenkins CLI Operations](./extensions/jenkins-cli-operations/README.md) | `@stagefright5/pi-jenkins-cli-operations` | Guarded Jenkins workflows using the official CLI | `/skill:jenkins-cli-operations` |
+| [Plan Mode](./extensions/plan-mode/README.md) | `@stagefright5/pi-plan-mode` | Evidence-guided planning and interactive review | `/plan`, `Alt+P` |
+| [Global Prompt History Search](./extensions/prompt-history-search/README.md) | `@stagefright5/pi-prompt-history-search` | Fuzzy reverse search across saved prompts | `Alt+R`, `/prompt-history` |
+| [Prompt Truly Mine](./extensions/prompt-truly-mine/README.md) | `@stagefright5/pi-prompt-truly-mine` | Inline skill/prompt context with undo and redo | inline `/`, `Ctrl+Z`, redo shortcuts |
+| [Provider URL Logger](./extensions/provider-url-logger/README.md) | `@stagefright5/pi-provider-url-logger` | Log selected provider endpoints locally | Automatic |
+| [Compact Status Bar](./extensions/status-bar/README.md) | `@stagefright5/pi-status-bar` | Compact cwd, Git, context, cost, and status footer | Automatic in TUI mode |
+| [Tool Output Browser](./extensions/tool-output-browser/README.md) | `@stagefright5/pi-tool-output-browser` | Inspect one complete stored tool result | `/tool-output` |
 
-Most interactive features require pi's TUI mode. See each extension's documentation for requirements, stored data, and limitations.
+Each workspace has its own `package.json`, version, Pi manifest, README, and npm release lifecycle. The repository root is private and is never published.
 
-## Install the complete collection
+## Install standalone packages
 
-The simplest installation is to clone this repository directly into pi's global extension directory:
-
-```bash
-git clone https://github.com/stagefright5/pi-agent-extensions.git ~/.pi/agent/extensions
-```
-
-The destination must not already contain files. Back up or move an existing `~/.pi/agent/extensions` directory before cloning.
-
-Restart pi after installation, or run `/reload` from an existing session.
-
-### Update
+After a package is published, install only the extension or skill you want:
 
 ```bash
-git -C ~/.pi/agent/extensions pull --ff-only
+pi install npm:@stagefright5/pi-plan-mode
+pi install npm:@stagefright5/pi-status-bar
+pi install npm:@stagefright5/pi-jenkins-cli-operations
 ```
 
-Then run `/reload` or restart pi.
+Use `pi config` to enable or disable resources from installed packages.
 
-### Install only selected extensions
+## Local development
 
-Clone the repository elsewhere, then copy the desired file or directory into an auto-discovered extension location:
+Install workspace dependencies:
 
 ```bash
-git clone https://github.com/stagefright5/pi-agent-extensions.git ~/src/pi-agent-extensions
-mkdir -p ~/.pi/agent/extensions
-
-# Directory extension
-cp -R ~/src/pi-agent-extensions/plan-mode ~/.pi/agent/extensions/
-
-# Single-file extension
-cp ~/src/pi-agent-extensions/log-provider-url.ts ~/.pi/agent/extensions/
+pnpm install
 ```
 
-For project-local installation, copy into `.pi/extensions/` instead. Project-local extensions are loaded only after the project is trusted.
+This repository pins pnpm through `packageManager` in the root `package.json`.
 
-## Auto-discovery layout
+### Auto-discovery through a symlink
 
-pi loads extension entry points from:
+For development, point Pi's global extension directory at this repository's `extensions/` workspace directory:
 
-- `~/.pi/agent/extensions/*.ts`
-- `~/.pi/agent/extensions/*/index.ts`
-- `.pi/extensions/*.ts`
-- `.pi/extensions/*/index.ts`
-
-This repository follows that layout directly:
-
-```text
-.
-├── README.md
-├── log-provider-url.md
-├── log-provider-url.ts
-├── jenkins-cli-operations/
-│   ├── README.md
-│   ├── SKILL.md
-│   ├── index.ts
-│   ├── references/
-│   ├── scripts/
-│   └── tests/
-├── plan-mode/
-│   ├── README.md
-│   ├── index.ts
-│   └── utils.ts
-├── prompt-history-search/
-│   ├── README.md
-│   └── index.ts
-├── tool-output-browser/
-│   ├── README.md
-│   └── index.ts
-├── prompt-truly-mine/
-│   ├── README.md
-│   ├── index.ts
-│   ├── inline-context.ts
-│   └── inline-context.test.ts
-└── status-bar/
-    ├── README.md
-    └── index.ts
+```bash
+ln -s ~/PersonalDev/pi-agent-extensions/extensions ~/.pi/agent/extensions
 ```
+
+Pi auto-discovers each `extensions/*/index.ts`. The Jenkins wrapper exposes its colocated `SKILL.md` for source-tree development. Edit a source file and run `/reload` in Pi; no package build or reinstall is required.
+
+### Temporary local loading
+
+Load the complete collection from the private aggregate manifest while keeping other installed extensions enabled:
+
+```bash
+pi -e ~/PersonalDev/pi-agent-extensions
+```
+
+Load one package in isolation from the rest of this workspace:
+
+```bash
+pi -e ~/PersonalDev/pi-agent-extensions/extensions/plan-mode
+```
+
+If the same package is already loaded through the global symlink or npm, disable that copy with `pi config` before using `-e` to avoid duplicate handlers, commands, shortcuts, or UI components.
+
+## Tests and package validation
+
+Run every package test:
+
+```bash
+pnpm test
+```
+
+Run one package's tests:
+
+```bash
+pnpm --filter @stagefright5/pi-prompt-truly-mine test
+pnpm --filter @stagefright5/pi-jenkins-cli-operations test
+```
+
+Inspect the files that each workspace would publish:
+
+```bash
+pnpm pack:check
+```
+
+For an interactive Pi smoke test, start Pi normally through the development symlink, or pass the package path with `-e`. TUI-specific editors, overlays, footers, and shortcuts must be tested interactively.
+
+## Versioning and publishing
+
+The packages use independent Changesets releases:
+
+```bash
+pnpm changeset
+pnpm version-packages
+pnpm install
+pnpm test
+pnpm release
+```
+
+Commit the generated version and changelog changes before publishing. Every package includes the `pi-package` keyword for Pi package-gallery discovery.
 
 ## Local data and privacy
 
-The collection operates locally or against services explicitly configured by the user, and some extensions read or write user data:
+The collection operates locally or against services explicitly configured by the user, and some packages read or write user data:
 
 - Jenkins CLI Operations connects to the configured Jenkins controller and stores non-secret connection metadata under the platform configuration directory. Credentials remain in the selected auth provider.
 - Plan Mode stores plans and revision history under `~/.pi/plans/`; its optional summaries use the active model provider.
-- Prompt History Search reads saved pi sessions across projects into an in-memory index.
+- Prompt History Search reads saved Pi sessions across projects into an in-memory index and local persisted index.
 - Provider URL Logger appends endpoint metadata to `~/.pi/agent/provider-urls.log` without rotation.
 
-No extension in this repository intentionally uploads its own index or log. Normal agent requests and Plan Mode's generated change summaries still use the configured model provider.
-
-## Development
-
-No repository-local build step is required. Edit the TypeScript sources and run `/reload` to reload extensions, skills, prompts, themes, and context files.
-
-The implementation uses current pi APIs including:
-
-- lifecycle hooks such as `before_agent_start`, `before_provider_request`, and session events
-- `ctx.ui.custom()` overlays, custom editors, and custom footers
-- commands, flags, shortcuts, tools, custom renderers, and extension status entries
-- `pi.appendEntry()` with active-branch reconstruction for persisted state
-
-Extension-specific behavior, shortcuts, storage, and caveats are documented in the linked pages above.
+No package intentionally uploads its own index or log. Normal agent requests and Plan Mode's generated change summaries still use the configured model provider.

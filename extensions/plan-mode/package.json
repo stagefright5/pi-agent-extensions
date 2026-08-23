@@ -1,0 +1,29 @@
+{
+  "name": "@stagefright5/pi-plan-mode",
+  "version": "0.1.0",
+  "description": "Evidence-guided planning and interactive plan review for pi",
+  "type": "module",
+  "keywords": ["pi-package", "pi-extension", "planning"],
+  "files": ["index.ts", "utils.ts", "README.md"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stagefright5/pi-agent-extensions.git",
+    "directory": "extensions/plan-mode"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*",
+    "typebox": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "catalog:",
+    "@earendil-works/pi-tui": "catalog:",
+    "typebox": "catalog:"
+  },
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
