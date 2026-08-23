@@ -1,5 +1,6 @@
 # Plan Mode
 
+<!-- prettier-ignore -->
 DISCLAIMER: This is *mostly* vibe-coded using pi agent cli
 
 Interactive, evidence-guided planning for pi 0.84.2 and the 0.84.x API line, with review, approval, revision history, diffs, summaries, and Q&A.

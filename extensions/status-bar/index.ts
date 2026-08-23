@@ -38,7 +38,10 @@ function getTotalCost(ctx: ExtensionContext): number {
 }
 
 function sanitizeStatusText(text: string): string {
-	return text.replace(/[\r\n\t]/g, " ").replace(/ +/g, " ").trim();
+	return text
+		.replace(/[\r\n\t]/g, " ")
+		.replace(/ +/g, " ")
+		.trim();
 }
 
 export default function statusBarExtension(pi: ExtensionAPI): void {
@@ -58,7 +61,8 @@ export default function statusBarExtension(pi: ExtensionAPI): void {
 
 					const usage = ctx.getContextUsage();
 					const contextWindow = formatContextWindow(usage?.contextWindow ?? ctx.model?.contextWindow ?? 0);
-					const contextText = usage?.percent == null ? `?/${contextWindow}` : `${usage.percent.toFixed(1)}%/${contextWindow}`;
+					const contextText =
+						usage?.percent == null ? `?/${contextWindow}` : `${usage.percent.toFixed(1)}%/${contextWindow}`;
 					const styledContext =
 						usage?.percent != null && usage.percent > 90
 							? theme.fg("error", contextText)

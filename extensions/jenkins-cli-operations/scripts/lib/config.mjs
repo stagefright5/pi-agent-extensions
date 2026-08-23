@@ -5,9 +5,10 @@ import { spawn } from 'node:child_process';
 
 export function defaultConfigPath() {
     if (process.env.JENKINS_SKILL_CONFIG) return path.resolve(process.env.JENKINS_SKILL_CONFIG);
-    const root = process.platform === 'win32'
-        ? process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming')
-        : process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
+    const root =
+        process.platform === 'win32'
+            ? process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming')
+            : process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
     return path.join(root, 'jenkins-cli-operations', 'config.json');
 }
 
@@ -44,8 +45,12 @@ function runCapture(command, args, options = {}) {
         const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true, ...options });
         let stdout = '';
         let stderr = '';
-        child.stdout.on('data', (chunk) => { stdout += chunk; });
-        child.stderr.on('data', (chunk) => { stderr += chunk; });
+        child.stdout.on('data', (chunk) => {
+            stdout += chunk;
+        });
+        child.stderr.on('data', (chunk) => {
+            stderr += chunk;
+        });
         child.on('error', reject);
         child.on('close', (code) => {
             if (code === 0) resolve(stdout.trim());
@@ -139,7 +144,8 @@ export function cliInvocation(config, authFile, commandArgs) {
     else throw new Error(`Unsupported transport '${config.transport}'; use webSocket or http`);
     globalArgs.push('-auth', `@${authFile}`, ...commandArgs);
 
-    if (config.jarPath) return { command: config.javaCommand || 'java', args: ['-jar', path.resolve(config.jarPath), ...globalArgs] };
+    if (config.jarPath)
+        return { command: config.javaCommand || 'java', args: ['-jar', path.resolve(config.jarPath), ...globalArgs] };
     return { command: config.command || 'jenkins-cli', args: globalArgs };
 }
 
@@ -162,14 +168,18 @@ export async function readCredential(config) {
 }
 
 export function jobApiPath(jobName) {
-    const parts = String(jobName).split('/').map((part) => part.trim()).filter(Boolean);
+    const parts = String(jobName)
+        .split('/')
+        .map((part) => part.trim())
+        .filter(Boolean);
     if (!parts.length) throw new Error('Job name must not be empty');
     return parts.map((part) => `job/${encodeURIComponent(part)}`).join('/');
 }
 
 export async function inspectJob(config, jobName) {
     const credential = await readCredential(config);
-    const tree = 'name,url,buildable,inQueue,nextBuildNumber,property[parameterDefinitions[name,type,description,defaultParameterValue[value]]]';
+    const tree =
+        'name,url,buildable,inQueue,nextBuildNumber,property[parameterDefinitions[name,type,description,defaultParameterValue[value]]]';
     const url = `${config.url}/${jobApiPath(jobName)}/api/json?tree=${encodeURIComponent(tree)}`;
     const response = await fetch(url, {
         headers: { Authorization: `Basic ${Buffer.from(credential).toString('base64')}` },

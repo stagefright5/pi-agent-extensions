@@ -103,9 +103,13 @@ function formatPlanModeState(state: PlanModePromptState | undefined): string {
 	];
 	if (state.planTitle) lines.push(`- Current plan title: ${state.planTitle}`);
 	if (state.revisionPending) {
-		lines.push("- A plan revision is pending. Revision is a discussion phase, not a requirement to call plan_output immediately. You may respond in normal assistant text, investigate, use tools, and ask concise clarifying questions. If the feedback leaves a material choice unclear, ask the user before revising. Call plan_output only when the complete revised plan is ready; do not put that plan in assistant text.");
+		lines.push(
+			"- A plan revision is pending. Revision is a discussion phase, not a requirement to call plan_output immediately. You may respond in normal assistant text, investigate, use tools, and ask concise clarifying questions. If the feedback leaves a material choice unclear, ask the user before revising. Call plan_output only when the complete revised plan is ready; do not put that plan in assistant text.",
+		);
 	} else {
-		lines.push("- The user may ask normal follow-up questions about the plan; answer those in regular assistant text.");
+		lines.push(
+			"- The user may ask normal follow-up questions about the plan; answer those in regular assistant text.",
+		);
 	}
 	return lines.join("\n");
 }
@@ -115,7 +119,9 @@ function isPlanRevisionIntent(text: string): boolean {
 	if (!normalized) return false;
 
 	const explicitRevision =
-		/\b(revise|revision|update|change|modify|edit|adjust|rework|rewrite|regenerate|redo|replan|amend)\b/.test(normalized) ||
+		/\b(revise|revision|update|change|modify|edit|adjust|rework|rewrite|regenerate|redo|replan|amend)\b/.test(
+			normalized,
+		) ||
 		/\b(add|include|incorporate|remove|exclude|drop|expand|shorten|tighten|simplify)\b/.test(normalized) ||
 		/\b(plan should|new plan|another plan|updated plan|revised plan)\b/.test(normalized);
 
@@ -131,7 +137,9 @@ function isPlanRevisionIntent(text: string): boolean {
 type MessageContentPart = { type?: string; text?: string; name?: string };
 
 function getMessageContentParts(content: unknown): MessageContentPart[] {
-	return Array.isArray(content) ? (content.filter((part) => part && typeof part === "object") as MessageContentPart[]) : [];
+	return Array.isArray(content)
+		? (content.filter((part) => part && typeof part === "object") as MessageContentPart[])
+		: [];
 }
 
 function getMessageText(content: unknown): string {
@@ -147,8 +155,10 @@ function assistantTextLooksLikePlan(text: string): boolean {
 	if (trimmed.length < 500) return false;
 
 	const normalized = trimmed.toLowerCase();
-	if (/\b(here(?:'s| is) (?:the )?(?:(?:revised|updated)\s+)?(?:implementation\s+)?plan)\b/.test(normalized)) return true;
-	if (/\b(?:revised|updated) (?:implementation )?plan\b/.test(normalized) && /\n\s*#{1,3}\s+/.test(trimmed)) return true;
+	if (/\b(here(?:'s| is) (?:the )?(?:(?:revised|updated)\s+)?(?:implementation\s+)?plan)\b/.test(normalized))
+		return true;
+	if (/\b(?:revised|updated) (?:implementation )?plan\b/.test(normalized) && /\n\s*#{1,3}\s+/.test(trimmed))
+		return true;
 
 	const sectionHeadings = [
 		/^\s*#{1,3}\s+goal\b/im,
@@ -279,7 +289,11 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		if (!planDir) return null;
 		const absolutePath = join(planDir, "plan.md");
 		const home = homedir();
-		return absolutePath === home ? "~" : absolutePath.startsWith(`${home}/`) ? `~/${absolutePath.slice(home.length + 1)}` : absolutePath;
+		return absolutePath === home
+			? "~"
+			: absolutePath.startsWith(`${home}/`)
+				? `~/${absolutePath.slice(home.length + 1)}`
+				: absolutePath;
 	}
 
 	pi.registerMessageRenderer(PLAN_RENDER_MESSAGE_TYPE, (message, _options, theme) => {
@@ -374,10 +388,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			let status = t.fg("warning", `${SYMBOL.plan} Planning`);
 			if (planTitle) status += t.fg("muted", ` ${planTitle}`);
 			if (iterations.length > 0) {
-				status += t.fg(
-					"dim",
-					` (${iterations.length} iteration${iterations.length !== 1 ? "s" : ""})`,
-				);
+				status += t.fg("dim", ` (${iterations.length} iteration${iterations.length !== 1 ? "s" : ""})`);
 			}
 
 			if (iterations.length > 0 || isAgentWorking) {
@@ -450,7 +461,10 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		latestPlanReviewQueued = false;
 
 		ctx.ui.setWorkingVisible(false);
-		ctx.ui.notify(`${SYMBOL.plan} Plan mode activated. The agent will gather material evidence before presenting a plan.`, "info");
+		ctx.ui.notify(
+			`${SYMBOL.plan} Plan mode activated. The agent will gather material evidence before presenting a plan.`,
+			"info",
+		);
 		updateUI(ctx);
 		persistState();
 	}
@@ -569,19 +583,18 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 					render(width: number): string[] {
 						const innerWidth = Math.max(20, width - 4);
 						if (!cachedDiffLines || cachedWidth !== width) {
-							cachedDiffLines = diff
-								.split("\n")
-								.flatMap((line) => {
-									const styled = (() => {
-										if (line.startsWith("+++") || line.startsWith("---")) return theme.fg("muted", line);
-										if (line.startsWith("+")) return theme.fg("toolDiffAdded", line);
-										if (line.startsWith("-")) return theme.fg("toolDiffRemoved", line);
-										if (line.startsWith("@@")) return theme.fg("accent", line);
-										return theme.fg("dim", line);
-									})();
-									const wrapped = wrapTextWithAnsi(styled, innerWidth);
-									return wrapped.length > 0 ? wrapped : [""];
-								});
+							cachedDiffLines = diff.split("\n").flatMap((line) => {
+								const styled = (() => {
+									if (line.startsWith("+++") || line.startsWith("---"))
+										return theme.fg("muted", line);
+									if (line.startsWith("+")) return theme.fg("toolDiffAdded", line);
+									if (line.startsWith("-")) return theme.fg("toolDiffRemoved", line);
+									if (line.startsWith("@@")) return theme.fg("accent", line);
+									return theme.fg("dim", line);
+								})();
+								const wrapped = wrapTextWithAnsi(styled, innerWidth);
+								return wrapped.length > 0 ? wrapped : [""];
+							});
 							cachedWidth = width;
 						}
 
@@ -596,7 +609,12 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 						lines.push(
 							truncateToWidth(
 								theme.fg("accent", "│ ") +
-									theme.fg("accent", theme.bold(`${SYMBOL.diff} Diff: Iteration ${iterations.length - 1} → ${iterations.length}`)) +
+									theme.fg(
+										"accent",
+										theme.bold(
+											`${SYMBOL.diff} Diff: Iteration ${iterations.length - 1} → ${iterations.length}`,
+										),
+									) +
 									(planTitle ? `  ${theme.fg("dim", planTitle)}` : "") +
 									theme.fg("accent", " │"),
 								width,
@@ -606,15 +624,22 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 
 						const visible = cachedDiffLines.slice(scrollOffset, scrollOffset + viewportHeight);
 						for (const line of visible) {
-							lines.push(theme.fg("accent", "│ ") + truncateToWidth(line, innerWidth) + theme.fg("accent", " │"));
+							lines.push(
+								theme.fg("accent", "│ ") + truncateToWidth(line, innerWidth) + theme.fg("accent", " │"),
+							);
 						}
 						for (let i = visible.length; i < viewportHeight; i++) {
-							lines.push(theme.fg("accent", "│") + " ".repeat(Math.max(0, width - 2)) + theme.fg("accent", "│"));
+							lines.push(
+								theme.fg("accent", "│") + " ".repeat(Math.max(0, width - 2)) + theme.fg("accent", "│"),
+							);
 						}
 
 						if (cachedDiffLines.length > viewportHeight) {
 							const pct = maxScroll > 0 ? Math.round((scrollOffset / maxScroll) * 100) : 100;
-							const info = truncateToWidth(theme.fg("dim", ` ${pct}% (${cachedDiffLines.length} lines) `), innerWidth);
+							const info = truncateToWidth(
+								theme.fg("dim", ` ${pct}% (${cachedDiffLines.length} lines) `),
+								innerWidth,
+							);
 							lines.push(
 								theme.fg("accent", "│ ") +
 									info +
@@ -622,7 +647,9 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 									theme.fg("accent", " │"),
 							);
 						} else {
-							lines.push(theme.fg("accent", "│") + " ".repeat(Math.max(0, width - 2)) + theme.fg("accent", "│"));
+							lines.push(
+								theme.fg("accent", "│") + " ".repeat(Math.max(0, width - 2)) + theme.fg("accent", "│"),
+							);
 						}
 
 						const help = truncateToWidth(
@@ -869,9 +896,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 					// ── Scroll indicator ──
 					if (cachedMdLines.length > viewportHeight) {
 						const pct = maxScroll > 0 ? Math.round((scrollOffset / maxScroll) * 100) : 100;
-						lines.push(
-							theme.fg("dim", `  ─── ${pct}% (${cachedMdLines.length} lines) ───`),
-						);
+						lines.push(theme.fg("dim", `  ─── ${pct}% (${cachedMdLines.length} lines) ───`));
 					}
 
 					// ── Footer ──
@@ -940,326 +965,337 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			return "cancel";
 		}
 		const planFilePath = getPlanFileDisplayPath();
-		return ctx.ui.custom<ReviewAction>((tui, theme, _kb, done) => {
-			type SelectionPoint = { line: number; col: number };
+		return ctx.ui.custom<ReviewAction>(
+			(tui, theme, _kb, done) => {
+				type SelectionPoint = { line: number; col: number };
 
-			const cleanupMouse = enableMouseWheel(tui);
-			let copyStatusTimer: ReturnType<typeof setTimeout> | null = null;
-			let closed = false;
-			const finish = (action: ReviewAction) => {
-				closed = true;
-				if (copyStatusTimer) clearTimeout(copyStatusTimer);
-				cleanupMouse();
-				done(action);
-			};
-			const mdTheme = getMarkdownTheme();
-			const md = new Markdown(plan, 1, 0, mdTheme);
-			let scrollOffset = 0;
-			let cachedMdLines: string[] | null = null;
-			let cachedWidth: number | null = null;
-			let lastFrameWidth = 0;
-			let selectionAnchor: SelectionPoint | null = null;
-			let selectionFocus: SelectionPoint | null = null;
-			let isSelecting = false;
-			let copyStatus: string | null = null;
-
-			const comparePoints = (a: SelectionPoint, b: SelectionPoint): number =>
-				a.line === b.line ? a.col - b.col : a.line - b.line;
-
-			const getNormalizedSelection = (): { start: SelectionPoint; end: SelectionPoint } | null => {
-				if (!selectionAnchor || !selectionFocus || comparePoints(selectionAnchor, selectionFocus) === 0) return null;
-				return comparePoints(selectionAnchor, selectionFocus) < 0
-					? { start: selectionAnchor, end: selectionFocus }
-					: { start: selectionFocus, end: selectionAnchor };
-			};
-
-			const showCopyStatus = (status: string): void => {
-				if (closed) return;
-				copyStatus = status;
-				if (copyStatusTimer) clearTimeout(copyStatusTimer);
-				copyStatusTimer = setTimeout(() => {
-					copyStatus = null;
-					copyStatusTimer = null;
-					tui.requestRender();
-				}, 1800);
-				tui.requestRender();
-			};
-
-			const copyText = (text: string, successMessage: string): void => {
-				void copyToClipboard(text)
-					.then(() => showCopyStatus(successMessage))
-					.catch((err) => showCopyStatus(`Copy failed: ${err instanceof Error ? err.message : String(err)}`));
-			};
-
-			const copySelection = (): void => {
-				const selection = getNormalizedSelection();
-				if (!selection || !cachedMdLines) return;
-
-				const selectedLines: string[] = [];
-				for (let lineIndex = selection.start.line; lineIndex <= selection.end.line; lineIndex++) {
-					const line = cachedMdLines[lineIndex] ?? "";
-					const from = lineIndex === selection.start.line ? selection.start.col : 0;
-					const to = lineIndex === selection.end.line ? selection.end.col : visibleWidth(line);
-					selectedLines.push(stripVTControlCharacters(sliceByColumn(line, from, Math.max(0, to - from))).trimEnd());
-				}
-
-				const selectedText = selectedLines.join("\n");
-				if (selectedText) copyText(selectedText, "Copied selection");
-			};
-
-			const highlightSelection = (line: string, lineIndex: number): string => {
-				const selection = getNormalizedSelection();
-				if (!selection || lineIndex < selection.start.line || lineIndex > selection.end.line) return line;
-
-				const lineWidth = visibleWidth(line);
-				const from = lineIndex === selection.start.line ? selection.start.col : 0;
-				const to = lineIndex === selection.end.line ? selection.end.col : lineWidth;
-				if (to <= from) return line;
-
-				const before = sliceByColumn(line, 0, from);
-				const selected = sliceByColumn(line, from, to - from).replace(/\x1b\[0m/g, "$&\x1b[7m");
-				const after = sliceByColumn(line, to, Math.max(0, lineWidth - to));
-				return `${before}\x1b[7m${selected}\x1b[27m${after}`;
-			};
-
-			const getSelectionPoint = (mouse: SgrMouseEvent, clampToContent: boolean): SelectionPoint | null => {
-				if (!lastFrameWidth || !cachedMdLines) return null;
-
-				const termWidth = tui.terminal.columns;
-				const termHeight = tui.terminal.rows;
-				const modalHeight = Math.max(10, Math.floor(termHeight * 0.85));
-				const viewportHeight = Math.max(5, modalHeight - 9);
-				const overlayHeight = viewportHeight + 9;
-				const overlayLeft = 1 + Math.floor((Math.max(1, termWidth - 2) - lastFrameWidth) / 2);
-				const overlayTop = 1 + Math.floor((Math.max(1, termHeight - 2) - overlayHeight) / 2);
-				const contentLeft = overlayLeft + 2;
-				const contentTop = overlayTop + 4;
-				const contentRight = contentLeft + Math.max(0, lastFrameWidth - 4);
-				const contentBottom = contentTop + viewportHeight - 1;
-
-				if (
-					!clampToContent &&
-					(mouse.x < contentLeft || mouse.x > contentRight || mouse.y < contentTop || mouse.y > contentBottom)
-				) {
-					return null;
-				}
-
-				const x = Math.max(contentLeft, Math.min(contentRight, mouse.x));
-				const y = Math.max(contentTop, Math.min(contentBottom, mouse.y));
-				return {
-					line: Math.min(cachedMdLines.length - 1, scrollOffset + y - contentTop),
-					col: Math.max(0, Math.min(lastFrameWidth - 4, x - contentLeft)),
+				const cleanupMouse = enableMouseWheel(tui);
+				let copyStatusTimer: ReturnType<typeof setTimeout> | null = null;
+				let closed = false;
+				const finish = (action: ReviewAction) => {
+					closed = true;
+					if (copyStatusTimer) clearTimeout(copyStatusTimer);
+					cleanupMouse();
+					done(action);
 				};
-			};
+				const mdTheme = getMarkdownTheme();
+				const md = new Markdown(plan, 1, 0, mdTheme);
+				let scrollOffset = 0;
+				let cachedMdLines: string[] | null = null;
+				let cachedWidth: number | null = null;
+				let lastFrameWidth = 0;
+				let selectionAnchor: SelectionPoint | null = null;
+				let selectionFocus: SelectionPoint | null = null;
+				let isSelecting = false;
+				let copyStatus: string | null = null;
 
-			return {
-				render(width: number): string[] {
-					const frameWidth = Math.max(20, width);
-					lastFrameWidth = frameWidth;
-					const innerWidth = Math.max(10, frameWidth - 4);
+				const comparePoints = (a: SelectionPoint, b: SelectionPoint): number =>
+					a.line === b.line ? a.col - b.col : a.line - b.line;
 
-					// Render full markdown inside the border (cached until inner width changes)
-					if (!cachedMdLines || cachedWidth !== innerWidth) {
-						cachedMdLines = md.render(innerWidth);
-						cachedWidth = innerWidth;
-					}
-					const mdLines = cachedMdLines ?? [];
+				const getNormalizedSelection = (): { start: SelectionPoint; end: SelectionPoint } | null => {
+					if (!selectionAnchor || !selectionFocus || comparePoints(selectionAnchor, selectionFocus) === 0)
+						return null;
+					return comparePoints(selectionAnchor, selectionFocus) < 0
+						? { start: selectionAnchor, end: selectionFocus }
+						: { start: selectionFocus, end: selectionAnchor };
+				};
 
-					const modalHeight = Math.max(10, Math.floor(getTerminalRows() * 0.85));
-					const headerFooterLines = 9;
-					const viewportHeight = Math.max(5, modalHeight - headerFooterLines);
-					const maxScroll = Math.max(0, mdLines.length - viewportHeight);
-					if (scrollOffset > maxScroll) scrollOffset = maxScroll;
+				const showCopyStatus = (status: string): void => {
+					if (closed) return;
+					copyStatus = status;
+					if (copyStatusTimer) clearTimeout(copyStatusTimer);
+					copyStatusTimer = setTimeout(() => {
+						copyStatus = null;
+						copyStatusTimer = null;
+						tui.requestRender();
+					}, 1800);
+					tui.requestRender();
+				};
 
-					const framedLine = (content = ""): string => {
-						const truncated = truncateToWidth(content, innerWidth, "");
-						return (
-							theme.fg("accent", "│ ") +
-							truncated +
-							" ".repeat(Math.max(0, innerWidth - visibleWidth(truncated))) +
-							theme.fg("accent", " │")
+				const copyText = (text: string, successMessage: string): void => {
+					void copyToClipboard(text)
+						.then(() => showCopyStatus(successMessage))
+						.catch((err) =>
+							showCopyStatus(`Copy failed: ${err instanceof Error ? err.message : String(err)}`),
 						);
-					};
-					const divider = (left: string, right: string): string =>
-						theme.fg("accent", `${left}${"─".repeat(Math.max(0, frameWidth - 2))}${right}`);
+				};
 
-					const lines: string[] = [];
+				const copySelection = (): void => {
+					const selection = getNormalizedSelection();
+					if (!selection || !cachedMdLines) return;
 
-					// ── Header ──
-					lines.push(divider("╭", "╮"));
-					lines.push(
-						framedLine(
-							theme.fg("accent", theme.bold(`${SYMBOL.plan} Plan Review`)) +
-								`  ${theme.fg("muted", `Iteration ${iteration}`)}` +
-								(planTitle ? `  ${theme.fg("dim", planTitle)}` : ""),
-						),
-					);
-					lines.push(framedLine(theme.fg("dim", planFilePath ?? "Plan file unavailable")));
-					lines.push(divider("├", "┤"));
-
-					// ── Scrollable plan content ──
-					const visible = mdLines.slice(scrollOffset, scrollOffset + viewportHeight);
-					for (let visibleIndex = 0; visibleIndex < visible.length; visibleIndex++) {
-						const line = visible[visibleIndex] ?? "";
-						lines.push(framedLine(highlightSelection(line, scrollOffset + visibleIndex)));
-					}
-
-					// pad if content is shorter than viewport
-					for (let i = visible.length; i < viewportHeight; i++) {
-						lines.push(framedLine());
-					}
-
-					// ── Scroll indicator ──
-					if (mdLines.length > viewportHeight) {
-						const pct = maxScroll > 0 ? Math.round((scrollOffset / maxScroll) * 100) : 100;
-						lines.push(framedLine(theme.fg("dim", `─── ${pct}% (${mdLines.length} lines) ───`)));
-					} else {
-						lines.push(framedLine());
-					}
-
-					// ── Footer actions ──
-					lines.push(divider("├", "┤"));
-					const actions: string[] = [
-						`${theme.fg("success", "a")} approve`,
-						`${theme.fg("warning", "r")} revise`,
-						`${theme.fg("accent", "c")} copy plan`,
-					];
-					if (iteration > 1) {
-						actions.push(
-							`${theme.fg("accent", "d")} diff`,
-							`${theme.fg("accent", "s")} summary`,
-							`${theme.fg("accent", "S")} all changes`,
+					const selectedLines: string[] = [];
+					for (let lineIndex = selection.start.line; lineIndex <= selection.end.line; lineIndex++) {
+						const line = cachedMdLines[lineIndex] ?? "";
+						const from = lineIndex === selection.start.line ? selection.start.col : 0;
+						const to = lineIndex === selection.end.line ? selection.end.col : visibleWidth(line);
+						selectedLines.push(
+							stripVTControlCharacters(sliceByColumn(line, from, Math.max(0, to - from))).trimEnd(),
 						);
 					}
-					actions.push(`${theme.fg("accent", "q")} Q&A`);
-					actions.push(`${theme.fg("dim", "esc")} back`);
-					lines.push(framedLine(actions.join("  │  ")));
-					const interactionHint = copyStatus
-						? theme.fg(copyStatus.startsWith("Copy failed") ? "error" : "success", copyStatus)
-						: theme.fg("dim", "↑↓/j/k scroll  PgUp/PgDn page  wheel scroll  drag select + copy");
-					lines.push(framedLine(interactionHint));
-					lines.push(divider("╰", "╯"));
 
-					return lines;
-				},
+					const selectedText = selectedLines.join("\n");
+					if (selectedText) copyText(selectedText, "Copied selection");
+				};
 
-				invalidate() {
-					cachedMdLines = null;
-					cachedWidth = null;
-				},
+				const highlightSelection = (line: string, lineIndex: number): string => {
+					const selection = getNormalizedSelection();
+					if (!selection || lineIndex < selection.start.line || lineIndex > selection.end.line) return line;
 
-				handleInput(data: string) {
-					const modalHeight = Math.max(10, Math.floor(getTerminalRows() * 0.85));
+					const lineWidth = visibleWidth(line);
+					const from = lineIndex === selection.start.line ? selection.start.col : 0;
+					const to = lineIndex === selection.end.line ? selection.end.col : lineWidth;
+					if (to <= from) return line;
+
+					const before = sliceByColumn(line, 0, from);
+					const selected = sliceByColumn(line, from, to - from).replace(/\x1b\[0m/g, "$&\x1b[7m");
+					const after = sliceByColumn(line, to, Math.max(0, lineWidth - to));
+					return `${before}\x1b[7m${selected}\x1b[27m${after}`;
+				};
+
+				const getSelectionPoint = (mouse: SgrMouseEvent, clampToContent: boolean): SelectionPoint | null => {
+					if (!lastFrameWidth || !cachedMdLines) return null;
+
+					const termWidth = tui.terminal.columns;
+					const termHeight = tui.terminal.rows;
+					const modalHeight = Math.max(10, Math.floor(termHeight * 0.85));
 					const viewportHeight = Math.max(5, modalHeight - 9);
-					const maxScroll = cachedMdLines ? Math.max(0, cachedMdLines.length - viewportHeight) : 0;
-					const mouseEvent = parseSgrMouseEvent(data);
-					const wheelDelta = getMouseWheelDelta(data);
+					const overlayHeight = viewportHeight + 9;
+					const overlayLeft = 1 + Math.floor((Math.max(1, termWidth - 2) - lastFrameWidth) / 2);
+					const overlayTop = 1 + Math.floor((Math.max(1, termHeight - 2) - overlayHeight) / 2);
+					const contentLeft = overlayLeft + 2;
+					const contentTop = overlayTop + 4;
+					const contentRight = contentLeft + Math.max(0, lastFrameWidth - 4);
+					const contentBottom = contentTop + viewportHeight - 1;
 
-					// ── Mouse selection, clipped to the plan content ──
-					if (mouseEvent && wheelDelta === null) {
-						const isLeftButton = (mouseEvent.code & 3) === 0;
-						const isMotion = (mouseEvent.code & 32) !== 0;
+					if (
+						!clampToContent &&
+						(mouse.x < contentLeft ||
+							mouse.x > contentRight ||
+							mouse.y < contentTop ||
+							mouse.y > contentBottom)
+					) {
+						return null;
+					}
 
-						if (mouseEvent.released && isSelecting) {
-							selectionFocus = getSelectionPoint(mouseEvent, true) ?? selectionFocus;
-							isSelecting = false;
-							tui.requestRender();
-							copySelection();
-							return;
+					const x = Math.max(contentLeft, Math.min(contentRight, mouse.x));
+					const y = Math.max(contentTop, Math.min(contentBottom, mouse.y));
+					return {
+						line: Math.min(cachedMdLines.length - 1, scrollOffset + y - contentTop),
+						col: Math.max(0, Math.min(lastFrameWidth - 4, x - contentLeft)),
+					};
+				};
+
+				return {
+					render(width: number): string[] {
+						const frameWidth = Math.max(20, width);
+						lastFrameWidth = frameWidth;
+						const innerWidth = Math.max(10, frameWidth - 4);
+
+						// Render full markdown inside the border (cached until inner width changes)
+						if (!cachedMdLines || cachedWidth !== innerWidth) {
+							cachedMdLines = md.render(innerWidth);
+							cachedWidth = innerWidth;
+						}
+						const mdLines = cachedMdLines ?? [];
+
+						const modalHeight = Math.max(10, Math.floor(getTerminalRows() * 0.85));
+						const headerFooterLines = 9;
+						const viewportHeight = Math.max(5, modalHeight - headerFooterLines);
+						const maxScroll = Math.max(0, mdLines.length - viewportHeight);
+						if (scrollOffset > maxScroll) scrollOffset = maxScroll;
+
+						const framedLine = (content = ""): string => {
+							const truncated = truncateToWidth(content, innerWidth, "");
+							return (
+								theme.fg("accent", "│ ") +
+								truncated +
+								" ".repeat(Math.max(0, innerWidth - visibleWidth(truncated))) +
+								theme.fg("accent", " │")
+							);
+						};
+						const divider = (left: string, right: string): string =>
+							theme.fg("accent", `${left}${"─".repeat(Math.max(0, frameWidth - 2))}${right}`);
+
+						const lines: string[] = [];
+
+						// ── Header ──
+						lines.push(divider("╭", "╮"));
+						lines.push(
+							framedLine(
+								theme.fg("accent", theme.bold(`${SYMBOL.plan} Plan Review`)) +
+									`  ${theme.fg("muted", `Iteration ${iteration}`)}` +
+									(planTitle ? `  ${theme.fg("dim", planTitle)}` : ""),
+							),
+						);
+						lines.push(framedLine(theme.fg("dim", planFilePath ?? "Plan file unavailable")));
+						lines.push(divider("├", "┤"));
+
+						// ── Scrollable plan content ──
+						const visible = mdLines.slice(scrollOffset, scrollOffset + viewportHeight);
+						for (let visibleIndex = 0; visibleIndex < visible.length; visibleIndex++) {
+							const line = visible[visibleIndex] ?? "";
+							lines.push(framedLine(highlightSelection(line, scrollOffset + visibleIndex)));
 						}
 
-						if (!mouseEvent.released && isLeftButton && !isMotion) {
-							const point = getSelectionPoint(mouseEvent, false);
-							if (point) {
-								selectionAnchor = point;
-								selectionFocus = point;
-								isSelecting = true;
+						// pad if content is shorter than viewport
+						for (let i = visible.length; i < viewportHeight; i++) {
+							lines.push(framedLine());
+						}
+
+						// ── Scroll indicator ──
+						if (mdLines.length > viewportHeight) {
+							const pct = maxScroll > 0 ? Math.round((scrollOffset / maxScroll) * 100) : 100;
+							lines.push(framedLine(theme.fg("dim", `─── ${pct}% (${mdLines.length} lines) ───`)));
+						} else {
+							lines.push(framedLine());
+						}
+
+						// ── Footer actions ──
+						lines.push(divider("├", "┤"));
+						const actions: string[] = [
+							`${theme.fg("success", "a")} approve`,
+							`${theme.fg("warning", "r")} revise`,
+							`${theme.fg("accent", "c")} copy plan`,
+						];
+						if (iteration > 1) {
+							actions.push(
+								`${theme.fg("accent", "d")} diff`,
+								`${theme.fg("accent", "s")} summary`,
+								`${theme.fg("accent", "S")} all changes`,
+							);
+						}
+						actions.push(`${theme.fg("accent", "q")} Q&A`);
+						actions.push(`${theme.fg("dim", "esc")} back`);
+						lines.push(framedLine(actions.join("  │  ")));
+						const interactionHint = copyStatus
+							? theme.fg(copyStatus.startsWith("Copy failed") ? "error" : "success", copyStatus)
+							: theme.fg("dim", "↑↓/j/k scroll  PgUp/PgDn page  wheel scroll  drag select + copy");
+						lines.push(framedLine(interactionHint));
+						lines.push(divider("╰", "╯"));
+
+						return lines;
+					},
+
+					invalidate() {
+						cachedMdLines = null;
+						cachedWidth = null;
+					},
+
+					handleInput(data: string) {
+						const modalHeight = Math.max(10, Math.floor(getTerminalRows() * 0.85));
+						const viewportHeight = Math.max(5, modalHeight - 9);
+						const maxScroll = cachedMdLines ? Math.max(0, cachedMdLines.length - viewportHeight) : 0;
+						const mouseEvent = parseSgrMouseEvent(data);
+						const wheelDelta = getMouseWheelDelta(data);
+
+						// ── Mouse selection, clipped to the plan content ──
+						if (mouseEvent && wheelDelta === null) {
+							const isLeftButton = (mouseEvent.code & 3) === 0;
+							const isMotion = (mouseEvent.code & 32) !== 0;
+
+							if (mouseEvent.released && isSelecting) {
+								selectionFocus = getSelectionPoint(mouseEvent, true) ?? selectionFocus;
+								isSelecting = false;
 								tui.requestRender();
+								copySelection();
+								return;
 							}
+
+							if (!mouseEvent.released && isLeftButton && !isMotion) {
+								const point = getSelectionPoint(mouseEvent, false);
+								if (point) {
+									selectionAnchor = point;
+									selectionFocus = point;
+									isSelecting = true;
+									tui.requestRender();
+								}
+								return;
+							}
+
+							if (!mouseEvent.released && isLeftButton && isMotion && isSelecting) {
+								selectionFocus = getSelectionPoint(mouseEvent, true) ?? selectionFocus;
+								tui.requestRender();
+								return;
+							}
+
 							return;
 						}
 
-						if (!mouseEvent.released && isLeftButton && isMotion && isSelecting) {
-							selectionFocus = getSelectionPoint(mouseEvent, true) ?? selectionFocus;
+						// ── Scrolling ──
+						if (wheelDelta !== null) {
+							scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset + wheelDelta * 3));
+							tui.requestRender();
+							return;
+						}
+						if (matchesKey(data, Key.up) || data === "k") {
+							scrollOffset = Math.max(0, scrollOffset - 1);
+							tui.requestRender();
+							return;
+						}
+						if (matchesKey(data, Key.down) || data === "j") {
+							scrollOffset = Math.min(maxScroll, scrollOffset + 1);
+							tui.requestRender();
+							return;
+						}
+						if (matchesKey(data, Key.pageUp)) {
+							scrollOffset = Math.max(0, scrollOffset - viewportHeight);
+							tui.requestRender();
+							return;
+						}
+						if (matchesKey(data, Key.pageDown)) {
+							scrollOffset = Math.min(maxScroll, scrollOffset + viewportHeight);
 							tui.requestRender();
 							return;
 						}
 
-						return;
-					}
-
-					// ── Scrolling ──
-					if (wheelDelta !== null) {
-						scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset + wheelDelta * 3));
-						tui.requestRender();
-						return;
-					}
-					if (matchesKey(data, Key.up) || data === "k") {
-						scrollOffset = Math.max(0, scrollOffset - 1);
-						tui.requestRender();
-						return;
-					}
-					if (matchesKey(data, Key.down) || data === "j") {
-						scrollOffset = Math.min(maxScroll, scrollOffset + 1);
-						tui.requestRender();
-						return;
-					}
-					if (matchesKey(data, Key.pageUp)) {
-						scrollOffset = Math.max(0, scrollOffset - viewportHeight);
-						tui.requestRender();
-						return;
-					}
-					if (matchesKey(data, Key.pageDown)) {
-						scrollOffset = Math.min(maxScroll, scrollOffset + viewportHeight);
-						tui.requestRender();
-						return;
-					}
-
-					// ── Actions ──
-					if (data === "c") {
-						copyText(plan, "Copied full plan");
-						return;
-					}
-					if (data === "a") {
-						finish("approve");
-						return;
-					}
-					if (data === "r") {
-						finish("revise");
-						return;
-					}
-					if (matchesKey(data, Key.escape)) {
-						finish("cancel");
-						return;
-					}
-					if (data === "d" && iteration > 1) {
-						finish("diff");
-						return;
-					}
-					if (data === "s" && iteration > 1) {
-						finish("summary");
-						return;
-					}
-					if (data === "S" && iteration > 1) {
-						finish("allSummary");
-						return;
-					}
-					if (data === "q") {
-						finish("qa");
-						return;
-					}
-				},
-			};
-		}, {
-			overlay: true,
-			overlayOptions: {
-				anchor: "center",
-				width: "90%",
-				minWidth: 60,
-				maxHeight: "90%",
-				margin: 1,
+						// ── Actions ──
+						if (data === "c") {
+							copyText(plan, "Copied full plan");
+							return;
+						}
+						if (data === "a") {
+							finish("approve");
+							return;
+						}
+						if (data === "r") {
+							finish("revise");
+							return;
+						}
+						if (matchesKey(data, Key.escape)) {
+							finish("cancel");
+							return;
+						}
+						if (data === "d" && iteration > 1) {
+							finish("diff");
+							return;
+						}
+						if (data === "s" && iteration > 1) {
+							finish("summary");
+							return;
+						}
+						if (data === "S" && iteration > 1) {
+							finish("allSummary");
+							return;
+						}
+						if (data === "q") {
+							finish("qa");
+							return;
+						}
+					},
+				};
 			},
-		});
+			{
+				overlay: true,
+				overlayOptions: {
+					anchor: "center",
+					width: "90%",
+					minWidth: 60,
+					maxHeight: "90%",
+					margin: 1,
+				},
+			},
+		);
 	}
 
 	// ─── Plan Review Loop ───────────────────────────────────
@@ -1333,7 +1369,10 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			// A revision can finish in the background while an older iteration is
 			// reopened. Never approve or revise a stale plan accidentally.
 			if (iteration !== iterations.length && result.action !== "cancel") {
-				ctx.ui.notify("A newer plan iteration is available. Reopen the review to act on the latest plan.", "warning");
+				ctx.ui.notify(
+					"A newer plan iteration is available. Reopen the review to act on the latest plan.",
+					"warning",
+				);
 				return;
 			}
 
@@ -1499,7 +1538,9 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		},
 
 		renderResult(result, _options, theme, _context) {
-			const details = result.details as { presented?: boolean; iteration?: number; planDir?: string | null } | undefined;
+			const details = result.details as
+				| { presented?: boolean; iteration?: number; planDir?: string | null }
+				| undefined;
 			if (!details) {
 				const first = result.content[0];
 				return new Text(first?.type === "text" ? truncateToWidth(first.text, 80) : "", 0, 0);
@@ -1665,9 +1706,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 
 		const hasPlanOutputToolCall =
 			msg.role === "assistant" &&
-			contentParts.some(
-				(c) => (c.type === "toolCall" || c.type === "tool_use") && c.name === "plan_output",
-			);
+			contentParts.some((c) => (c.type === "toolCall" || c.type === "tool_use") && c.name === "plan_output");
 
 		// Skip assistant messages that contain a plan_output tool call.
 		if (hasPlanOutputToolCall) return;
@@ -1690,8 +1729,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 				}, 0);
 			}
 
-			const replacementText =
-				`${SYMBOL.warning} Plan mode revision is pending. The revised plan must be presented through the plan review UI with plan_output, not as normal chat. Requesting resubmission now…`;
+			const replacementText = `${SYMBOL.warning} Plan mode revision is pending. The revised plan must be presented through the plan review UI with plan_output, not as normal chat. Requesting resubmission now…`;
 			qaMessages.push({ role: "assistant", content: replacementText });
 			persistState();
 			return {

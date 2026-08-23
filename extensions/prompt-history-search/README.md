@@ -1,5 +1,6 @@
 # Global Prompt History Search
 
+<!-- prettier-ignore -->
 DISCLAIMER: This is *mostly* vibe-coded using pi agent cli
 
 Adds shell-style reverse search across textual user prompts from a local persisted prompt index.

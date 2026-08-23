@@ -3,8 +3,15 @@
   "version": "0.1.0",
   "description": "Fuzzy reverse search across prompts in saved pi sessions",
   "type": "module",
-  "keywords": ["pi-package", "pi-extension", "prompt-history"],
-  "files": ["index.ts", "README.md"],
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "prompt-history"
+  ],
+  "files": [
+    "index.ts",
+    "README.md"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/stagefright5/pi-agent-extensions.git",
@@ -19,7 +26,9 @@
     "@earendil-works/pi-tui": "catalog:"
   },
   "pi": {
-    "extensions": ["./index.ts"]
+    "extensions": [
+      "./index.ts"
+    ]
   },
   "publishConfig": {
     "access": "public"

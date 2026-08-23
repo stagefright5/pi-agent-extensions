@@ -3,8 +3,16 @@
   "version": "0.1.0",
   "description": "Evidence-guided planning and interactive plan review for pi",
   "type": "module",
-  "keywords": ["pi-package", "pi-extension", "planning"],
-  "files": ["index.ts", "utils.ts", "README.md"],
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "planning"
+  ],
+  "files": [
+    "index.ts",
+    "utils.ts",
+    "README.md"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/stagefright5/pi-agent-extensions.git",
@@ -21,7 +29,9 @@
     "typebox": "catalog:"
   },
   "pi": {
-    "extensions": ["./index.ts"]
+    "extensions": [
+      "./index.ts"
+    ]
   },
   "publishConfig": {
     "access": "public"

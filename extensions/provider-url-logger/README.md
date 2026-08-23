@@ -1,5 +1,6 @@
 # Provider URL Logger
 
+<!-- prettier-ignore -->
 DISCLAIMER: This is *mostly* vibe-coded using pi agent cli
 
 A small diagnostic extension that records which provider endpoint pi selects for each provider request.

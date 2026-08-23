@@ -3,8 +3,20 @@
   "version": "0.1.0",
   "description": "Guarded Jenkins operations for pi using the official Jenkins CLI",
   "type": "module",
-  "keywords": ["pi-package", "pi-skill", "jenkins", "ci"],
-  "files": ["index.ts", "SKILL.md", "README.md", "references", "scripts", "tests"],
+  "keywords": [
+    "pi-package",
+    "pi-skill",
+    "jenkins",
+    "ci"
+  ],
+  "files": [
+    "index.ts",
+    "SKILL.md",
+    "README.md",
+    "references",
+    "scripts",
+    "tests"
+  ],
   "scripts": {
     "test": "node --test tests/*.test.mjs"
   },
@@ -20,7 +32,9 @@
     "@earendil-works/pi-coding-agent": "catalog:"
   },
   "pi": {
-    "skills": ["./SKILL.md"]
+    "skills": [
+      "./SKILL.md"
+    ]
   },
   "publishConfig": {
     "access": "public"

@@ -72,7 +72,8 @@ async function readParamsFile(filePath) {
         console.warn(`Warning: parameter file ${filePath} is accessible by group/others; consider chmod 600`);
     }
     const parsed = JSON.parse(await readFile(filePath, 'utf8'));
-    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') throw new Error('Parameter file must contain a JSON object');
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object')
+        throw new Error('Parameter file must contain a JSON object');
     return parsed;
 }
 
@@ -117,7 +118,9 @@ async function main() {
     console.log(`  Job URL: ${job.url}`);
     console.log(`  Buildable: ${job.buildable}; in queue: ${job.inQueue}; next build: ${job.nextBuildNumber}`);
     console.log(`  Action: ${dryRun ? 'dry run; do not queue' : 'queue build'}`);
-    console.log(`  Mode: ${follow ? 'follow until completion' : 'queue and return'}${verbose ? ', stream console' : ''}`);
+    console.log(
+        `  Mode: ${follow ? 'follow until completion' : 'queue and return'}${verbose ? ', stream console' : ''}`,
+    );
     console.log('  Parameters:');
     if (!Object.keys(parameters).length) console.log('    (defaults only)');
     for (const [name, value] of Object.entries(parameters)) {
@@ -130,7 +133,8 @@ async function main() {
     }
 
     if (!yes) {
-        if (!input.isTTY) throw new Error('Refusing non-interactive build without --yes; obtain explicit user confirmation first');
+        if (!input.isTTY)
+            throw new Error('Refusing non-interactive build without --yes; obtain explicit user confirmation first');
         const rl = readline.createInterface({ input, output });
         const expected = `trigger ${jobName}`;
         const answer = await rl.question(`Type ${JSON.stringify(expected)} to continue: `);

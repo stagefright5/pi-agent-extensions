@@ -4,17 +4,25 @@
   "private": true,
   "description": "Workspace for independently published pi extensions and skills",
   "type": "module",
-  "packageManager": "pnpm@11.22.0",
   "scripts": {
     "test": "pnpm -r --if-present test",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "lint:staged": "lint-staged",
     "pack:check": "pnpm -r --filter './extensions/*' pack --dry-run",
     "changeset": "changeset",
     "version-packages": "changeset version",
     "release": "changeset publish"
   },
   "devDependencies": {
-    "@changesets/cli": "^3.0.1"
+    "@changesets/cli": "^3.0.1",
+    "lint-staged": "^17.3.0",
+    "oxfmt": "^0.64.0",
+    "oxlint": "^1.79.0"
   },
+  "packageManager": "pnpm@11.22.0",
   "pi": {
     "extensions": [
       "./extensions/plan-mode/index.ts",

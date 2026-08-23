@@ -9,15 +9,15 @@ The packages are maintained against pi **0.84.2** and use pi's TypeScript extens
 
 ## Packages
 
-| Workspace | npm package | Purpose | Primary interface |
-| --- | --- | --- | --- |
-| [Jenkins CLI Operations](./extensions/jenkins-cli-operations/README.md) | `@stagefright5/pi-jenkins-cli-operations` | Guarded Jenkins workflows using the official CLI | `/skill:jenkins-cli-operations` |
-| [Plan Mode](./extensions/plan-mode/README.md) | `@stagefright5/pi-plan-mode` | Evidence-guided planning and interactive review | `/plan`, `Alt+P` |
-| [Global Prompt History Search](./extensions/prompt-history-search/README.md) | `@stagefright5/pi-prompt-history-search` | Fuzzy reverse search across saved prompts | `Alt+R`, `/prompt-history` |
-| [Prompt Truly Mine](./extensions/prompt-truly-mine/README.md) | `@stagefright5/pi-prompt-truly-mine` | Inline skill/prompt context with undo and redo | inline `/`, `Ctrl+Z`, redo shortcuts |
-| [Provider URL Logger](./extensions/provider-url-logger/README.md) | `@stagefright5/pi-provider-url-logger` | Log selected provider endpoints locally | Automatic |
-| [Compact Status Bar](./extensions/status-bar/README.md) | `@stagefright5/pi-status-bar` | Compact cwd, Git, context, cost, and status footer | Automatic in TUI mode |
-| [Tool Output Browser](./extensions/tool-output-browser/README.md) | `@stagefright5/pi-tool-output-browser` | Inspect one complete stored tool result | `/tool-output` |
+| Workspace                                                                    | npm package                               | Purpose                                            | Primary interface                    |
+| ---------------------------------------------------------------------------- | ----------------------------------------- | -------------------------------------------------- | ------------------------------------ |
+| [Jenkins CLI Operations](./extensions/jenkins-cli-operations/README.md)      | `@stagefright5/pi-jenkins-cli-operations` | Guarded Jenkins workflows using the official CLI   | `/skill:jenkins-cli-operations`      |
+| [Plan Mode](./extensions/plan-mode/README.md)                                | `@stagefright5/pi-plan-mode`              | Evidence-guided planning and interactive review    | `/plan`, `Alt+P`                     |
+| [Global Prompt History Search](./extensions/prompt-history-search/README.md) | `@stagefright5/pi-prompt-history-search`  | Fuzzy reverse search across saved prompts          | `Alt+R`, `/prompt-history`           |
+| [Prompt Truly Mine](./extensions/prompt-truly-mine/README.md)                | `@stagefright5/pi-prompt-truly-mine`      | Inline skill/prompt context with undo and redo     | inline `/`, `Ctrl+Z`, redo shortcuts |
+| [Provider URL Logger](./extensions/provider-url-logger/README.md)            | `@stagefright5/pi-provider-url-logger`    | Log selected provider endpoints locally            | Automatic                            |
+| [Compact Status Bar](./extensions/status-bar/README.md)                      | `@stagefright5/pi-status-bar`             | Compact cwd, Git, context, cost, and status footer | Automatic in TUI mode                |
+| [Tool Output Browser](./extensions/tool-output-browser/README.md)            | `@stagefright5/pi-tool-output-browser`    | Inspect one complete stored tool result            | `/tool-output`                       |
 
 Each workspace has its own `package.json`, version, Pi manifest, README, and npm release lifecycle. The repository root is private and is never published.
 
@@ -89,6 +89,18 @@ Inspect the files that each workspace would publish:
 ```bash
 pnpm pack:check
 ```
+
+Lint and format the workspace:
+
+```bash
+pnpm lint
+pnpm lint:fix
+pnpm format
+pnpm format:check
+pnpm lint:staged
+```
+
+`.lintstagedrc.json` runs safe Oxlint fixes before Oxfmt for staged JavaScript and TypeScript sources, and formats supported staged text assets.
 
 For an interactive Pi smoke test, start Pi normally through the development symlink, or pass the package path with `-e`. TUI-specific editors, overlays, footers, and shortcuts must be tested interactively.
 

@@ -1,9 +1,4 @@
-import type {
-	ExtensionAPI,
-	ExtensionContext,
-	KeybindingsManager,
-	Theme,
-} from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext, KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import {
 	Input,
 	Key,
@@ -319,7 +314,11 @@ class ToolOutputBrowser implements Component, Focusable {
 		};
 
 		lines.push(border(`╭${"─".repeat(innerWidth)}╮`));
-		lines.push(row(` ${this.theme.fg("accent", this.theme.bold("Tool Output Browser"))} ${this.theme.fg("dim", `(${this.filtered.length}/${this.records.length})`)}`));
+		lines.push(
+			row(
+				` ${this.theme.fg("accent", this.theme.bold("Tool Output Browser"))} ${this.theme.fg("dim", `(${this.filtered.length}/${this.records.length})`)}`,
+			),
+		);
 
 		const prefix = this.theme.fg("muted", " filter: ");
 		const inputWidth = Math.max(1, innerWidth - visibleWidth(prefix));
@@ -338,13 +337,19 @@ class ToolOutputBrowser implements Component, Focusable {
 				const record = this.filtered[index]!;
 				const selected = index === this.selectedIndex;
 				const marker = selected ? " ›" : "  ";
-				const status = record.isError
-					? this.theme.fg("error", "✗")
-					: this.theme.fg("success", "✓");
+				const status = record.isError ? this.theme.fg("error", "✗") : this.theme.fg("success", "✓");
 				const name = this.theme.fg(selected ? "accent" : "toolTitle", record.toolName);
 				const preview = argumentsPreview(record);
-				const metadata = this.theme.fg("dim", `${formatTimestamp(record.timestamp)} · ${record.output.split("\n").length} lines`);
-				lines.push(row(`${marker} ${status} #${record.sequence} ${name}${preview ? `  ${preview}` : ""}  ${metadata}`, selected));
+				const metadata = this.theme.fg(
+					"dim",
+					`${formatTimestamp(record.timestamp)} · ${record.output.split("\n").length} lines`,
+				);
+				lines.push(
+					row(
+						`${marker} ${status} #${record.sequence} ${name}${preview ? `  ${preview}` : ""}  ${metadata}`,
+						selected,
+					),
+				);
 			}
 		}
 
@@ -370,8 +375,14 @@ class ToolOutputBrowser implements Component, Focusable {
 
 		lines.push(border(`╭${"─".repeat(innerWidth)}╮`));
 		const status = record.isError ? this.theme.fg("error", "error") : this.theme.fg("success", "success");
-		lines.push(row(` ${this.theme.fg("accent", this.theme.bold(`#${record.sequence} ${record.toolName}`))} · ${status}`));
-		lines.push(row(` ${this.theme.fg("dim", `${formatTimestamp(record.timestamp)} · call ${record.toolCallId} · entry ${record.entryId}`)}`));
+		lines.push(
+			row(` ${this.theme.fg("accent", this.theme.bold(`#${record.sequence} ${record.toolName}`))} · ${status}`),
+		);
+		lines.push(
+			row(
+				` ${this.theme.fg("dim", `${formatTimestamp(record.timestamp)} · call ${record.toolCallId} · entry ${record.entryId}`)}`,
+			),
+		);
 
 		const tabs = DETAIL_VIEWS.map((view) =>
 			view === this.detailView
@@ -390,10 +401,15 @@ class ToolOutputBrowser implements Component, Focusable {
 		for (let index = visible.length; index < pageSize; index++) lines.push(contentRow(""));
 
 		lines.push(border(`├${"─".repeat(innerWidth)}┤`));
-		const position = wrapped.length === 0
-			? "0/0"
-			: `${this.scrollOffset + 1}-${Math.min(this.scrollOffset + pageSize, wrapped.length)}/${wrapped.length}`;
-		lines.push(row(` ${this.theme.fg("dim", `${position} · ↑↓/j k scroll · PgUp/PgDn page · Tab/→ view · n/p result · Esc/← back · Ctrl+C close`)}`));
+		const position =
+			wrapped.length === 0
+				? "0/0"
+				: `${this.scrollOffset + 1}-${Math.min(this.scrollOffset + pageSize, wrapped.length)}/${wrapped.length}`;
+		lines.push(
+			row(
+				` ${this.theme.fg("dim", `${position} · ↑↓/j k scroll · PgUp/PgDn page · Tab/→ view · n/p result · Esc/← back · Ctrl+C close`)}`,
+			),
+		);
 		lines.push(border(`╰${"─".repeat(innerWidth)}╯`));
 		return lines;
 	}
@@ -481,8 +497,7 @@ async function openToolOutputBrowser(ctx: ExtensionContext, initialQuery = ""): 
 	}
 
 	await ctx.ui.custom<void>(
-		(tui, theme, keybindings, done) =>
-			new ToolOutputBrowser(tui, theme, keybindings, records, initialQuery, done),
+		(tui, theme, keybindings, done) => new ToolOutputBrowser(tui, theme, keybindings, records, initialQuery, done),
 		{
 			overlay: true,
 			overlayOptions: {

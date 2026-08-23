@@ -1,5 +1,6 @@
 # Jenkins CLI Operations
 
+<!-- prettier-ignore -->
 DISCLAIMER: This is *mostly* vibe-coded using pi agent cli
 
 Standalone Pi package for the bundled `jenkins-cli-operations` Agent Skill.

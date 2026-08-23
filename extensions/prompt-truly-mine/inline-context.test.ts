@@ -61,11 +61,14 @@ test("applies an encoded completion without submitting or damaging surrounding t
 		cursorCol: 29,
 	});
 
-	assert.deepEqual(applyComposableCompletion(["Use /as later"], 0, 7, "ask", encodeComposableCompletionPrefix("/as")), {
-		lines: ["Use /ask later"],
-		cursorLine: 0,
-		cursorCol: 8,
-	});
+	assert.deepEqual(
+		applyComposableCompletion(["Use /as later"], 0, 7, "ask", encodeComposableCompletionPrefix("/as")),
+		{
+			lines: ["Use /ask later"],
+			cursorLine: 0,
+			cursorCol: 8,
+		},
+	);
 });
 
 test("fuzzy-filters and labels prompt and skill completion items", () => {
@@ -76,16 +79,13 @@ test("fuzzy-filters and labels prompt and skill completion items", () => {
 			description: "[skill] Angular architecture and implementation",
 		},
 	]);
-	assert.deepEqual(
-		buildContextCompletionItems([...commands, commands[0]!], "ask"),
-		[
-			{
-				value: "ask",
-				label: "ask",
-				description: "[prompt] Ask before deciding",
-			},
-		],
-	);
+	assert.deepEqual(buildContextCompletionItems([...commands, commands[0]!], "ask"), [
+		{
+			value: "ask",
+			label: "ask",
+			description: "[prompt] Ask before deciding",
+		},
+	]);
 });
 
 test("extracts known references across punctuation boundaries and deduplicates bodies", () => {
@@ -117,9 +117,7 @@ test("substitutes all Pi prompt-template placeholder forms without recursion", (
 	].join("\n");
 	assert.equal(
 		substitutePromptArguments(template, args),
-		["one|two|", "one two $1|one two $1", "one|fallback", "one two $1", "two $1|two|one two"].join(
-			"\n",
-		),
+		["one|two|", "one two $1|one two $1", "one|fallback", "one two $1", "two $1|two|one two"].join("\n"),
 	);
 	assert.equal(substitutePromptArguments("$1", ["$ARGUMENTS"]), "$ARGUMENTS");
 });
@@ -144,10 +142,7 @@ test("formats a collapsible mixed bundle and preserves the original draft verbat
 	assert.match(formatted, /## Skill: angular-developer/);
 	assert.match(formatted, /References are relative to \/home\/me\/\.agents\/skills\/angular-developer\./);
 	assert.match(formatted, /## Prompt template: ask/);
-	assert.match(
-		formatted,
-		/Review this complete request: Implement login form with \/skill:angular-developer \/ask/,
-	);
+	assert.match(formatted, /Review this complete request: Implement login form with \/skill:angular-developer \/ask/);
 	assert.match(formatted, /First token: Implement/);
 	assert.ok(formatted.endsWith(`\n\n${original}`));
 	assert.equal(isExpandedContextBundle(formatted), true);

@@ -3,8 +3,16 @@
   "version": "0.1.0",
   "description": "A compact single-line status bar for pi",
   "type": "module",
-  "keywords": ["pi-package", "pi-extension", "status-bar", "tui"],
-  "files": ["index.ts", "README.md"],
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "status-bar",
+    "tui"
+  ],
+  "files": [
+    "index.ts",
+    "README.md"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/stagefright5/pi-agent-extensions.git",
@@ -19,7 +27,9 @@
     "@earendil-works/pi-tui": "catalog:"
   },
   "pi": {
-    "extensions": ["./index.ts"]
+    "extensions": [
+      "./index.ts"
+    ]
   },
   "publishConfig": {
     "access": "public"
