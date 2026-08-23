@@ -1,13 +1,27 @@
 export const INLINE_COMPLETION_PREFIX_MARKER = "\u{e000}";
 export const INLINE_CONTEXT_BUNDLE_MARKER = "pi-extension:inline-context:v1";
 
-export type ComposableCommandSource = "skill" | "prompt";
+export type InlineCommandSource = "extension" | "skill" | "prompt";
+export type ComposableCommandSource = Exclude<InlineCommandSource, "extension">;
 
-export type ComposableCommand = {
+export type InlineCommand = {
 	name: string;
 	description?: string;
-	source: ComposableCommandSource;
+	source: InlineCommandSource;
 	path: string;
+};
+
+export type ComposableCommand = InlineCommand & {
+	source: ComposableCommandSource;
+};
+
+export type ExtensionCommand = InlineCommand & {
+	source: "extension";
+};
+
+export type PromotedExtensionCommand = {
+	command: ExtensionCommand;
+	text: string;
 };
 
 export type ContextCompletionItem = {
@@ -117,10 +131,10 @@ function fuzzyScore(value: string, query: string): number | null {
 }
 
 export function buildContextCompletionItems(
-	commands: readonly ComposableCommand[],
+	commands: readonly InlineCommand[],
 	query: string,
 ): ContextCompletionItem[] {
-	const unique = new Map<string, { command: ComposableCommand; index: number; score: number }>();
+	const unique = new Map<string, { command: InlineCommand; index: number; score: number }>();
 	commands.forEach((command, index) => {
 		const score = fuzzyScore(command.name, query);
 		if (score === null) return;
@@ -135,6 +149,32 @@ export function buildContextCompletionItems(
 			label: command.name,
 			description: `[${command.source}]${command.description ? ` ${command.description}` : ""}`,
 		}));
+}
+
+export function promoteInlineExtensionCommand(
+	text: string,
+	commands: readonly InlineCommand[],
+): PromotedExtensionCommand | null {
+	const byInvocation = new Map(
+		commands
+			.filter((command): command is ExtensionCommand => command.source === "extension")
+			.map((command) => [command.name, command]),
+	);
+
+	for (const match of text.matchAll(RESOURCE_TOKEN_PATTERN)) {
+		const token = match[2];
+		if (!token) continue;
+		const invocation = byInvocation.has(token) ? token : token.replace(/[),.;!?\]}]+$/, "");
+		const command = byInvocation.get(invocation);
+		if (!command) continue;
+
+		return {
+			command,
+			text: `/${command.name} ${text}`,
+		};
+	}
+
+	return null;
 }
 
 export function extractReferencedCommands(text: string, commands: readonly ComposableCommand[]): ComposableCommand[] {
