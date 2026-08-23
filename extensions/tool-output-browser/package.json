@@ -2,6 +2,7 @@
   "name": "@stagefright5/pi-tool-output-browser",
   "version": "0.1.0",
   "description": "Browse complete stored tool results without expanding every pi transcript row",
+  "license": "Unlicense",
   "type": "module",
   "keywords": [
     "pi-package",

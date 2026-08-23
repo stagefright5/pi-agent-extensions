@@ -2,6 +2,7 @@
   "name": "@stagefright5/pi-jenkins-cli-operations",
   "version": "0.1.0",
   "description": "Guarded Jenkins operations for pi using the official Jenkins CLI",
+  "license": "Unlicense",
   "type": "module",
   "keywords": [
     "pi-package",
