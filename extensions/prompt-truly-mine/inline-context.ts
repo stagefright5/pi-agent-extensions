@@ -137,10 +137,7 @@ export function buildContextCompletionItems(
 		}));
 }
 
-export function extractReferencedCommands(
-	text: string,
-	commands: readonly ComposableCommand[],
-): ComposableCommand[] {
+export function extractReferencedCommands(text: string, commands: readonly ComposableCommand[]): ComposableCommand[] {
 	const byInvocation = new Map(commands.map((command) => [command.name, command]));
 	const selected = new Map<string, ComposableCommand>();
 
@@ -213,21 +210,14 @@ export function substitutePromptArguments(content: string, args: readonly string
 }
 
 function escapeXmlAttribute(value: string): string {
-	return value
-		.replaceAll("&", "&amp;")
-		.replaceAll('"', "&quot;")
-		.replaceAll("<", "&lt;")
-		.replaceAll(">", "&gt;");
+	return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
 function displayName(resource: LoadedContextResource): string {
 	return resource.source === "skill" ? resource.name.replace(/^skill:/, "") : `prompt:${resource.name}`;
 }
 
-function formatResourceSection(
-	resource: LoadedContextResource,
-	originalArgs: readonly string[],
-): string {
+function formatResourceSection(resource: LoadedContextResource, originalArgs: readonly string[]): string {
 	if (resource.source === "skill") {
 		const skillName = resource.name.replace(/^skill:/, "");
 		return [

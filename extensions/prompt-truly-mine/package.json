@@ -3,8 +3,17 @@
   "version": "0.1.0",
   "description": "Composable inline skill and prompt context with cursor-restoring undo and redo for pi",
   "type": "module",
-  "keywords": ["pi-package", "pi-extension", "prompt-editor"],
-  "files": ["index.ts", "inline-context.ts", "inline-context.test.ts", "README.md"],
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "prompt-editor"
+  ],
+  "files": [
+    "index.ts",
+    "inline-context.ts",
+    "inline-context.test.ts",
+    "README.md"
+  ],
   "scripts": {
     "test": "node --test inline-context.test.ts"
   },
@@ -22,7 +31,9 @@
     "@earendil-works/pi-tui": "catalog:"
   },
   "pi": {
-    "extensions": ["./index.ts"]
+    "extensions": [
+      "./index.ts"
+    ]
   },
   "publishConfig": {
     "access": "public"

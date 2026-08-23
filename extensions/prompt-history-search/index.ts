@@ -238,12 +238,14 @@ async function updatePersistedIndex(
 	update: (current: LoadedPersistedIndex) => { prompts: PromptRecord[]; bootstrappedAt?: number },
 ): Promise<PromptRecord[]> {
 	let updatedPrompts: PromptRecord[] = [];
-	const run = indexWriteQueue.catch(() => undefined).then(async () => {
-		const current = await readPersistedIndex();
-		const next = update(current);
-		updatedPrompts = mergePrompts(next.prompts);
-		await writePersistedIndex(updatedPrompts, next.bootstrappedAt);
-	});
+	const run = indexWriteQueue
+		.catch(() => undefined)
+		.then(async () => {
+			const current = await readPersistedIndex();
+			const next = update(current);
+			updatedPrompts = mergePrompts(next.prompts);
+			await writePersistedIndex(updatedPrompts, next.bootstrappedAt);
+		});
 	indexWriteQueue = run;
 	await run;
 	return updatedPrompts;
@@ -289,11 +291,7 @@ async function discoverSessionFiles(): Promise<string[]> {
 	return perDir.flat();
 }
 
-async function mapWithConcurrency<T, R>(
-	items: T[],
-	limit: number,
-	mapper: (item: T) => Promise<R>,
-): Promise<R[]> {
+async function mapWithConcurrency<T, R>(items: T[], limit: number, mapper: (item: T) => Promise<R>): Promise<R[]> {
 	const results = new Array<R>(items.length);
 	let nextIndex = 0;
 
@@ -324,26 +322,30 @@ async function buildPromptIndexFromSessions(): Promise<PromptIndex> {
 		if (!activePaths.has(path)) sessionCache.delete(path);
 	}
 
-	const perSession = await mapWithConcurrency(files, SESSION_SCAN_CONCURRENCY, async (path): Promise<PromptRecord[]> => {
-		try {
-			const stats = await stat(path);
-			const modifiedMs = stats.mtime.getTime();
-			const cached = sessionCache.get(path);
-			if (cached?.modifiedMs === modifiedMs) {
-				if (cached.malformed) warnings++;
-				return cached.prompts;
-			}
+	const perSession = await mapWithConcurrency(
+		files,
+		SESSION_SCAN_CONCURRENCY,
+		async (path): Promise<PromptRecord[]> => {
+			try {
+				const stats = await stat(path);
+				const modifiedMs = stats.mtime.getTime();
+				const cached = sessionCache.get(path);
+				if (cached?.modifiedMs === modifiedMs) {
+					if (cached.malformed) warnings++;
+					return cached.prompts;
+				}
 
-			const loaded = await loadSessionPrompts(path, modifiedMs);
-			sessionCache.set(path, loaded);
-			if (loaded.malformed) warnings++;
-			return loaded.prompts;
-		} catch {
-			warnings++;
-			sessionCache.delete(path);
-			return [];
-		}
-	});
+				const loaded = await loadSessionPrompts(path, modifiedMs);
+				sessionCache.set(path, loaded);
+				if (loaded.malformed) warnings++;
+				return loaded.prompts;
+			} catch {
+				warnings++;
+				sessionCache.delete(path);
+				return [];
+			}
+		},
+	);
 
 	return {
 		prompts: mergePrompts(...perSession),
@@ -482,9 +484,7 @@ function matchRangesForQuery(text: string, query: string): MatchRange[] {
 }
 
 function mergeRanges(ranges: MatchRange[]): MatchRange[] {
-	const sorted = ranges
-		.filter((range) => range.end > range.start)
-		.sort((a, b) => a.start - b.start || b.end - a.end);
+	const sorted = ranges.filter((range) => range.end > range.start).sort((a, b) => a.start - b.start || b.end - a.end);
 	const merged: MatchRange[] = [];
 
 	for (const range of sorted) {
@@ -499,7 +499,11 @@ function mergeRanges(ranges: MatchRange[]): MatchRange[] {
 	return merged;
 }
 
-function excerptAroundFirstMatch(text: string, ranges: MatchRange[], maxWidth: number): { text: string; ranges: MatchRange[] } {
+function excerptAroundFirstMatch(
+	text: string,
+	ranges: MatchRange[],
+	maxWidth: number,
+): { text: string; ranges: MatchRange[] } {
 	const width = Math.max(1, maxWidth);
 	if (visibleWidth(text) <= width) return { text, ranges };
 
@@ -548,7 +552,10 @@ function highlightRanges(text: string, ranges: MatchRange[], theme: Theme): stri
 	let offset = 0;
 	for (const range of ranges) {
 		rendered += text.slice(offset, range.start);
-		rendered += theme.bg("searchMatchBg", theme.fg("searchMatchText", theme.bold(text.slice(range.start, range.end))));
+		rendered += theme.bg(
+			"searchMatchBg",
+			theme.fg("searchMatchText", theme.bold(text.slice(range.start, range.end))),
+		);
 		offset = range.end;
 	}
 	rendered += text.slice(offset);
@@ -728,7 +735,10 @@ class PromptHistorySearchComponent implements Component, Focusable {
 		if (this.warnings > 0) {
 			lines.push(
 				truncateToWidth(
-					this.theme.fg("warning", `Skipped, partially read, or repaired ${this.warnings} index/session file(s)`),
+					this.theme.fg(
+						"warning",
+						`Skipped, partially read, or repaired ${this.warnings} index/session file(s)`,
+					),
 					width,
 					"…",
 				),

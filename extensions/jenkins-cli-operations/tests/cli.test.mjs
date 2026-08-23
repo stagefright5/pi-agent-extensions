@@ -20,8 +20,12 @@ function runNode(args) {
         });
         let stdout = '';
         let stderr = '';
-        child.stdout.on('data', (chunk) => { stdout += chunk; });
-        child.stderr.on('data', (chunk) => { stderr += chunk; });
+        child.stdout.on('data', (chunk) => {
+            stdout += chunk;
+        });
+        child.stderr.on('data', (chunk) => {
+            stderr += chunk;
+        });
         child.on('error', reject);
         child.on('close', (code, signal) => resolve({ code, signal, stdout, stderr }));
     });
@@ -43,14 +47,18 @@ async function fakeJenkins(t, overrides = {}) {
         buildable: true,
         inQueue: false,
         nextBuildNumber: 42,
-        property: [{
-            parameterDefinitions: [{
-                name: 'BRANCH',
-                type: 'StringParameterDefinition',
-                description: 'Git branch',
-                defaultParameterValue: { value: 'main' },
-            }],
-        }],
+        property: [
+            {
+                parameterDefinitions: [
+                    {
+                        name: 'BRANCH',
+                        type: 'StringParameterDefinition',
+                        description: 'Git branch',
+                        defaultParameterValue: { value: 'main' },
+                    },
+                ],
+            },
+        ],
         ...overrides,
     };
 
@@ -70,12 +78,20 @@ async function fakeJenkins(t, overrides = {}) {
     const address = server.address();
     controllerUrl = `http://127.0.0.1:${address.port}`;
 
-    await writeFile(configPath, `${JSON.stringify({
-        url: controllerUrl,
-        transport: 'webSocket',
-        command: 'this-launcher-must-not-run-during-dry-run',
-        auth: { provider: 'file', path: authPath },
-    }, null, 2)}\n`, { mode: 0o600 });
+    await writeFile(
+        configPath,
+        `${JSON.stringify(
+            {
+                url: controllerUrl,
+                transport: 'webSocket',
+                command: 'this-launcher-must-not-run-during-dry-run',
+                auth: { provider: 'file', path: authPath },
+            },
+            null,
+            2,
+        )}\n`,
+        { mode: 0o600 },
+    );
 
     t.after(async () => {
         await new Promise((resolve) => server.close(resolve));
@@ -86,10 +102,7 @@ async function fakeJenkins(t, overrides = {}) {
 }
 
 test('job paths encode each full-name segment', () => {
-    assert.equal(
-        jobApiPath(' Folder / Feature%2Fwork '),
-        'job/Folder/job/Feature%252Fwork',
-    );
+    assert.equal(jobApiPath(' Folder / Feature%2Fwork '), 'job/Folder/job/Feature%252Fwork');
     assert.throws(() => jobApiPath(' / '), /must not be empty/);
 });
 
@@ -122,9 +135,12 @@ test('build dry-run inspects and summarizes without invoking the CLI', async (t)
     const fixture = await fakeJenkins(t);
     const result = await runNode([
         triggerScript,
-        '--config', fixture.configPath,
-        '--job', 'Folder/Build',
-        '--param', 'BRANCH=release',
+        '--config',
+        fixture.configPath,
+        '--job',
+        'Folder/Build',
+        '--param',
+        'BRANCH=release',
         '--follow',
         '--verbose',
         '--dry-run',
@@ -134,7 +150,10 @@ test('build dry-run inspects and summarizes without invoking the CLI', async (t)
     assert.equal(result.code, 0, result.stderr);
     assert.equal(result.signal, null);
     assert.match(result.stdout, /Build execution summary:/);
-    assert.match(result.stdout, new RegExp(`Controller: ${fixture.controllerUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+    assert.match(
+        result.stdout,
+        new RegExp(`Controller: ${fixture.controllerUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`),
+    );
     assert.match(result.stdout, /Buildable: true; in queue: false; next build: 42/);
     assert.match(result.stdout, /Action: dry run; do not queue/);
     assert.match(result.stdout, /Mode: follow until completion, stream console/);
@@ -143,19 +162,19 @@ test('build dry-run inspects and summarizes without invoking the CLI', async (t)
     assert.equal(result.stderr, '');
     assert.equal(fixture.requests.length, 1);
     assert.match(fixture.requests[0].url, /^\/job\/Folder\/job\/Build\/api\/json\?tree=/);
-    assert.equal(
-        fixture.requests[0].authorization,
-        `Basic ${Buffer.from(fixture.credential).toString('base64')}`,
-    );
+    assert.equal(fixture.requests[0].authorization, `Basic ${Buffer.from(fixture.credential).toString('base64')}`);
 });
 
 test('dry-run rejects unknown declared-job parameters', async (t) => {
     const fixture = await fakeJenkins(t);
     const result = await runNode([
         triggerScript,
-        '--config', fixture.configPath,
-        '--job', 'Folder/Build',
-        '--param', 'UNKNOWN=value',
+        '--config',
+        fixture.configPath,
+        '--job',
+        'Folder/Build',
+        '--param',
+        'UNKNOWN=value',
         '--dry-run',
     ]);
 
@@ -168,9 +187,12 @@ test('non-interactive execution still requires --yes', async (t) => {
     const fixture = await fakeJenkins(t);
     const result = await runNode([
         triggerScript,
-        '--config', fixture.configPath,
-        '--job', 'Folder/Build',
-        '--param', 'BRANCH=main',
+        '--config',
+        fixture.configPath,
+        '--job',
+        'Folder/Build',
+        '--param',
+        'BRANCH=main',
     ]);
 
     assert.equal(result.code, 1);
@@ -180,12 +202,7 @@ test('non-interactive execution still requires --yes', async (t) => {
 
 test('dry-run rejects a non-buildable job', async (t) => {
     const fixture = await fakeJenkins(t, { buildable: false });
-    const result = await runNode([
-        triggerScript,
-        '--config', fixture.configPath,
-        '--job', 'Folder/Build',
-        '--dry-run',
-    ]);
+    const result = await runNode([triggerScript, '--config', fixture.configPath, '--job', 'Folder/Build', '--dry-run']);
 
     assert.equal(result.code, 1);
     assert.match(result.stderr, /Job Folder\/Build is not buildable/);

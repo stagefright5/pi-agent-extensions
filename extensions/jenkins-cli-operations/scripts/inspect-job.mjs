@@ -30,9 +30,12 @@ async function main() {
         name: definition.name,
         type: definition.type,
         description: definition.description || '',
-        default: isSensitiveName(definition.name) || /password/i.test(definition.type)
-            ? definition.defaultParameterValue?.value == null ? null : '[redacted]'
-            : definition.defaultParameterValue?.value ?? null,
+        default:
+            isSensitiveName(definition.name) || /password/i.test(definition.type)
+                ? definition.defaultParameterValue?.value == null
+                    ? null
+                    : '[redacted]'
+                : (definition.defaultParameterValue?.value ?? null),
     }));
     const output = {
         name: job.name,
@@ -46,7 +49,9 @@ async function main() {
     else {
         console.log(`Job: ${output.name}`);
         console.log(`URL: ${output.url}`);
-        console.log(`Buildable: ${output.buildable}; in queue: ${output.inQueue}; next build: ${output.nextBuildNumber}`);
+        console.log(
+            `Buildable: ${output.buildable}; in queue: ${output.inQueue}; next build: ${output.nextBuildNumber}`,
+        );
         if (!parameters.length) console.log('Parameters: none declared');
         else {
             console.log('Parameters:');

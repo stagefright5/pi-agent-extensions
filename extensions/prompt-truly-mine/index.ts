@@ -249,8 +249,7 @@ async function loadContextResources(
 	for (const command of commands) {
 		try {
 			const raw = await readFile(command.path, "utf8");
-			const body =
-				command.source === "skill" ? stripFrontmatter(raw).trim() : parseFrontmatter(raw).body.trim();
+			const body = command.source === "skill" ? stripFrontmatter(raw).trim() : parseFrontmatter(raw).body.trim();
 			loaded.push({
 				...command,
 				body,
@@ -320,9 +319,7 @@ class UndoRedoEditor extends CustomEditor {
 
 		if (snapshotTextChanged(before, after)) {
 			const coalesceWithPreviousTyping =
-				wasPlainPrintable &&
-				this.lastEditWasTyping &&
-				!/^\s$/.test(decodePrintableInput(data) ?? data);
+				wasPlainPrintable && this.lastEditWasTyping && !/^\s$/.test(decodePrintableInput(data) ?? data);
 
 			if (!coalesceWithPreviousTyping) {
 				this.pushUndo(before);

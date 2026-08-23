@@ -1,5 +1,6 @@
 # Tool Output Browser
 
+<!-- prettier-ignore -->
 DISCLAIMER: This is *mostly* vibe-coded using pi agent cli
 
 Opens one tool result at a time without changing pi's compact transcript view.

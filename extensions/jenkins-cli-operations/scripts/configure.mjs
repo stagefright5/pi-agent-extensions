@@ -51,7 +51,8 @@ async function main() {
     }
     if (!['webSocket', 'http'].includes(transport)) throw new Error('--transport must be webSocket or http');
     if (jarPath && command) throw new Error('Choose either --jar or --command, not both');
-    if (!['file', 'env', 'keychain'].includes(provider)) throw new Error('--auth-provider must be file, env, or keychain');
+    if (!['file', 'env', 'keychain'].includes(provider))
+        throw new Error('--auth-provider must be file, env, or keychain');
 
     let auth;
     if (provider === 'file') {
