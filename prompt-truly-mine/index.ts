@@ -1,19 +1,25 @@
 /**
- * Prompt Undo/Redo Extension
+ * Prompt Truly Mine
  *
- * Replaces pi's prompt editor with a CustomEditor subclass that adds a redo
- * stack and familiar editor shortcuts:
+ * Replaces pi's prompt editor with a CustomEditor subclass that adds:
  *   - Ctrl+Z and pi's configured tui.editor.undo key: undo
  *   - Ctrl+Shift+Z and Ctrl+Y: redo
+ *   - Inline skill/prompt-template autocomplete after "/"
+ *   - Composable skill and prompt-template context expansion
  *
  * The editor still delegates to CustomEditor for pi app shortcuts,
  * autocomplete, prompt history, paste handling, image paste, etc.
  */
 
+import { readFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import {
 	CustomEditor,
+	parseFrontmatter,
+	stripFrontmatter,
 	type EditorFactory,
 	type ExtensionAPI,
+	type ExtensionContext,
 	type KeybindingsManager,
 } from "@earendil-works/pi-coding-agent";
 import {
@@ -22,10 +28,24 @@ import {
 	matchesKey,
 	truncateToWidth,
 	visibleWidth,
+	type AutocompleteItem,
+	type AutocompleteProvider,
 	type EditorOptions,
 	type EditorTheme,
 	type TUI,
 } from "@earendil-works/pi-tui";
+import {
+	applyComposableCompletion,
+	buildContextCompletionItems,
+	decodeComposableCompletionPrefix,
+	encodeComposableCompletionPrefix,
+	extractReferencedCommands,
+	findSlashCompletionContext,
+	formatContextBundle,
+	isExpandedContextBundle,
+	type ComposableCommand,
+	type LoadedContextResource,
+} from "./inline-context.ts";
 
 type Snapshot = {
 	text: string;
@@ -90,6 +110,9 @@ type EditorInternals = {
 	cancelAutocomplete?: () => void;
 	onChange?: (text: string) => void;
 	tui?: { requestRender?: () => void };
+	autocompletePrefix?: string;
+	autocompleteList?: { getSelectedItem?: () => AutocompleteItem | undefined };
+	requestAutocomplete?: (options: { force: boolean; explicitTab: boolean }) => void;
 };
 
 /**
@@ -133,15 +156,134 @@ function restoreEditorSnapshotViaInternalState(editor: CustomEditor, snapshot: S
 	}
 }
 
+function requestInlineContextAutocomplete(editor: CustomEditor): boolean {
+	try {
+		if (editor.isShowingAutocomplete()) return false;
+		const internal = editor as unknown as EditorInternals;
+		if (!internal.state || typeof internal.requestAutocomplete !== "function") return false;
+		const context = findSlashCompletionContext(
+			internal.state.lines,
+			internal.state.cursorLine,
+			internal.state.cursorCol,
+		);
+		if (!context || context.isInitialCommand) return false;
+		internal.requestAutocomplete({ force: false, explicitTab: false });
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+function makeSelectedContextCompletionComposable(
+	editor: CustomEditor,
+	isComposableCommand: (value: string) => boolean,
+): boolean {
+	try {
+		const internal = editor as unknown as EditorInternals;
+		const prefix = internal.autocompletePrefix;
+		if (!prefix?.startsWith("/")) return false;
+		const selected = internal.autocompleteList?.getSelectedItem?.();
+		if (!selected || !isComposableCommand(selected.value)) return false;
+		internal.autocompletePrefix = encodeComposableCompletionPrefix(prefix);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+function getComposableCommands(pi: ExtensionAPI): ComposableCommand[] {
+	return pi
+		.getCommands()
+		.filter((command) => command.source === "skill" || command.source === "prompt")
+		.map((command) => ({
+			name: command.name,
+			description: command.description,
+			source: command.source as "skill" | "prompt",
+			path: command.sourceInfo.path,
+		}));
+}
+
+function createInlineContextAutocompleteProvider(
+	current: AutocompleteProvider,
+	getCommands: () => ComposableCommand[],
+): AutocompleteProvider {
+	return {
+		...(current.triggerCharacters ? { triggerCharacters: current.triggerCharacters } : {}),
+
+		async getSuggestions(lines, cursorLine, cursorCol, options) {
+			// Explicit Tab retains Pi's normal forced file/path completion.
+			if (options.force) return current.getSuggestions(lines, cursorLine, cursorCol, options);
+
+			const context = findSlashCompletionContext(lines, cursorLine, cursorCol);
+			if (!context || context.isInitialCommand) {
+				return current.getSuggestions(lines, cursorLine, cursorCol, options);
+			}
+
+			const items = buildContextCompletionItems(getCommands(), context.query);
+			if (items.length === 0) return null;
+			return {
+				items,
+				prefix: encodeComposableCompletionPrefix(context.prefix),
+			};
+		},
+
+		applyCompletion(lines, cursorLine, cursorCol, item, prefix) {
+			if (decodeComposableCompletionPrefix(prefix) !== null) {
+				return applyComposableCompletion(lines, cursorLine, cursorCol, item.value, prefix);
+			}
+			return current.applyCompletion(lines, cursorLine, cursorCol, item, prefix);
+		},
+
+		shouldTriggerFileCompletion(lines, cursorLine, cursorCol) {
+			return current.shouldTriggerFileCompletion?.(lines, cursorLine, cursorCol) ?? true;
+		},
+	};
+}
+
+async function loadContextResources(
+	commands: readonly ComposableCommand[],
+	ctx: ExtensionContext,
+): Promise<LoadedContextResource[]> {
+	const loaded: LoadedContextResource[] = [];
+
+	for (const command of commands) {
+		try {
+			const raw = await readFile(command.path, "utf8");
+			const body =
+				command.source === "skill" ? stripFrontmatter(raw).trim() : parseFrontmatter(raw).body.trim();
+			loaded.push({
+				...command,
+				body,
+				baseDir: dirname(command.path),
+			});
+		} catch (error) {
+			if (ctx.hasUI) {
+				const message = error instanceof Error ? error.message : String(error);
+				ctx.ui.notify(`Could not load /${command.name}: ${message}`, "warning");
+			}
+		}
+	}
+
+	return loaded;
+}
+
 class UndoRedoEditor extends CustomEditor {
 	private undoHistory: Snapshot[] = [];
 	private redoHistory: Snapshot[] = [];
 	private lastEditWasTyping = false;
 	private readonly appKeybindings: KeybindingsManager;
+	private readonly isComposableCommand: (value: string) => boolean;
 
-	constructor(tui: TUI, theme: EditorTheme, keybindings: KeybindingsManager, options?: EditorOptions) {
+	constructor(
+		tui: TUI,
+		theme: EditorTheme,
+		keybindings: KeybindingsManager,
+		isComposableCommand: (value: string) => boolean,
+		options?: EditorOptions,
+	) {
 		super(tui, theme, keybindings, options);
 		this.appKeybindings = keybindings;
+		this.isComposableCommand = isComposableCommand;
 	}
 
 	override handleInput(data: string): void {
@@ -155,12 +297,19 @@ class UndoRedoEditor extends CustomEditor {
 			return;
 		}
 
+		if (this.appKeybindings.matches(data, "tui.select.confirm")) {
+			makeSelectedContextCompletionComposable(this, this.isComposableCommand);
+		}
+
 		const before = this.currentSnapshot();
 		const wasPlainPrintable = this.isPlainPrintable(data);
 
 		super.handleInput(data);
 
 		const after = this.currentSnapshot();
+		if (!sameSnapshot(before, after)) {
+			requestInlineContextAutocomplete(this);
+		}
 		if (sameSnapshot(before, after)) return;
 
 		// Do not let a submitted prompt become undoable in the now-empty editor.
@@ -295,15 +444,38 @@ class UndoRedoEditor extends CustomEditor {
 	}
 }
 
-export default function promptUndoRedoExtension(pi: ExtensionAPI): void {
+export default function promptTrulyMineExtension(pi: ExtensionAPI): void {
 	let previousEditorFactory: EditorFactory | undefined;
 	let installedEditorFactory: EditorFactory | undefined;
+
+	pi.on("input", async (event, ctx) => {
+		if (isExpandedContextBundle(event.text)) return { action: "continue" as const };
+
+		const availableCommands = getComposableCommands(pi);
+		const referencedCommands = extractReferencedCommands(event.text, availableCommands);
+		if (referencedCommands.length === 0) return { action: "continue" as const };
+
+		const resources = await loadContextResources(referencedCommands, ctx);
+		if (resources.length === 0) return { action: "continue" as const };
+
+		return {
+			action: "transform" as const,
+			text: formatContextBundle(event.text, resources),
+		};
+	});
 
 	pi.on("session_start", (_event, ctx) => {
 		if (ctx.mode !== "tui") return;
 
+		ctx.ui.addAutocompleteProvider((current) =>
+			createInlineContextAutocompleteProvider(current, () => getComposableCommands(pi)),
+		);
+		const isComposableCommand = (value: string) =>
+			getComposableCommands(pi).some((command) => command.name === value);
+
 		previousEditorFactory = ctx.ui.getEditorComponent();
-		installedEditorFactory = (tui, theme, keybindings) => new UndoRedoEditor(tui, theme, keybindings);
+		installedEditorFactory = (tui, theme, keybindings) =>
+			new UndoRedoEditor(tui, theme, keybindings, isComposableCommand);
 		ctx.ui.setEditorComponent(installedEditorFactory);
 	});
 
