@@ -2,7 +2,7 @@
 
 A collection of custom extensions for [pi](https://github.com/earendil-works/pi-mono/tree/main/packages/coding-agent), maintained on GitHub at [`stagefright5/pi-agent-extensions`](https://github.com/stagefright5/pi-agent-extensions).
 
-The extensions are maintained against pi **0.80.7** (the 0.80.x API line), use pi's auto-discovered TypeScript extension format, and do not require a local build or package installation. This repository is laid out for direct clone or copy installation; it is not currently published as a pi package for `pi install`.
+The extensions are maintained against pi **0.84.2** (the 0.84.x API line), use pi's auto-discovered TypeScript extension format, and do not require a local build or package installation. This repository is laid out for direct clone or copy installation; it is not currently published as a pi package for `pi install`.
 
 > [!WARNING]
 > pi extensions execute with your user account's full system permissions. Review the source before installing or updating any extension.
@@ -15,7 +15,7 @@ The extensions are maintained against pi **0.80.7** (the 0.80.x API line), use p
 | [Plan Mode](./plan-mode/README.md) | Evidence-guided planning with interactive review, revisions, diffs, summaries, Q&A history, and branch-aware persistence | `/plan`, `Alt+P` |
 | [Global Prompt History Search](./prompt-history-search/README.md) | Fuzzy reverse search across prompts in all saved pi sessions | `Alt+R`, `/prompt-history` |
 | [Tool Output Browser](./tool-output-browser/README.md) | Select and inspect one full stored tool result without expanding every transcript row | `/tool-output` |
-| [Prompt Undo/Redo](./prompt-undo-redo/README.md) | Cursor-restoring undo and redo for the prompt editor | `Ctrl+Z`, `Ctrl+Shift+Z`, `Ctrl+Y` |
+| [Prompt Truly Mine](./prompt-truly-mine/README.md) | Inline skill/prompt context tags with cursor-restoring undo and redo | inline `/`, `Ctrl+Z`, `Ctrl+Shift+Z`, `Ctrl+Y` |
 | [Compact Status Bar](./status-bar/README.md) | One-line footer with cwd, Git branch, context usage, cost, and extension statuses | Automatic in TUI mode |
 | [Provider URL Logger](./log-provider-url.md) | Appends the selected provider, model, and base URL for provider requests to a local log | Automatic |
 
@@ -91,9 +91,11 @@ This repository follows that layout directly:
 ├── tool-output-browser/
 │   ├── README.md
 │   └── index.ts
-├── prompt-undo-redo/
+├── prompt-truly-mine/
 │   ├── README.md
-│   └── index.ts
+│   ├── index.ts
+│   ├── inline-context.ts
+│   └── inline-context.test.ts
 └── status-bar/
     ├── README.md
     └── index.ts
