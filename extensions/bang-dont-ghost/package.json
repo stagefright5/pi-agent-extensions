@@ -1,0 +1,43 @@
+{
+  "name": "@stagefright5/pi-bang-dont-ghost",
+  "version": "0.0.0",
+  "description": "Automatically continue pi after a user-entered single-bang shell command",
+  "license": "Unlicense",
+  "type": "module",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "bash",
+    "shell",
+    "follow-up"
+  ],
+  "files": [
+    "index.ts",
+    "bang-follow-up.ts",
+    "bang-follow-up.test.ts",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test bang-follow-up.test.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stagefright5/pi-agent-extensions.git",
+    "directory": "extensions/bang-dont-ghost"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "catalog:"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
