@@ -9,17 +9,19 @@ import {
 	formatContextBundle,
 	isExpandedContextBundle,
 	parseCommandArgs,
+	promoteInlineExtensionCommand,
 	substitutePromptArguments,
 	type ComposableCommand,
+	type InlineCommand,
 	type LoadedContextResource,
 } from "./inline-context.ts";
 
 const commands: ComposableCommand[] = [
 	{
-		name: "ask",
-		description: "Ask before deciding",
+		name: "review",
+		description: "Review before deciding",
 		source: "prompt",
-		path: "/home/me/.pi/agent/prompts/ask.md",
+		path: "/home/me/.pi/agent/prompts/review.md",
 	},
 	{
 		name: "skill:angular-developer",
@@ -35,6 +37,22 @@ const commands: ComposableCommand[] = [
 	},
 ];
 
+const inlineCommands: InlineCommand[] = [
+	{
+		name: "ask",
+		description: "Ask before deciding",
+		source: "extension",
+		path: "/home/me/.pi/agent/extensions/ask/index.ts",
+	},
+	{
+		name: "websearch",
+		description: "Open web search curator",
+		source: "extension",
+		path: "/home/me/.pi/agent/npm/node_modules/pi-web-access/index.ts",
+	},
+	...commands,
+];
+
 test("distinguishes the initial slash menu from inline context completion", () => {
 	assert.deepEqual(findSlashCompletionContext(["/ski"], 0, 4), {
 		prefix: "/ski",
@@ -48,7 +66,7 @@ test("distinguishes the initial slash menu from inline context completion", () =
 		tokenStart: 15,
 		isInitialCommand: false,
 	});
-	assert.equal(findSlashCompletionContext(["", "/ask"], 1, 4)?.isInitialCommand, false);
+	assert.equal(findSlashCompletionContext(["", "/review"], 1, 7)?.isInitialCommand, false);
 	assert.equal(findSlashCompletionContext(["Inspect .pi/agent/"], 0, 18), null);
 	assert.equal(findSlashCompletionContext(["Open https://example.com/"], 0, 25), null);
 });
@@ -62,47 +80,73 @@ test("applies an encoded completion without submitting or damaging surrounding t
 	});
 
 	assert.deepEqual(
-		applyComposableCompletion(["Use /as later"], 0, 7, "ask", encodeComposableCompletionPrefix("/as")),
+		applyComposableCompletion(["Use /rev later"], 0, 8, "review", encodeComposableCompletionPrefix("/rev")),
 		{
-			lines: ["Use /ask later"],
+			lines: ["Use /review later"],
 			cursorLine: 0,
-			cursorCol: 8,
+			cursorCol: 11,
 		},
 	);
 });
 
-test("fuzzy-filters and labels prompt and skill completion items", () => {
-	assert.deepEqual(buildContextCompletionItems(commands, "ang"), [
+test("fuzzy-filters and labels extension, prompt, and skill completion items", () => {
+	assert.deepEqual(buildContextCompletionItems(inlineCommands, "web"), [
+		{
+			value: "websearch",
+			label: "websearch",
+			description: "[extension] Open web search curator",
+		},
+	]);
+	assert.deepEqual(buildContextCompletionItems(inlineCommands, "ang"), [
 		{
 			value: "skill:angular-developer",
 			label: "skill:angular-developer",
 			description: "[skill] Angular architecture and implementation",
 		},
 	]);
-	assert.deepEqual(buildContextCompletionItems([...commands, commands[0]!], "ask"), [
+	assert.deepEqual(buildContextCompletionItems(inlineCommands, "ask"), [
 		{
 			value: "ask",
 			label: "ask",
-			description: "[prompt] Ask before deciding",
+			description: "[extension] Ask before deciding",
+		},
+	]);
+	assert.deepEqual(buildContextCompletionItems([...inlineCommands, commands[0]!], "review"), [
+		{
+			value: "review",
+			label: "review",
+			description: "[prompt] Review before deciding",
 		},
 	]);
 });
 
+test("promotes the first inline extension command and preserves the complete draft as arguments", () => {
+	assert.deepEqual(promoteInlineExtensionCommand("hi please /ask test", inlineCommands), {
+		command: inlineCommands[0],
+		text: "/ask hi please /ask test",
+	});
+	assert.deepEqual(promoteInlineExtensionCommand("search /websearch react hooks", inlineCommands), {
+		command: inlineCommands[1],
+		text: "/websearch search /websearch react hooks",
+	});
+	assert.equal(promoteInlineExtensionCommand("Use /review and https://example.com/ask", inlineCommands), null);
+});
+
 test("extracts known references across punctuation boundaries and deduplicates bodies", () => {
-	const text = "Build this with (/skill:terminal-browser), then /ask; /ask and /skill:angular-developer.";
+	const text = "Build this with (/skill:terminal-browser), then /review; /review and /skill:angular-developer.";
 	assert.deepEqual(
 		extractReferencedCommands(text, commands).map((command) => command.name),
-		["skill:terminal-browser", "ask", "skill:angular-developer"],
+		["skill:terminal-browser", "review", "skill:angular-developer"],
 	);
-	assert.deepEqual(extractReferencedCommands("Open /unknown and https://example.com/ask", commands), []);
+	assert.deepEqual(extractReferencedCommands("Open /unknown and https://example.com/review", commands), []);
 });
 
 test("parses quoted whole-draft arguments like Pi", () => {
-	assert.deepEqual(parseCommandArgs(`Build "login form" 'with tests' /ask`), [
+	assert.deepEqual(parseCommandArgs(`Build "login form" 'with tests' /review`), [
 		"Build",
 		"login form",
 		"with tests",
-		"/ask",
+		"/review",
 	]);
 });
 
@@ -123,7 +167,7 @@ test("substitutes all Pi prompt-template placeholder forms without recursion", (
 });
 
 test("formats a collapsible mixed bundle and preserves the original draft verbatim", () => {
-	const original = `Implement "login form" with /skill:angular-developer /ask`;
+	const original = `Implement "login form" with /skill:angular-developer /review`;
 	const resources: LoadedContextResource[] = [
 		{
 			...commands[1]!,
@@ -138,11 +182,14 @@ test("formats a collapsible mixed bundle and preserves the original draft verbat
 	];
 	const formatted = formatContextBundle(original, resources);
 
-	assert.match(formatted, /^<skill name="angular-developer, prompt:ask" location="multiple">/);
+	assert.match(formatted, /^<skill name="angular-developer, prompt:review" location="multiple">/);
 	assert.match(formatted, /## Skill: angular-developer/);
 	assert.match(formatted, /References are relative to \/home\/me\/\.agents\/skills\/angular-developer\./);
-	assert.match(formatted, /## Prompt template: ask/);
-	assert.match(formatted, /Review this complete request: Implement login form with \/skill:angular-developer \/ask/);
+	assert.match(formatted, /## Prompt template: review/);
+	assert.match(
+		formatted,
+		/Review this complete request: Implement login form with \/skill:angular-developer \/review/,
+	);
 	assert.match(formatted, /First token: Implement/);
 	assert.ok(formatted.endsWith(`\n\n${original}`));
 	assert.equal(isExpandedContextBundle(formatted), true);

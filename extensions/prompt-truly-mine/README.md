@@ -3,7 +3,7 @@
 <!-- prettier-ignore -->
 DISCLAIMER: This is *mostly* vibe-coded using pi agent cli
 
-Makes pi's prompt editor truly yours with composable skill/prompt context tags plus cursor-restoring undo and redo.
+Makes pi's prompt editor truly yours with inline extension-command discovery, composable skill/prompt context tags, and cursor-restoring undo and redo.
 
 [Back to the extension workspace](../../README.md)
 
@@ -11,20 +11,30 @@ Makes pi's prompt editor truly yours with composable skill/prompt context tags p
 
 At the beginning of the first editor line, `/` keeps pi's normal autocomplete menu with commands, prompt templates, and enabled skill commands.
 
-After existing prompt text—or on a later line—typing `/` opens a filtered menu containing only:
+After existing prompt text—or on a later line—typing `/` opens a filtered menu containing:
 
+- extension commands, such as `/ask` or `/websearch`
 - loaded skills, such as `/skill:angular-developer`
-- file-based prompt templates, such as `/ask`
+- file-based prompt templates, such as `/review`
 
-Built-in and extension commands are intentionally excluded from the inline menu. Results are fuzzy-filtered by invokable name and labeled as `[skill]` or `[prompt]`.
+Built-in commands are intentionally excluded from the inline menu. Results are fuzzy-filtered by invokable name and labeled as `[extension]`, `[skill]`, or `[prompt]`.
 
-Use `Enter` or `Tab` to insert the selected tag without submitting the draft. You can then add more tags or continue writing:
+Use `Enter` or `Tab` to insert the selected item without submitting the draft. You can then add more tags or continue writing:
 
 ```text
-Implement this with /skill:angular-developer /ask
+Implement this with /skill:angular-developer /review
 ```
 
-Selecting a skill or prompt template from the normal start-of-prompt menu also inserts it without submitting. Leading ordinary commands retain pi's normal behavior.
+Selecting a skill or prompt template from the normal start-of-prompt menu also inserts it without submitting. Leading extension commands retain pi's normal behavior.
+
+Selecting an extension command inline inserts it without immediately submitting the draft. When the draft is submitted, Prompt Truly Mine promotes the first referenced extension command to the beginning and passes the complete original draft—including the inline command verb—as its arguments:
+
+```text
+hi please /ask test
+→ /ask hi please /ask test
+```
+
+Pi then dispatches the real extension command. Extension-generated user messages are not promoted again, which prevents the preserved verb from recursively invoking the command. Additional extension-command tags remain arguments to the first command. Extension source files are never loaded as context or expanded into the prompt.
 
 `@` attachment search, forced Tab path completion, prompt history, paste handling, image paste, and app shortcuts continue to delegate to pi's `CustomEditor`.
 
@@ -41,7 +51,7 @@ When a draft is submitted, the extension finds every registered skill and prompt
 For example, the model receives both full resource bodies and the unchanged task for:
 
 ```text
-Implement this with /skill:angular-developer /ask
+Implement this with /skill:angular-developer /review
 ```
 
 Repeated tags remain in the original task but their source body is loaded only once. Unknown tags remain ordinary text. If a registered resource becomes unreadable, the extension warns, loads the other valid resources, and preserves the draft.

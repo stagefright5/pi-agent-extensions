@@ -4,7 +4,7 @@
  * Replaces pi's prompt editor with a CustomEditor subclass that adds:
  *   - Ctrl+Z and pi's configured tui.editor.undo key: undo
  *   - Ctrl+Shift+Z and Ctrl+Y: redo
- *   - Inline skill/prompt-template autocomplete after "/"
+ *   - Inline extension/skill/prompt-template autocomplete after "/"
  *   - Composable skill and prompt-template context expansion
  *
  * The editor still delegates to CustomEditor for pi app shortcuts,
@@ -43,7 +43,9 @@ import {
 	findSlashCompletionContext,
 	formatContextBundle,
 	isExpandedContextBundle,
+	promoteInlineExtensionCommand,
 	type ComposableCommand,
+	type InlineCommand,
 	type LoadedContextResource,
 } from "./inline-context.ts";
 
@@ -191,21 +193,24 @@ function makeSelectedContextCompletionComposable(
 	}
 }
 
+function getInlineCommands(pi: ExtensionAPI): InlineCommand[] {
+	return pi.getCommands().map((command) => ({
+		name: command.name,
+		description: command.description,
+		source: command.source,
+		path: command.sourceInfo.path,
+	}));
+}
+
 function getComposableCommands(pi: ExtensionAPI): ComposableCommand[] {
-	return pi
-		.getCommands()
-		.filter((command) => command.source === "skill" || command.source === "prompt")
-		.map((command) => ({
-			name: command.name,
-			description: command.description,
-			source: command.source as "skill" | "prompt",
-			path: command.sourceInfo.path,
-		}));
+	return getInlineCommands(pi).filter(
+		(command): command is ComposableCommand => command.source === "skill" || command.source === "prompt",
+	);
 }
 
 function createInlineContextAutocompleteProvider(
 	current: AutocompleteProvider,
-	getCommands: () => ComposableCommand[],
+	getCommands: () => InlineCommand[],
 ): AutocompleteProvider {
 	return {
 		...(current.triggerCharacters ? { triggerCharacters: current.triggerCharacters } : {}),
@@ -448,6 +453,20 @@ export default function promptTrulyMineExtension(pi: ExtensionAPI): void {
 	pi.on("input", async (event, ctx) => {
 		if (isExpandedContextBundle(event.text)) return { action: "continue" as const };
 
+		const promotedExtension =
+			event.source === "extension" ? null : promoteInlineExtensionCommand(event.text, getInlineCommands(pi));
+		if (promotedExtension) {
+			if (event.streamingBehavior) {
+				pi.sendUserMessage(promotedExtension.text, {
+					deliverAs: event.streamingBehavior,
+					expandPromptTemplates: true,
+				});
+			} else {
+				pi.sendUserMessage(promotedExtension.text, { expandPromptTemplates: true });
+			}
+			return { action: "handled" as const };
+		}
+
 		const availableCommands = getComposableCommands(pi);
 		const referencedCommands = extractReferencedCommands(event.text, availableCommands);
 		if (referencedCommands.length === 0) return { action: "continue" as const };
@@ -465,7 +484,7 @@ export default function promptTrulyMineExtension(pi: ExtensionAPI): void {
 		if (ctx.mode !== "tui") return;
 
 		ctx.ui.addAutocompleteProvider((current) =>
-			createInlineContextAutocompleteProvider(current, () => getComposableCommands(pi)),
+			createInlineContextAutocompleteProvider(current, () => getInlineCommands(pi)),
 		);
 		const isComposableCommand = (value: string) =>
 			getComposableCommands(pi).some((command) => command.name === value);
