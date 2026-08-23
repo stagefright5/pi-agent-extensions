@@ -1,6 +1,6 @@
 {
   "name": "@stagefright5/pi-ask",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Ask before decisions by applying a one-turn interaction policy in pi",
   "license": "Unlicense",
   "type": "module",
@@ -11,6 +11,7 @@
     "prompt-policy"
   ],
   "files": [
+    "CHANGELOG.md",
     "index.ts",
     "ask-prompt.ts",
     "ask-prompt.test.ts",
