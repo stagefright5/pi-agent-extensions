@@ -42,6 +42,12 @@ importers:
         specifier: 'catalog:'
         version: 0.84.2(ws@8.21.3)
 
+  extensions/bang-dont-ghost:
+    devDependencies:
+      '@earendil-works/pi-coding-agent':
+        specifier: 'catalog:'
+        version: 0.84.2(ws@8.21.3)
+
   extensions/jenkins-cli-operations:
     devDependencies:
       '@earendil-works/pi-coding-agent':

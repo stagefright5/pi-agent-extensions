@@ -12,6 +12,7 @@ The packages are maintained against pi **0.84.2** and use pi's TypeScript extens
 | Workspace                                                                    | npm package                               | Purpose                                            | Primary interface                    |
 | ---------------------------------------------------------------------------- | ----------------------------------------- | -------------------------------------------------- | ------------------------------------ |
 | [Ask](./extensions/ask/README.md)                                            | `@stagefright5/pi-ask`                    | Apply an ask-before-deciding policy to one task    | `/ask <task>`                        |
+| [Bang Don't Ghost](./extensions/bang-dont-ghost/README.md)                   | `@stagefright5/pi-bang-dont-ghost`        | Continue after user-entered single-`!` commands    | Automatic                            |
 | [Jenkins CLI Operations](./extensions/jenkins-cli-operations/README.md)      | `@stagefright5/pi-jenkins-cli-operations` | Guarded Jenkins workflows using the official CLI   | `/skill:jenkins-cli-operations`      |
 | [Plan Mode](./extensions/plan-mode/README.md)                                | `@stagefright5/pi-plan-mode`              | Evidence-guided planning and interactive review    | `/plan`, `Alt+P`                     |
 | [Global Prompt History Search](./extensions/prompt-history-search/README.md) | `@stagefright5/pi-prompt-history-search`  | Fuzzy reverse search across saved prompts          | `Alt+R`, `/prompt-history`           |
@@ -28,6 +29,7 @@ After a package is published, install only the extension or skill you want:
 
 ```bash
 pi install npm:@stagefright5/pi-ask
+pi install npm:@stagefright5/pi-bang-dont-ghost
 pi install npm:@stagefright5/pi-plan-mode
 pi install npm:@stagefright5/pi-status-bar
 pi install npm:@stagefright5/pi-jenkins-cli-operations
@@ -124,6 +126,7 @@ Commit the generated version and changelog changes before publishing. Every pack
 
 The collection operates locally or against services explicitly configured by the user, and some packages read or write user data:
 
+- Bang Don't Ghost starts a normal model-provider request after each eligible single-`!` command; Pi already includes that command and its output in model context.
 - Jenkins CLI Operations connects to the configured Jenkins controller and stores non-secret connection metadata under the platform configuration directory. Credentials remain in the selected auth provider.
 - Plan Mode stores plans and revision history under `~/.pi/plans/`; its optional summaries use the active model provider.
 - Prompt History Search reads saved Pi sessions across projects into an in-memory index and local persisted index.

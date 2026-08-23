@@ -27,6 +27,7 @@
   "pi": {
     "extensions": [
       "./extensions/ask/index.ts",
+      "./extensions/bang-dont-ghost/index.ts",
       "./extensions/plan-mode/index.ts",
       "./extensions/prompt-history-search/index.ts",
       "./extensions/prompt-truly-mine/index.ts",
