@@ -25,6 +25,7 @@
   "packageManager": "pnpm@11.22.0",
   "pi": {
     "extensions": [
+      "./extensions/ask/index.ts",
       "./extensions/plan-mode/index.ts",
       "./extensions/prompt-history-search/index.ts",
       "./extensions/prompt-truly-mine/index.ts",
