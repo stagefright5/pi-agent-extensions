@@ -2,6 +2,7 @@
   "name": "@stagefright5/pi-plan-mode",
   "version": "0.1.0",
   "description": "Evidence-guided planning and interactive plan review for pi",
+  "license": "Unlicense",
   "type": "module",
   "keywords": [
     "pi-package",

@@ -2,6 +2,7 @@
   "name": "@stagefright5/pi-ask",
   "version": "0.0.0",
   "description": "Ask before decisions by applying a one-turn interaction policy in pi",
+  "license": "Unlicense",
   "type": "module",
   "keywords": [
     "pi-package",

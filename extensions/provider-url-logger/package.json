@@ -2,6 +2,7 @@
   "name": "@stagefright5/pi-provider-url-logger",
   "version": "0.1.0",
   "description": "Log the provider, model, and base URL selected for pi provider requests",
+  "license": "Unlicense",
   "type": "module",
   "keywords": [
     "pi-package",

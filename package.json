@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "description": "Workspace for independently published pi extensions and skills",
+  "license": "Unlicense",
   "type": "module",
   "scripts": {
     "test": "vp run -r test",
