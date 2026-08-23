@@ -11,6 +11,7 @@ The extensions are maintained against pi **0.80.7** (the 0.80.x API line), use p
 
 | Extension | Purpose | Primary interface |
 | --- | --- | --- |
+| [Jenkins CLI Operations](./jenkins-cli-operations/README.md) | Configures and operates Jenkins through guarded build helpers and the official CLI | `/skill:jenkins-cli-operations` |
 | [Plan Mode](./plan-mode/README.md) | Evidence-guided planning with interactive review, revisions, diffs, summaries, Q&A history, and branch-aware persistence | `/plan`, `Alt+P` |
 | [Global Prompt History Search](./prompt-history-search/README.md) | Fuzzy reverse search across prompts in all saved pi sessions | `Alt+R`, `/prompt-history` |
 | [Tool Output Browser](./tool-output-browser/README.md) | Select and inspect one full stored tool result without expanding every transcript row | `/tool-output` |
@@ -73,6 +74,13 @@ This repository follows that layout directly:
 ├── README.md
 ├── log-provider-url.md
 ├── log-provider-url.ts
+├── jenkins-cli-operations/
+│   ├── README.md
+│   ├── SKILL.md
+│   ├── index.ts
+│   ├── references/
+│   ├── scripts/
+│   └── tests/
 ├── plan-mode/
 │   ├── README.md
 │   ├── index.ts
@@ -93,8 +101,9 @@ This repository follows that layout directly:
 
 ## Local data and privacy
 
-The collection operates locally, but some extensions read or write user data:
+The collection operates locally or against services explicitly configured by the user, and some extensions read or write user data:
 
+- Jenkins CLI Operations connects to the configured Jenkins controller and stores non-secret connection metadata under the platform configuration directory. Credentials remain in the selected auth provider.
 - Plan Mode stores plans and revision history under `~/.pi/plans/`; its optional summaries use the active model provider.
 - Prompt History Search reads saved pi sessions across projects into an in-memory index.
 - Provider URL Logger appends endpoint metadata to `~/.pi/agent/provider-urls.log` without rotation.

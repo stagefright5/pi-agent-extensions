@@ -16,11 +16,16 @@ import {
 
 function usage() {
     console.log(`Usage:
-  node trigger-build.mjs [--config PATH] --job JOB [parameters] [--follow] [--verbose] [--yes]
+  node trigger-build.mjs [--config PATH] --job JOB [parameters] [--follow] [--verbose] [--dry-run] [--yes]
 
 Parameters:
-  --param NAME=VALUE          Repeatable non-secret parameter
+  --param NAME=VALUE          Repeatable build parameter
   --params-file PATH          JSON object containing build parameters
+
+Execution:
+  --dry-run                   Inspect, validate, and summarize without queueing a build
+  --follow                    Wait for the final Jenkins result
+  --verbose                   Stream console output; requires --follow
 
 Safety:
   Without --yes, type "trigger JOB" interactively. Agents may use --yes only after explicit user confirmation.`);
@@ -80,6 +85,7 @@ async function main() {
     const assignments = takeRepeated(args, '--param');
     const follow = takeFlag(args, '--follow');
     const verbose = takeFlag(args, '--verbose');
+    const dryRun = takeFlag(args, '--dry-run');
     const yes = takeFlag(args, '--yes');
     if (args.length) throw new Error(`Unknown arguments: ${args.join(' ')}`);
     if (!jobName) throw new Error('--job is required');
@@ -105,16 +111,23 @@ async function main() {
     const unknown = Object.keys(parameters).filter((name) => !knownNames.has(name));
     if (unknown.length && definitions.length) throw new Error(`Unknown job parameter(s): ${unknown.join(', ')}`);
 
-    console.log('Build mutation summary:');
+    console.log('Build execution summary:');
+    console.log(`  Controller: ${config.url}`);
     console.log(`  Job: ${jobName}`);
-    console.log(`  URL: ${job.url}`);
+    console.log(`  Job URL: ${job.url}`);
+    console.log(`  Buildable: ${job.buildable}; in queue: ${job.inQueue}; next build: ${job.nextBuildNumber}`);
+    console.log(`  Action: ${dryRun ? 'dry run; do not queue' : 'queue build'}`);
     console.log(`  Mode: ${follow ? 'follow until completion' : 'queue and return'}${verbose ? ', stream console' : ''}`);
     console.log('  Parameters:');
     if (!Object.keys(parameters).length) console.log('    (defaults only)');
     for (const [name, value] of Object.entries(parameters)) {
         console.log(`    ${name}=${isSensitiveName(name) ? '[redacted]' : JSON.stringify(value)}`);
     }
-    console.log('Reminder: ordinary Jenkins String/Text parameters are retained in build metadata; do not use them for secrets.');
+
+    if (dryRun) {
+        console.log('Dry run complete; no build was queued.');
+        return;
+    }
 
     if (!yes) {
         if (!input.isTTY) throw new Error('Refusing non-interactive build without --yes; obtain explicit user confirmation first');

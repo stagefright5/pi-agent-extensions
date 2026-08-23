@@ -1,20 +1,37 @@
 # Authentication and installation
 
+Paths in this reference are relative to the directory containing `SKILL.md`. Resolve script paths before execution rather than assuming the current working directory.
+
 ## Prerequisites
 
 - Node.js 18 or newer
-- Java version compatible with the Jenkins controller
+- Java compatible with the Jenkins controller
 - Network access to the Jenkins base URL
-- Official `jenkins-cli.jar` or a `jenkins-cli` launcher on `PATH`
-- Jenkins user ID and API token with the minimum required permissions
+- The official `jenkins-cli.jar` or a `jenkins-cli` launcher on `PATH`
+- A Jenkins user ID and API token with the minimum required permissions
 
-The Jenkins user ID may differ from an email address or display name, especially with Entra ID/SSO. Find it on the Jenkins user page. Create an API token under **User → Configure → API Token**.
+The Jenkins user ID may differ from an email address or display name, particularly with SSO. Find it on the Jenkins user page. Create an API token under **User → Configure → API Token**.
 
-Never paste a token into chat, tickets, source control, or ordinary build parameters.
+Never paste the token into chat, tickets, source control, or shell command arguments.
+
+## Check for existing configuration
+
+The default configuration path is:
+
+- Windows: `%APPDATA%\jenkins-cli-operations\config.json`
+- Linux/macOS: `$XDG_CONFIG_HOME/jenkins-cli-operations/config.json`, or `~/.config/jenkins-cli-operations/config.json` when `XDG_CONFIG_HOME` is unset
+
+`JENKINS_SKILL_CONFIG` or `--config PATH` overrides the default. If a configuration already exists, verify it before replacing it:
+
+```bash
+node scripts/jenkins.mjs -- who-am-i
+```
+
+The configuration contains connection and credential-provider metadata, not the API token itself.
 
 ## Install the official CLI
 
-Download from the target controller so client/server versions match.
+Download the jar from the target controller so client and server versions match.
 
 Linux/macOS:
 
@@ -30,24 +47,26 @@ PowerShell:
 ```powershell
 $Dir = Join-Path $env:LOCALAPPDATA 'jenkins-cli'
 New-Item -ItemType Directory -Force $Dir | Out-Null
-Invoke-WebRequest \
-  -Uri 'https://jenkins.example.com/jnlpJars/jenkins-cli.jar' \
+Invoke-WebRequest `
+  -Uri 'https://jenkins.example.com/jnlpJars/jenkins-cli.jar' `
   -OutFile (Join-Path $Dir 'jenkins-cli.jar')
 ```
 
-Point `configure.mjs --jar` at the downloaded file. Do not download a CLI jar from an unrelated controller.
+Do not use a CLI jar downloaded from an unrelated controller.
 
-## Provider: protected auth file
+## Configure a credential provider
 
-The file contains one line:
+`configure.mjs` stores only non-secret connection and provider settings. Choose one provider below.
+
+### Protected auth file
+
+The auth file contains one line:
 
 ```text
 JENKINS_USER_ID:API_TOKEN
 ```
 
-### Linux/macOS
-
-Create it outside any repository and restrict permissions:
+Linux/macOS:
 
 ```bash
 mkdir -p ~/.config/jenkins
@@ -57,11 +76,7 @@ read -r -s -p 'Jenkins API token: ' JENKINS_API_TOKEN; echo
 printf '%s:%s' "$JENKINS_USER_ID" "$JENKINS_API_TOKEN" > ~/.config/jenkins/cli-auth
 chmod 600 ~/.config/jenkins/cli-auth
 unset JENKINS_API_TOKEN
-```
 
-Configure:
-
-```bash
 node scripts/configure.mjs \
   --url https://jenkins.example.com \
   --jar ~/.local/share/jenkins-cli/jenkins-cli.jar \
@@ -69,7 +84,7 @@ node scripts/configure.mjs \
   --auth-file ~/.config/jenkins/cli-auth
 ```
 
-### Windows PowerShell
+PowerShell:
 
 ```powershell
 $Dir = Join-Path $env:APPDATA 'jenkins-cli'
@@ -80,31 +95,21 @@ $AuthFile = Join-Path $Dir 'cli-auth'
 [IO.File]::WriteAllText($AuthFile, $Value)
 icacls $AuthFile /inheritance:r /grant:r "${env:USERNAME}:(R,W)"
 $Value = $null
-```
 
-Configure:
-
-```powershell
-node "$SkillDir\scripts\configure.mjs" `
+node "scripts/configure.mjs" `
   --url https://jenkins.example.com `
   --jar "$env:LOCALAPPDATA\jenkins-cli\jenkins-cli.jar" `
   --auth-provider file `
   --auth-file $AuthFile
 ```
 
-## Provider: native credential store
+### Native credential store
 
-The configuration stores only a service label and Jenkins user ID. The token remains in the OS credential store and is copied into a temporary mode-600 file only while the CLI process runs.
+The configuration stores a service label and Jenkins user ID. The helper copies the retrieved token into a temporary credential file only for the lifetime of each CLI invocation.
 
-Default service label:
+The default service label is `jenkins-cli:<jenkins-host>`.
 
-```text
-jenkins-cli:<jenkins-host>
-```
-
-### macOS Keychain
-
-Store the token using a local secure prompt:
+#### macOS Keychain
 
 ```bash
 read -r -p 'Jenkins user ID: ' JENKINS_USER_ID
@@ -114,11 +119,7 @@ security add-generic-password -U \
   -a "$JENKINS_USER_ID" \
   -w "$JENKINS_API_TOKEN"
 unset JENKINS_API_TOKEN
-```
 
-Configure:
-
-```bash
 node scripts/configure.mjs \
   --url https://jenkins.example.com \
   --jar ~/.local/share/jenkins-cli/jenkins-cli.jar \
@@ -126,17 +127,12 @@ node scripts/configure.mjs \
   --user-id "$JENKINS_USER_ID"
 ```
 
-### Ubuntu/Linux Secret Service
+#### Linux Secret Service
 
-Install the client (desktop keyring/Secret Service must also be available):
+A desktop keyring or other Secret Service implementation must be available and unlocked:
 
 ```bash
 sudo apt-get install libsecret-tools
-```
-
-Store the token; `secret-tool` reads the secret from standard input:
-
-```bash
 read -r -p 'Jenkins user ID: ' JENKINS_USER_ID
 read -r -s -p 'Jenkins API token: ' JENKINS_API_TOKEN; echo
 printf '%s' "$JENKINS_API_TOKEN" | secret-tool store \
@@ -146,42 +142,31 @@ printf '%s' "$JENKINS_API_TOKEN" | secret-tool store \
 unset JENKINS_API_TOKEN
 ```
 
-Configure with the same `--auth-provider keychain --user-id ...` command. On headless Linux without Secret Service, use a protected auth file or environment injection from a secret manager.
+Configure with the same `--auth-provider keychain --user-id ID` options shown for macOS. On a headless system without Secret Service, use a protected auth file or environment injection.
 
-### Windows Credential Manager
-
-Install the PowerShell module for the current user:
+#### Windows Credential Manager
 
 ```powershell
 Install-Module CredentialManager -Scope CurrentUser
-```
-
-Store with a secure prompt:
-
-```powershell
 $Credential = Get-Credential -Message 'Jenkins user ID and API token'
 New-StoredCredential `
   -Target 'jenkins-cli:jenkins.example.com' `
   -UserName $Credential.UserName `
   -Password $Credential.GetNetworkCredential().Password `
   -Persist LocalMachine | Out-Null
-```
 
-Configure:
-
-```powershell
-node "$SkillDir\scripts\configure.mjs" `
+node "scripts/configure.mjs" `
   --url https://jenkins.example.com `
   --jar "$env:LOCALAPPDATA\jenkins-cli\jenkins-cli.jar" `
   --auth-provider keychain `
   --user-id $Credential.UserName
 ```
 
-The helper uses `Get-StoredCredential`; verify it with `Get-Command Get-StoredCredential`.
+The helper uses `Get-StoredCredential`; verify availability with `Get-Command Get-StoredCredential`.
 
-## Provider: environment
+### Environment injection
 
-Use for ephemeral CI shells backed by a secret manager:
+Use this provider for ephemeral shells populated by a secret manager:
 
 ```bash
 export JENKINS_USER_ID='...'
@@ -191,21 +176,30 @@ node scripts/configure.mjs \
   --auth-provider env
 ```
 
-Do not put these exports in shell profiles or committed `.env` files. The helper writes a temporary auth file and removes it after each invocation.
+Do not put these exports in shell profiles or committed `.env` files. The helper creates and removes a temporary auth file for each invocation.
 
-## Verification and rotation
+## Launcher and transport options
 
-Verify:
+Use `--jar PATH` for a downloaded jar or `--command NAME` for a launcher on `PATH`. If neither is supplied, the launcher defaults to `jenkins-cli`.
+
+WebSocket is the default transport. Use `--transport http` only when the controller or reverse proxy does not support the WebSocket upgrade:
+
+```bash
+node scripts/configure.mjs \
+  --url https://jenkins.example.com \
+  --command jenkins-cli \
+  --auth-provider file \
+  --auth-file ~/.config/jenkins/cli-auth \
+  --transport http
+```
+
+## Verify and rotate
 
 ```bash
 node scripts/jenkins.mjs -- who-am-i
+node scripts/jenkins.mjs -- help
 ```
 
-HTTP 401 means the user ID/token pair is invalid. SSO display names and email addresses are not guaranteed to be the Jenkins user ID.
+An HTTP 401 normally means the Jenkins user ID/token pair is invalid. Do not bypass authentication or TLS checks.
 
-If a token appears in chat, logs, process output, source control, or an ordinary build parameter:
-
-1. Revoke it in Jenkins immediately.
-2. Create a replacement token.
-3. Update the protected file or native credential store.
-4. Re-run `who-am-i`.
+If a token is exposed, revoke it in Jenkins, create a replacement, update the selected provider, and rerun `who-am-i`.
