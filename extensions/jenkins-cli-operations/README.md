@@ -1,5 +1,7 @@
 # Jenkins CLI Operations
 
+DISCLAIMER: This is *mostly* vibe-coded using pi agent cli
+
 Standalone Pi package for the bundled `jenkins-cli-operations` Agent Skill.
 
 [Back to the extension workspace](../../README.md)

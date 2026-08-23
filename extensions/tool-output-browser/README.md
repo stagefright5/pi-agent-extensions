@@ -1,5 +1,7 @@
 # Tool Output Browser
 
+DISCLAIMER: This is *mostly* vibe-coded using pi agent cli
+
 Opens one tool result at a time without changing pi's compact transcript view.
 
 [Back to the extension workspace](../../README.md)

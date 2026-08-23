@@ -1,5 +1,7 @@
 # Prompt Truly Mine
 
+DISCLAIMER: This is *mostly* vibe-coded using pi agent cli
+
 Makes pi's prompt editor truly yours with composable skill/prompt context tags plus cursor-restoring undo and redo.
 
 [Back to the extension workspace](../../README.md)

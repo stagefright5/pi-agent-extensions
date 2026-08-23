@@ -1,5 +1,7 @@
 # Compact Status Bar
 
+DISCLAIMER: This is *mostly* vibe-coded using pi agent cli
+
 Replaces pi's built-in multi-line footer with a compact, single-line status bar in TUI mode.
 
 [Back to the extension workspace](../../README.md)
