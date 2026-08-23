@@ -1,5 +1,7 @@
 # Operational recipes and troubleshooting
 
+Paths in this reference are relative to the directory containing `SKILL.md`. Resolve script paths before execution rather than assuming the current working directory.
+
 ## Read-only commands
 
 ```bash
@@ -9,10 +11,33 @@ node scripts/jenkins.mjs -- help build
 node scripts/jenkins.mjs -- list-jobs
 node scripts/jenkins.mjs -- list-jobs 'Folder Name'
 node scripts/inspect-job.mjs --job 'Folder/Job Name'
+node scripts/inspect-job.mjs --job 'Folder/Job Name' --json
 node scripts/jenkins.mjs -- console 'Folder/Job Name' 123
 ```
 
-Job names use Jenkins full names with `/` between folders. Multibranch branch names may appear URL-encoded in the job name; discover them rather than guessing.
+Job names use Jenkins full names with `/` between folders. Discover multibranch names rather than guessing their encoding.
+
+Large controllers may return thousands of root jobs. Filter output locally:
+
+```bash
+node scripts/jenkins.mjs -- list-jobs | grep -i 'search-term'
+```
+
+Use `Select-String` instead of `grep` in PowerShell.
+
+## Prepare a build without queueing it
+
+Use `--dry-run` with the exact execution options intended for the real build:
+
+```bash
+node scripts/trigger-build.mjs \
+  --job 'Folder/Job' \
+  --param BRANCH=main \
+  --follow \
+  --dry-run
+```
+
+The helper contacts Jenkins, confirms that the job is buildable, validates declared parameter names, prints a build summary, and exits before confirmation or CLI execution. `--yes` has no effect when `--dry-run` is present.
 
 ## Trigger modes
 
@@ -22,36 +47,36 @@ Queue and return:
 node scripts/trigger-build.mjs --job 'Folder/Job' --param BRANCH=main --yes
 ```
 
-Follow result without console streaming:
+Follow the final result without streaming console output:
 
 ```bash
 node scripts/trigger-build.mjs --job 'Folder/Job' --param BRANCH=main --follow --yes
 ```
 
-Follow and stream console:
+Follow and stream console output:
 
 ```bash
 node scripts/trigger-build.mjs --job 'Folder/Job' --params-file params.json --follow --verbose --yes
 ```
 
-`--follow` uses Jenkins CLI `build -f`, so interrupting the local command does not abort the server-side build. The final process exit code reflects the Jenkins result.
+`--verbose` requires `--follow`. Follow mode uses Jenkins CLI `build -f`; interrupting the local process does not abort the server-side build. The final local exit status reflects the Jenkins result unless the local process itself is interrupted.
 
-## Confirmation checklist
+## Confirmation summary
 
-Before passing `--yes`, confirm:
+Before passing `--yes`, show and confirm:
 
-- exact controller URL;
+- controller URL;
 - exact full job name;
-- job is buildable and whether it is already queued;
-- branch/ref and all non-default parameters;
-- sensitive values are redacted;
-- no secret is being put in a String/Text parameter;
-- whether the command returns after queueing or follows to completion;
-- expected environmental side effects, test data, deployments, notifications, and cost.
+- whether the job is buildable or already queued;
+- submitted parameters and defaults-only behavior;
+- queue-only, follow, and console-streaming behavior;
+- known or unknown deployments, notifications, test data, infrastructure changes, and cost.
+
+Use a fresh confirmation after presenting the dry-run summary.
 
 ## Parameter files
 
-Use JSON with scalar values:
+A parameter file is a JSON object with scalar values:
 
 ```json
 {
@@ -61,7 +86,7 @@ Use JSON with scalar values:
 }
 ```
 
-Restrict files containing internal values:
+On Linux/macOS, restrict a parameter file containing internal values:
 
 ```bash
 chmod 600 params.json
@@ -73,54 +98,59 @@ PowerShell ACL example:
 icacls .\params.json /inheritance:r /grant:r "${env:USERNAME}:(R,W)"
 ```
 
-Do not use a parameter file to legitimize secret-bearing String/Text parameters. Jenkins still retains submitted build parameters server-side.
+Command-line `--param NAME=VALUE` entries override matching values loaded from the file.
+
+## Direct CLI pass-through
+
+The wrapper accepts any command supported by the installed official Jenkins CLI:
+
+```bash
+node scripts/jenkins.mjs -- help <command>
+node scripts/jenkins.mjs -- <command> [arguments...]
+```
+
+The wrapper deliberately does not classify or block mutating commands. Determine command semantics first with `help <command>`, and obtain confirmation before mutations.
 
 ## Finding a build URL
 
-The CLI prints the build number when Jenkins starts it. The URL is generally:
+Use the URL printed by Jenkins or returned by its API. A nested job URL generally resembles:
 
 ```text
 <JENKINS_URL>/job/<folder>/job/<job>/<build-number>/
 ```
 
-Use the URL printed by Jenkins or the job API rather than constructing it when names contain spaces or slashes.
+Do not construct it manually when names contain spaces, encoded characters, or slashes.
 
 ## Transport failures
 
-### WebSocket handshake fails
+### WebSocket handshake failure
 
-A reverse proxy may not support the WebSocket upgrade. Reconfigure:
+A reverse proxy may not support the WebSocket upgrade. Reconfigure with `--transport http` and retry.
 
-```bash
-node scripts/configure.mjs ... --transport http
-```
+### HTTP transport failure
 
-### HTTP mode fails but WebSocket works
-
-Use `webSocket`. Some proxy/controller combinations reject the duplex HTTP CLI endpoint even while REST and WebSocket authentication work.
+Switch back to `webSocket`. Some controller or proxy combinations reject the duplex HTTP CLI endpoint while WebSocket works.
 
 ### HTTP 401
 
-- Verify the API token has not expired or been revoked.
-- Verify the Jenkins user ID, which may be an SSO object ID rather than email/display name.
-- Verify the token belongs to that exact user ID.
-- Run `who-am-i` after correction.
-
-Do not add `-noCertificateCheck` or weaken TLS to solve authentication.
+- Verify that the API token has not expired or been revoked.
+- Verify the Jenkins user ID; it may differ from an email address or display name.
+- Verify that the token belongs to that exact user ID.
+- Rerun `who-am-i` after correcting the provider.
 
 ### HTTP 403
 
-Authentication may have succeeded but the identity lacks `Overall/Read`, `Job/Read`, or `Job/Build`. Ask a Jenkins administrator for least-privilege access.
+Authentication may have succeeded while the identity lacks `Overall/Read`, `Job/Read`, or `Job/Build`. Request the minimum required permissions from a Jenkins administrator.
 
 ### Job not found
 
-- Run `list-jobs` at root or inside the containing folder.
-- Use the full Jenkins job name, not only the display name.
+- Run `list-jobs` at root or within the containing folder.
+- Use the full Jenkins job name, not only its display name.
 - Check case, spaces, and multibranch encoding.
 
 ### Unknown parameter
 
-Run `inspect-job.mjs` again. Parameter definitions can change when a Pipeline job refreshes its Jenkinsfile.
+Run `inspect-job.mjs` again. Parameter definitions may change when a Pipeline job refreshes its Jenkinsfile.
 
 ## Native credential-store failures
 
@@ -130,13 +160,13 @@ Run `inspect-job.mjs` again. Parameter definitions can change when a Pipeline jo
 security find-generic-password -s 'jenkins-cli:jenkins.example.com' -a 'USER_ID' -w >/dev/null
 ```
 
-### Ubuntu/Linux
+### Linux
 
 ```bash
 secret-tool lookup service 'jenkins-cli:jenkins.example.com' account 'USER_ID' >/dev/null
 ```
 
-Headless servers may not have an unlocked Secret Service session. Use a protected file or a secret-manager-injected environment instead.
+A headless server may not have an unlocked Secret Service session. Use a protected auth file or environment injection instead.
 
 ### Windows
 
@@ -145,14 +175,14 @@ Import-Module CredentialManager
 Get-StoredCredential -Target 'jenkins-cli:jenkins.example.com' | Select-Object UserName
 ```
 
-If the module is unavailable, use a protected file or environment injection.
+If the module is unavailable, use a protected auth file or environment injection.
 
 ## Result interpretation
 
-- `SUCCESS`: job completed successfully.
-- `UNSTABLE`: job completed but one or more quality/test/reporting conditions were unstable.
-- `FAILURE`: pipeline failed.
-- `ABORTED`: pipeline or build was stopped.
-- CLI exit `125` with follow mode: local follow was interrupted; the server build may still be running.
+- `SUCCESS`: completed successfully.
+- `UNSTABLE`: completed with unstable quality, test, or reporting conditions.
+- `FAILURE`: the Pipeline failed.
+- `ABORTED`: Jenkins stopped the build.
+- Local exit `125` in follow mode: the local follow was interrupted; the server-side build may still be running.
 
-Separate test failures from post-processing warnings. For example, tests can pass while artifact publication or email notification makes the overall job unstable.
+Separate test or build failures from post-processing warnings when reporting the result.
