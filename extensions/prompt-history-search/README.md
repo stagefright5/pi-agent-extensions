@@ -1,5 +1,7 @@
 # Global Prompt History Search
 
+DISCLAIMER: This is *mostly* vibe-coded using pi agent cli
+
 Adds shell-style reverse search across textual user prompts from a local persisted prompt index.
 
 [Back to the extension workspace](../../README.md)
