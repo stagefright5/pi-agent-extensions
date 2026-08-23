@@ -2,7 +2,7 @@
 
 Opens one tool result at a time without changing pi's compact transcript view.
 
-[Back to the extension collection](../README.md)
+[Back to the extension workspace](../../README.md)
 
 ## Usage
 
@@ -50,10 +50,10 @@ Interactive TUI mode is required; overlays are unavailable in RPC, JSON, and pri
 
 ## Installation
 
-Install the [complete collection](../README.md#install-the-complete-collection), or copy this directory to:
+Install the standalone package:
 
-```text
-~/.pi/agent/extensions/tool-output-browser/
+```bash
+pi install npm:@stagefright5/pi-tool-output-browser
 ```
 
-Run `/reload` or restart pi after installation.
+For source development, load this directory with `pi -e ./extensions/tool-output-browser` or expose it through the workspace's development symlink. Run `/reload` after source changes.

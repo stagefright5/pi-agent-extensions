@@ -2,7 +2,7 @@
 
 Replaces pi's built-in multi-line footer with a compact, single-line status bar in TUI mode.
 
-[Back to the extension collection](../README.md)
+[Back to the extension workspace](../../README.md)
 
 ## Display
 
@@ -37,10 +37,10 @@ Because pi supports only one custom footer at a time, another footer extension l
 
 ## Installation
 
-Install the [complete collection](../README.md#install-the-complete-collection), or copy this directory to:
+Install the standalone package:
 
-```text
-~/.pi/agent/extensions/status-bar/
+```bash
+pi install npm:@stagefright5/pi-status-bar
 ```
 
-Run `/reload` or restart pi after installation.
+For source development, load this directory with `pi -e ./extensions/status-bar` or expose it through the workspace's development symlink. Run `/reload` after source changes.

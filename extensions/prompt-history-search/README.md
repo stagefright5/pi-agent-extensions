@@ -2,7 +2,7 @@
 
 Adds shell-style reverse search across textual user prompts from a local persisted prompt index.
 
-[Back to the extension collection](../README.md)
+[Back to the extension workspace](../../README.md)
 
 ## Usage
 
@@ -67,10 +67,10 @@ Anyone with access to your terminal or local index file can inspect saved prompt
 
 ## Installation
 
-Install the [complete collection](../README.md#install-the-complete-collection), or copy this directory to:
+Install the standalone package:
 
-```text
-~/.pi/agent/extensions/prompt-history-search/
+```bash
+pi install npm:@stagefright5/pi-prompt-history-search
 ```
 
-Run `/reload` or restart pi after installation.
+For source development, load this directory with `pi -e ./extensions/prompt-history-search` or expose it through the workspace's development symlink. Run `/reload` after source changes.

@@ -1,0 +1,25 @@
+{
+  "name": "@stagefright5/pi-provider-url-logger",
+  "version": "0.1.0",
+  "description": "Log the provider, model, and base URL selected for pi provider requests",
+  "type": "module",
+  "keywords": ["pi-package", "pi-extension", "provider", "logging"],
+  "files": ["index.ts", "README.md"],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stagefright5/pi-agent-extensions.git",
+    "directory": "extensions/provider-url-logger"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "catalog:"
+  },
+  "pi": {
+    "extensions": ["./index.ts"]
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -2,7 +2,7 @@
 
 A small diagnostic extension that records which provider endpoint pi selects for each provider request.
 
-[Back to the extension collection](./README.md)
+[Back to the extension workspace](../../README.md)
 
 ## Logged data
 
@@ -32,13 +32,13 @@ The file is never truncated or rotated automatically. Remove or rotate it yourse
 
 ## Installation
 
-Install the [complete collection](./README.md#install-the-complete-collection), or copy `log-provider-url.ts` into one of pi's extension directories:
+Install the standalone package:
 
 ```bash
-cp log-provider-url.ts ~/.pi/agent/extensions/
+pi install npm:@stagefright5/pi-provider-url-logger
 ```
 
-Run `/reload` or restart pi after installation.
+For source development, load this directory with `pi -e ./extensions/provider-url-logger` or expose it through the workspace's development symlink. Run `/reload` after source changes.
 
 ## Limitations
 
