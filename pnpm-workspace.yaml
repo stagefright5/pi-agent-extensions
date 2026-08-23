@@ -5,7 +5,16 @@ catalog:
   "@earendil-works/pi-coding-agent": "0.84.2"
   "@earendil-works/pi-tui": "0.84.2"
   "typebox": "1.3.7"
+  vite: npm:@voidzero-dev/vite-plus-core@0.2.9
+  vite-plus: 0.2.9
 
 allowBuilds:
   "@google/genai": false
   "protobufjs": false
+overrides:
+  vite: "catalog:"
+peerDependencyRules:
+  allowAny:
+    - vite
+  allowedVersions:
+    vite: "*"
