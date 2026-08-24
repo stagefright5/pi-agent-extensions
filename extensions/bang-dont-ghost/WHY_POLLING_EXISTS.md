@@ -1,4 +1,4 @@
-# Why Polling Exists
+# Why Polling Exists AKA https://github.com/earendil-works/pi/issues/8530
 
 Bang Don't Ghost starts an agent follow-up after Pi finishes a user-entered single-`!` shell command. The extension polls session entries because Pi 0.84.2 exposes a pre-execution `user_bash` hook, but no post-execution event for the recorded result.
 
