@@ -13,13 +13,12 @@
   ],
   "files": [
     "index.ts",
-    "bang-follow-up.ts",
-    "bang-follow-up.test.ts",
+    "index.test.ts",
     "LICENSE",
     "README.md"
   ],
   "scripts": {
-    "test": "node --test bang-follow-up.test.ts"
+    "test": "node --test index.test.ts"
   },
   "repository": {
     "type": "git",
