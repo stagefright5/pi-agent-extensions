@@ -1,58 +1,47 @@
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { BashCompletionTracker, createEmptyFollowUpRequest } from "./bang-follow-up.ts";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-const POLL_INTERVAL_MS = 50;
+export const BANG_DONT_GHOST_MESSAGE_TYPE = "bang-dont-ghost";
+
+export interface UserBashResultEvent {
+	type: "user_bash_result";
+	command: string;
+	excludeFromContext: boolean;
+	result: {
+		output: string;
+		exitCode: number | undefined;
+		cancelled: boolean;
+		truncated: boolean;
+		fullOutputPath?: string;
+	};
+}
+
+type UserBashResultHandler = (event: UserBashResultEvent) => void;
+type RegisterUserBashResult = (event: "user_bash_result", handler: UserBashResultHandler) => void;
+
+export function createEmptyFollowUpRequest() {
+	return {
+		message: {
+			customType: BANG_DONT_GHOST_MESSAGE_TYPE,
+			content: [],
+			display: false,
+		},
+		options: {
+			triggerTurn: true,
+			deliverAs: "followUp" as const,
+		},
+	};
+}
+
+function onUserBashResult(pi: ExtensionAPI, handler: UserBashResultHandler): void {
+	const register = pi.on as unknown as RegisterUserBashResult;
+	register("user_bash_result", handler);
+}
 
 export default function bangDontGhostExtension(pi: ExtensionAPI): void {
-	const tracker = new BashCompletionTracker();
-	let active = false;
-	let pollTimer: ReturnType<typeof setTimeout> | undefined;
+	onUserBashResult(pi, (event) => {
+		if (event.excludeFromContext || event.result.cancelled) return;
 
-	const stopPolling = (): void => {
-		if (pollTimer !== undefined) clearTimeout(pollTimer);
-		pollTimer = undefined;
-	};
-
-	const triggerCompletions = (ctx: ExtensionContext): void => {
-		const completions = tracker.scan(ctx.sessionManager.getEntries());
-		for (const _completion of completions) {
-			const { message, options } = createEmptyFollowUpRequest();
-			pi.sendMessage(message, options);
-		}
-	};
-
-	const poll = (ctx: ExtensionContext): void => {
-		pollTimer = undefined;
-		if (!active) return;
-
-		triggerCompletions(ctx);
-		if (tracker.hasPending()) {
-			pollTimer = setTimeout(() => poll(ctx), POLL_INTERVAL_MS);
-		}
-	};
-
-	const startPolling = (ctx: ExtensionContext): void => {
-		if (pollTimer === undefined) {
-			pollTimer = setTimeout(() => poll(ctx), 0);
-		}
-	};
-
-	pi.on("session_start", (_event, ctx) => {
-		active = true;
-		stopPolling();
-		tracker.reset(ctx.sessionManager.getEntries());
-	});
-
-	pi.on("user_bash", (event, ctx) => {
-		triggerCompletions(ctx);
-		if (event.excludeFromContext) return;
-
-		tracker.expect(event.command);
-		startPolling(ctx);
-	});
-
-	pi.on("session_shutdown", () => {
-		active = false;
-		stopPolling();
+		const { message, options } = createEmptyFollowUpRequest();
+		pi.sendMessage(message, options);
 	});
 }
