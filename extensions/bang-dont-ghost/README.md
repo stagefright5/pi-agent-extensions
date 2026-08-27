@@ -9,7 +9,7 @@ Automatically starts an agent follow-up after a user-entered single-`!` shell co
 
 ## Runtime requirement
 
-Bang Don't Ghost requires Pi to emit a post-execution `user_bash_result` extension event after the matching `bashExecution` message has been recorded. Pi 0.84.2 does not provide this event in its published extension API; this branch targets the experimental local Pi patch that adds it.
+Bang Don't Ghost requires Pi to emit a post-execution `user_bash_result` extension event after the matching `bashExecution` message has been recorded. Pi 0.84.2–0.84.3 do not provide this event in their published extension API; this branch targets the experimental local Pi patch that adds it.
 
 The expected runtime payload is:
 
@@ -42,7 +42,8 @@ pi-patch-user-bash-result
 
 The command:
 
-- resolves the active `pi` executable from `PATH`
+- resolves the active `pi` executable from `PATH`, including pnpm command shims
+- locates either the unbundled AgentSession module or the active bundled runtime chunk
 - accepts an already-applied patch without rewriting the file
 - attempts exact-anchor patching on any installed Pi version
 - patches both direct recording and deferred-result flushing
@@ -51,7 +52,7 @@ The command:
 
 This is a manual command, not a Pi startup wrapper. Normal Pi startup does not automatically run it. The patcher and command shim are development-source automation and are not included in the published npm package.
 
-For an explicit test target, the repository script also accepts `--target <agent-session.js>`.
+For an explicit test target, the repository script also accepts `--target <runtime.js>`.
 
 ## Usage
 

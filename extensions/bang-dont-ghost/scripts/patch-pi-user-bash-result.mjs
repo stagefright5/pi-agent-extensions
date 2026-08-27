@@ -3,7 +3,9 @@
 import {
   accessSync,
   constants,
+  existsSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -14,8 +16,9 @@ import { delimiter, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const EVENT_MARKER = 'type: "user_bash_result"';
+const EVENT_MARKER = /type\s*:\s*["']user_bash_result["']/;
 const METHOD_MARKER = "_emitUserBashResult(bashMessage)";
+const BUNDLED_SESSION_MARKER = "recordBashResult(command,result,options){let bashMessage=";
 
 const DIRECT_RECORD_ANCHOR = `            // Save to session
             this.sessionManager.appendMessage(bashMessage);
@@ -59,6 +62,18 @@ const DEFERRED_FLUSH_REPLACEMENT = `            // Save to session
         }
         this._pendingBashMessages = [];`;
 
+const BUNDLED_DIRECT_RECORD_ANCHOR =
+  "this.isStreaming?this._pendingBashMessages.push(bashMessage):(this.agent.state.messages.push(bashMessage),this.sessionManager.appendMessage(bashMessage))}abortBash(){";
+
+const BUNDLED_DIRECT_RECORD_REPLACEMENT =
+  'this.isStreaming?this._pendingBashMessages.push(bashMessage):(this.agent.state.messages.push(bashMessage),this.sessionManager.appendMessage(bashMessage),this._emitUserBashResult(bashMessage))}_emitUserBashResult(bashMessage){void this._extensionRunner.emit({type:"user_bash_result",command:bashMessage.command,excludeFromContext:bashMessage.excludeFromContext??false,result:{output:bashMessage.output,exitCode:bashMessage.exitCode,cancelled:bashMessage.cancelled,truncated:bashMessage.truncated,fullOutputPath:bashMessage.fullOutputPath}})}abortBash(){';
+
+const BUNDLED_DEFERRED_FLUSH_ANCHOR =
+  "for(let bashMessage of this._pendingBashMessages)this.agent.state.messages.push(bashMessage),this.sessionManager.appendMessage(bashMessage);this._pendingBashMessages=[]";
+
+const BUNDLED_DEFERRED_FLUSH_REPLACEMENT =
+  "for(let bashMessage of this._pendingBashMessages)this.agent.state.messages.push(bashMessage),this.sessionManager.appendMessage(bashMessage),this._emitUserBashResult(bashMessage);this._pendingBashMessages=[]";
+
 function countOccurrences(source, search) {
   let count = 0;
   let offset = 0;
@@ -71,25 +86,47 @@ function countOccurrences(source, search) {
 }
 
 export function patchSource(source) {
-  if (source.includes(EVENT_MARKER)) {
+  if (EVENT_MARKER.test(source)) {
     const methodOccurrences = countOccurrences(source, METHOD_MARKER);
     if (methodOccurrences >= 3) {
       return { state: "already-applied", source };
     }
-    throw new Error("agent-session.js already mentions user_bash_result, but not in the expected patched shape");
+    throw new Error("Pi runtime already mentions user_bash_result, but not in the expected patched shape");
   }
 
-  const directCount = countOccurrences(source, DIRECT_RECORD_ANCHOR);
-  const deferredCount = countOccurrences(source, DEFERRED_FLUSH_ANCHOR);
-  if (directCount !== 1 || deferredCount !== 1) {
-    throw new Error(
-      `patch anchors did not match exactly once (direct=${directCount}, deferred=${deferredCount}); Pi was not modified`,
-    );
+  const formats = [
+    {
+      name: "unbundled",
+      directAnchor: DIRECT_RECORD_ANCHOR,
+      directReplacement: DIRECT_RECORD_REPLACEMENT,
+      deferredAnchor: DEFERRED_FLUSH_ANCHOR,
+      deferredReplacement: DEFERRED_FLUSH_REPLACEMENT,
+    },
+    {
+      name: "bundled",
+      directAnchor: BUNDLED_DIRECT_RECORD_ANCHOR,
+      directReplacement: BUNDLED_DIRECT_RECORD_REPLACEMENT,
+      deferredAnchor: BUNDLED_DEFERRED_FLUSH_ANCHOR,
+      deferredReplacement: BUNDLED_DEFERRED_FLUSH_REPLACEMENT,
+    },
+  ];
+
+  const matches = formats.map((format) => ({
+    ...format,
+    directCount: countOccurrences(source, format.directAnchor),
+    deferredCount: countOccurrences(source, format.deferredAnchor),
+  }));
+  const format = matches.find((candidate) => candidate.directCount === 1 && candidate.deferredCount === 1);
+  if (!format) {
+    const diagnostics = matches
+      .map((candidate) => `${candidate.name}: direct=${candidate.directCount}, deferred=${candidate.deferredCount}`)
+      .join("; ");
+    throw new Error(`patch anchors did not match exactly once (${diagnostics}); Pi was not modified`);
   }
 
   const patched = source
-    .replace(DIRECT_RECORD_ANCHOR, DIRECT_RECORD_REPLACEMENT)
-    .replace(DEFERRED_FLUSH_ANCHOR, DEFERRED_FLUSH_REPLACEMENT);
+    .replace(format.directAnchor, format.directReplacement)
+    .replace(format.deferredAnchor, format.deferredReplacement);
 
   return { state: "applied", source: patched };
 }
@@ -108,20 +145,89 @@ function findExecutable(name) {
   throw new Error(`${name} was not found on PATH`);
 }
 
-export function discoverInstalledPi() {
-  const executable = findExecutable("pi");
-  const cliPath = realpathSync(executable);
-  if (cliPath.endsWith("/dist/cli.js") === false) {
-    throw new Error(`resolved Pi executable has an unexpected target: ${cliPath}`);
+function isSupportedCliPath(path) {
+  const normalized = path.replaceAll("\\", "/");
+  return normalized.endsWith("/dist/cli.js") || normalized.endsWith("/dist/bundle/cli.js");
+}
+
+function resolvePiCliPath(executable) {
+  const executableTarget = realpathSync(executable);
+  if (isSupportedCliPath(executableTarget)) return executableTarget;
+
+  let shimSource;
+  try {
+    shimSource = readFileSync(executableTarget, "utf8");
+  } catch {
+    throw new Error(`resolved Pi executable has an unexpected target: ${executableTarget}`);
   }
 
-  const packageRoot = dirname(dirname(cliPath));
-  const packageJsonPath = join(packageRoot, "package.json");
-  const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
+  const marker = shimSource.match(/^# cmd-shim-target=(.+)$/m)?.[1]?.trim();
+  if (!marker) {
+    throw new Error(`resolved Pi executable has an unexpected target: ${executableTarget}`);
+  }
+
+  const declaredTarget = resolve(dirname(executableTarget), marker);
+  let cliPath;
+  try {
+    cliPath = realpathSync(declaredTarget);
+  } catch {
+    throw new Error(`Pi command shim target does not exist: ${declaredTarget}`);
+  }
+  if (!isSupportedCliPath(cliPath)) {
+    throw new Error(`Pi command shim has an unexpected target: ${cliPath}`);
+  }
+  return cliPath;
+}
+
+function findPiPackage(cliPath) {
+  let directory = dirname(cliPath);
+  while (true) {
+    const packageJsonPath = join(directory, "package.json");
+    if (existsSync(packageJsonPath)) {
+      const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
+      if (packageJson.name === "@earendil-works/pi-coding-agent") {
+        return { packageRoot: directory, packageJson };
+      }
+    }
+    const parent = dirname(directory);
+    if (parent === directory) break;
+    directory = parent;
+  }
+  throw new Error(`could not find @earendil-works/pi-coding-agent package for ${cliPath}`);
+}
+
+function findBundledRuntime(cliPath) {
+  const chunksDirectory = join(dirname(cliPath), "chunks");
+  let entries;
+  try {
+    entries = readdirSync(chunksDirectory, { withFileTypes: true });
+  } catch {
+    throw new Error(`could not inspect Pi bundle chunks: ${chunksDirectory}`);
+  }
+
+  const candidates = entries
+    .filter((entry) => (entry.isFile() || entry.isSymbolicLink()) && entry.name.endsWith(".js"))
+    .map((entry) => join(chunksDirectory, entry.name))
+    .filter((path) => readFileSync(path, "utf8").includes(BUNDLED_SESSION_MARKER));
+  if (candidates.length !== 1) {
+    throw new Error(
+      `could not locate exactly one bundled AgentSession runtime (found ${candidates.length}) in ${chunksDirectory}`,
+    );
+  }
+  return realpathSync(candidates[0]);
+}
+
+export function discoverInstalledPi(executable = findExecutable("pi")) {
+  const cliPath = resolvePiCliPath(executable);
+  const { packageRoot, packageJson } = findPiPackage(cliPath);
+  const normalizedCliPath = cliPath.replaceAll("\\", "/");
+  const targetPath = normalizedCliPath.endsWith("/dist/bundle/cli.js")
+    ? findBundledRuntime(cliPath)
+    : realpathSync(join(packageRoot, "dist", "core", "agent-session.js"));
   return {
     executable,
     version: String(packageJson.version ?? "unknown"),
-    targetPath: join(dirname(cliPath), "core", "agent-session.js"),
+    targetPath,
   };
 }
 
@@ -182,7 +288,7 @@ function notifyFailure(message) {
 function parseArguments(args) {
   if (args.length === 0) return {};
   if (args.length === 2 && args[0] === "--target") return { targetPath: resolve(args[1]) };
-  throw new Error("Usage: pi-patch-user-bash-result [--target <agent-session.js>]");
+  throw new Error("Usage: pi-patch-user-bash-result [--target <runtime.js>]");
 }
 
 export function run(args = process.argv.slice(2)) {
