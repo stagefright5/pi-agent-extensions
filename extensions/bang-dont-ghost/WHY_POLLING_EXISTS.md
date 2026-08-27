@@ -4,7 +4,7 @@
 
 ## Original gap
 
-Pi 0.84.2 publishes a pre-execution `user_bash` hook:
+Pi 0.84.2–0.84.3 publish a pre-execution `user_bash` hook:
 
 ```text
 user enters !command
@@ -34,7 +34,7 @@ shell execution
 bashExecution result recorded
         │
         ▼
-user_bash_result event       ← missing from published Pi 0.84.2
+user_bash_result event       ← missing from published Pi 0.84.2–0.84.3
 ```
 
 ## Why interception was not enough
@@ -223,7 +223,7 @@ Pi already placed the command and output in the preceding `bashExecution` contex
 
 ## Temporary local typing
 
-The installed runtime patch emits `user_bash_result`, but Pi 0.84.2's published TypeScript declarations do not include it. The extension defines the payload locally and isolates one cast around `pi.on`.
+The installed runtime patch emits `user_bash_result`, but the published TypeScript declarations for Pi 0.84.2–0.84.3 do not include it. The extension defines the payload locally and isolates one cast around `pi.on`.
 
 ```text
 runtime event exists
@@ -238,7 +238,7 @@ When Pi publishes the event type and `ExtensionAPI.on` overload, the local event
 
 ## Runtime requirement
 
-Stock Pi 0.84.2 never emits `user_bash_result`. On an unpatched runtime, this branch loads but receives no completion event and therefore starts no follow-up. It deliberately has no polling fallback: restoring one would also restore the complexity and limitations this refactor removes.
+Stock Pi 0.84.2–0.84.3 never emits `user_bash_result`. On an unpatched runtime, this branch loads but receives no completion event and therefore starts no follow-up. It deliberately has no polling fallback: restoring one would also restore the complexity and limitations this refactor removes.
 
 The source checkout provides `scripts/patch-pi-user-bash-result.mjs`. The locally installed `pi-patch-user-bash-result` command invokes that script to verify or reapply the patch after Pi updates. It is idempotent, uses exact source anchors, syntax-checks a temporary candidate before atomic replacement, and fails with terminal and macOS notifications rather than partially modifying an unknown Pi build.
 
