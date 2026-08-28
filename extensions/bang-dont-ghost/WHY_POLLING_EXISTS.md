@@ -1,5 +1,7 @@
 # Why Polling Existed
 
+See https://github.com/earendil-works/pi/issues/8530
+
 > Historical design note: Bang Don't Ghost no longer polls on this branch. It now requires the experimental `user_bash_result` Pi event described below.
 
 ## Original gap

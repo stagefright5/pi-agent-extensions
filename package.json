@@ -36,6 +36,7 @@
       "./extensions/tool-output-browser/index.ts"
     ],
     "skills": [
+      "./extensions/artifact-design/SKILL.md",
       "./extensions/jenkins-cli-operations/SKILL.md"
     ]
   }

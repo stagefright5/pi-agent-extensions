@@ -1,0 +1,55 @@
+#__artifact_harness {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-radius: 8px;
+  background: #1c1c1cee;
+  color: #f5f5f5;
+  border: 1px solid #ffffff26;
+  font:
+    500 11px/1 ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
+  box-shadow: 0 4px 16px #00000040;
+}
+#__artifact_harness .ah-group {
+  display: flex;
+  gap: 2px;
+}
+#__artifact_harness button {
+  font: inherit;
+  padding: 5px 8px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  background: #ffffff14;
+  color: inherit;
+  cursor: pointer;
+}
+#__artifact_harness button:hover {
+  background: #ffffff24;
+}
+#__artifact_harness button[aria-checked="true"],
+#__artifact_harness button[aria-pressed="true"] {
+  background: #f5f5f5;
+  color: #1c1c1c;
+}
+#__artifact_harness button:focus-visible {
+  outline: 2px solid #7aa2ff;
+  outline-offset: 1px;
+}
+#__artifact_harness .ah-warn {
+  padding: 0 6px;
+  border-left: 1px solid #ffffff26;
+  color: #ffb454;
+}
+@media print {
+  #__artifact_harness {
+    display: none;
+  }
+}
