@@ -36,6 +36,18 @@ Sketch a compact token system first:
 - **Type** — typefaces for 2+ roles: a characterful display face used with restraint, a body face, a utility face for captions or data
 - **Layout** — the concept in one or two sentences
 
+Run a **mandatory domain-language preflight** before scaffolding:
+
+1. Count the distinct domain terms, acronyms, protocol concepts, and specialist
+   configuration names that a new reader may not know.
+2. Record one of these decisions in the design plan:
+   - `Glossary: yes — approximately N terms`; read
+     [references/GLOSSARY-SIDEBAR.md](references/GLOSSARY-SIDEBAR.md) before building.
+   - `Glossary: no — approximately N terms`; state why a glossary is unnecessary.
+3. At approximately 15 or more terms, the glossary pattern is required. This applies to
+   every artifact — including interactive explainers, architecture maps, dashboards,
+   onboarding pages, and UI/document hybrids — not only prose documents.
+
 Then build, deriving every color and type decision from that plan.
 
 ### 3. Scaffold
@@ -71,6 +83,11 @@ Inlines everything into `dist/artifact.html` via `vite-plugin-singlefile` and ru
 validator. It exits non-zero on an off-allowlist reference, a non-inlined asset, a
 theme token defined only inside a theme block, or a page over 16MB.
 
+Repeat the domain-language preflight against the finished copy because terminology
+usually grows during implementation. If the glossary threshold is now met, add it and
+verify desktop pinning, collapse behavior, search, filters, mobile stacking,
+accessibility, and all three theme states before publishing.
+
 Never publish a file that has not passed this.
 
 ### 6. Publish
@@ -97,8 +114,9 @@ source `index.html`.
 ## Patterns
 
 - [Glossary sidebar](references/GLOSSARY-SIDEBAR.md) — pinned, collapsible, filterable
-  term list for a document carrying ~15+ domain terms. Includes the fixed-height scroll
-  shell, which has three non-obvious CSS requirements.
+  term list for any artifact carrying ~15+ domain terms, including interactive
+  explainers and UI/document hybrids. Includes the fixed-height scroll shell, which has
+  three non-obvious CSS requirements.
 
 ## Scripts
 
