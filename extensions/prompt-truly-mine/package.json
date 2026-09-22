@@ -1,6 +1,6 @@
 {
   "name": "@stagefright5/pi-prompt-truly-mine",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Inline extension commands and composable skill/prompt context with cursor-restoring undo and redo for pi",
   "license": "Unlicense",
   "type": "module",

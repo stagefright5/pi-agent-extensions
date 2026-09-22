@@ -1,5 +1,12 @@
 # @stagefright5/pi-bang-dont-ghost
 
+## 0.0.2
+
+### Patch changes
+
+- e48a556: Document the Pi 0.87.0 bundled-runtime requirement for the `user_bash_result` event and limit the development patcher to that exact runtime. Fail closed on any other version or layout.
+- b54d008: Rewrite the README, SKILL.md, and reference docs in plain language: sentence-case headings, shorter sentences, active voice, and no em dashes or filler. Skill instructions keep the same steps and rules.
+
 ## 0.0.1
 
 ### Patch changes

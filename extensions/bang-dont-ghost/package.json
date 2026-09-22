@@ -1,6 +1,6 @@
 {
   "name": "@stagefright5/pi-bang-dont-ghost",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Automatically continue pi after a user-entered single-bang shell command",
   "license": "Unlicense",
   "type": "module",

@@ -1,6 +1,6 @@
 {
   "name": "@stagefright5/pi-prompt-history-search",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Fuzzy reverse search across prompts in saved pi sessions",
   "license": "Unlicense",
   "type": "module",
@@ -10,6 +10,7 @@
     "prompt-history"
   ],
   "files": [
+    "CHANGELOG.md",
     "index.ts",
     "README.md"
   ],
