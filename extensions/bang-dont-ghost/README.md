@@ -9,7 +9,7 @@ Automatically starts an agent follow-up after a user-entered single-`!` shell co
 
 ## Runtime requirement
 
-Bang Don't Ghost requires Pi to emit a post-execution `user_bash_result` extension event after the matching `bashExecution` message has been recorded. Pi 0.84.2–0.84.3 do not provide this event in their published extension API; this branch targets the experimental local Pi patch that adds it.
+Bang Don't Ghost requires Pi to emit a post-execution `user_bash_result` extension event after the matching `bashExecution` message has been recorded. Stock Pi does not currently provide this event in its published extension API. The local patcher supports only the installed **Pi 0.87.0 bundled runtime** and fails closed for every other version or layout.
 
 The expected runtime payload is:
 
@@ -42,17 +42,17 @@ pi-patch-user-bash-result
 
 The command:
 
-- resolves the active `pi` executable from `PATH`, including pnpm command shims
-- locates either the unbundled AgentSession module or the active bundled runtime chunk
-- accepts an already-applied patch without rewriting the file
-- attempts exact-anchor patching on any installed Pi version
-- patches both direct recording and deferred-result flushing
+- requires Pi 0.87.0 and its bundled `dist/bundle/cli.js` layout
+- resolves the active `pi` executable from `PATH`, including the current pnpm command shim
+- locates the single bundled runtime chunk containing `AgentSession`
+- accepts the exact current patch without rewriting the file
+- patches both direct recording and deferred-result flushing after context refresh
 - writes through a same-directory temporary file and runs `node --check` before an atomic rename
-- leaves Pi unchanged, prints diagnostics, shows a macOS notification, and exits nonzero when validation or patching fails
+- leaves Pi unchanged, prints diagnostics, shows a macOS notification, and exits nonzero when the version, layout, or exact anchors differ
 
-This is a manual command, not a Pi startup wrapper. Normal Pi startup does not automatically run it. The patcher and command shim are development-source automation and are not included in the published npm package.
+This is a manual command, not a Pi startup wrapper. Normal Pi startup does not automatically run it. Rerun it after reinstalling Pi 0.87.0. A newer Pi release requires an explicit patcher update rather than falling back to an older patch shape. The patcher and command shim are development-source automation and are not included in the published npm package.
 
-For an explicit test target, the repository script also accepts `--target <runtime.js>`.
+For an explicit Pi 0.87.0 bundled runtime test target, the repository script also accepts `--target <runtime.js>`.
 
 ## Usage
 

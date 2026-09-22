@@ -16,63 +16,23 @@ import { delimiter, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
+export const SUPPORTED_PI_VERSION = "0.87.0";
+
 const EVENT_MARKER = /type\s*:\s*["']user_bash_result["']/;
 const METHOD_MARKER = "_emitUserBashResult(bashMessage)";
 const BUNDLED_SESSION_MARKER = "recordBashResult(command,result,options){let bashMessage=";
 
-const DIRECT_RECORD_ANCHOR = `            // Save to session
-            this.sessionManager.appendMessage(bashMessage);
-        }
-    }
-    /**
-     * Cancel running bash command.
-     */`;
+const DIRECT_RECORD_ANCHOR =
+  "this.isStreaming?this._pendingBashMessages.push(bashMessage):(this.sessionManager.appendMessage(bashMessage),this._refreshFinalizedContext())}abortBash(){";
 
-const DIRECT_RECORD_REPLACEMENT = `            // Save to session
-            this.sessionManager.appendMessage(bashMessage);
-            this._emitUserBashResult(bashMessage);
-        }
-    }
-    _emitUserBashResult(bashMessage) {
-        void this._extensionRunner.emit({
-            type: "user_bash_result",
-            command: bashMessage.command,
-            excludeFromContext: bashMessage.excludeFromContext ?? false,
-            result: {
-                output: bashMessage.output,
-                exitCode: bashMessage.exitCode,
-                cancelled: bashMessage.cancelled,
-                truncated: bashMessage.truncated,
-                fullOutputPath: bashMessage.fullOutputPath,
-            },
-        });
-    }
-    /**
-     * Cancel running bash command.
-     */`;
+const DIRECT_RECORD_REPLACEMENT =
+  'this.isStreaming?this._pendingBashMessages.push(bashMessage):(this.sessionManager.appendMessage(bashMessage),this._refreshFinalizedContext(),this._emitUserBashResult(bashMessage))}_emitUserBashResult(bashMessage){void this._extensionRunner.emit({type:"user_bash_result",command:bashMessage.command,excludeFromContext:bashMessage.excludeFromContext??false,result:{output:bashMessage.output,exitCode:bashMessage.exitCode,cancelled:bashMessage.cancelled,truncated:bashMessage.truncated,fullOutputPath:bashMessage.fullOutputPath}})}abortBash(){';
 
-const DEFERRED_FLUSH_ANCHOR = `            // Save to session
-            this.sessionManager.appendMessage(bashMessage);
-        }
-        this._pendingBashMessages = [];`;
+const DEFERRED_FLUSH_ANCHOR =
+  "for(let bashMessage of this._pendingBashMessages)this.sessionManager.appendMessage(bashMessage);this._pendingBashMessages=[],this._refreshFinalizedContext()}";
 
-const DEFERRED_FLUSH_REPLACEMENT = `            // Save to session
-            this.sessionManager.appendMessage(bashMessage);
-            this._emitUserBashResult(bashMessage);
-        }
-        this._pendingBashMessages = [];`;
-
-const BUNDLED_DIRECT_RECORD_ANCHOR =
-  "this.isStreaming?this._pendingBashMessages.push(bashMessage):(this.agent.state.messages.push(bashMessage),this.sessionManager.appendMessage(bashMessage))}abortBash(){";
-
-const BUNDLED_DIRECT_RECORD_REPLACEMENT =
-  'this.isStreaming?this._pendingBashMessages.push(bashMessage):(this.agent.state.messages.push(bashMessage),this.sessionManager.appendMessage(bashMessage),this._emitUserBashResult(bashMessage))}_emitUserBashResult(bashMessage){void this._extensionRunner.emit({type:"user_bash_result",command:bashMessage.command,excludeFromContext:bashMessage.excludeFromContext??false,result:{output:bashMessage.output,exitCode:bashMessage.exitCode,cancelled:bashMessage.cancelled,truncated:bashMessage.truncated,fullOutputPath:bashMessage.fullOutputPath}})}abortBash(){';
-
-const BUNDLED_DEFERRED_FLUSH_ANCHOR =
-  "for(let bashMessage of this._pendingBashMessages)this.agent.state.messages.push(bashMessage),this.sessionManager.appendMessage(bashMessage);this._pendingBashMessages=[]";
-
-const BUNDLED_DEFERRED_FLUSH_REPLACEMENT =
-  "for(let bashMessage of this._pendingBashMessages)this.agent.state.messages.push(bashMessage),this.sessionManager.appendMessage(bashMessage),this._emitUserBashResult(bashMessage);this._pendingBashMessages=[]";
+const DEFERRED_FLUSH_REPLACEMENT =
+  "for(let bashMessage of this._pendingBashMessages)this.sessionManager.appendMessage(bashMessage);let bashMessages=this._pendingBashMessages;this._pendingBashMessages=[],this._refreshFinalizedContext();for(let bashMessage of bashMessages)this._emitUserBashResult(bashMessage)}";
 
 function countOccurrences(source, search) {
   let count = 0;
@@ -87,48 +47,27 @@ function countOccurrences(source, search) {
 
 export function patchSource(source) {
   if (EVENT_MARKER.test(source)) {
-    const methodOccurrences = countOccurrences(source, METHOD_MARKER);
-    if (methodOccurrences >= 3) {
+    if (countOccurrences(source, METHOD_MARKER) === 3) {
       return { state: "already-applied", source };
     }
-    throw new Error("Pi runtime already mentions user_bash_result, but not in the expected patched shape");
+    throw new Error("Pi runtime already mentions user_bash_result, but not in the expected Pi 0.87.0 patch shape");
   }
 
-  const formats = [
-    {
-      name: "unbundled",
-      directAnchor: DIRECT_RECORD_ANCHOR,
-      directReplacement: DIRECT_RECORD_REPLACEMENT,
-      deferredAnchor: DEFERRED_FLUSH_ANCHOR,
-      deferredReplacement: DEFERRED_FLUSH_REPLACEMENT,
-    },
-    {
-      name: "bundled",
-      directAnchor: BUNDLED_DIRECT_RECORD_ANCHOR,
-      directReplacement: BUNDLED_DIRECT_RECORD_REPLACEMENT,
-      deferredAnchor: BUNDLED_DEFERRED_FLUSH_ANCHOR,
-      deferredReplacement: BUNDLED_DEFERRED_FLUSH_REPLACEMENT,
-    },
-  ];
-
-  const matches = formats.map((format) => ({
-    ...format,
-    directCount: countOccurrences(source, format.directAnchor),
-    deferredCount: countOccurrences(source, format.deferredAnchor),
-  }));
-  const format = matches.find((candidate) => candidate.directCount === 1 && candidate.deferredCount === 1);
-  if (!format) {
-    const diagnostics = matches
-      .map((candidate) => `${candidate.name}: direct=${candidate.directCount}, deferred=${candidate.deferredCount}`)
-      .join("; ");
-    throw new Error(`patch anchors did not match exactly once (${diagnostics}); Pi was not modified`);
+  const directCount = countOccurrences(source, DIRECT_RECORD_ANCHOR);
+  const deferredCount = countOccurrences(source, DEFERRED_FLUSH_ANCHOR);
+  if (directCount !== 1 || deferredCount !== 1) {
+    throw new Error(
+      `Pi ${SUPPORTED_PI_VERSION} bundled patch anchors did not match exactly once ` +
+        `(direct=${directCount}, deferred=${deferredCount}); Pi was not modified`,
+    );
   }
 
-  const patched = source
-    .replace(format.directAnchor, format.directReplacement)
-    .replace(format.deferredAnchor, format.deferredReplacement);
-
-  return { state: "applied", source: patched };
+  return {
+    state: "applied",
+    source: source
+      .replace(DIRECT_RECORD_ANCHOR, DIRECT_RECORD_REPLACEMENT)
+      .replace(DEFERRED_FLUSH_ANCHOR, DEFERRED_FLUSH_REPLACEMENT),
+  };
 }
 
 function findExecutable(name) {
@@ -146,8 +85,7 @@ function findExecutable(name) {
 }
 
 function isSupportedCliPath(path) {
-  const normalized = path.replaceAll("\\", "/");
-  return normalized.endsWith("/dist/cli.js") || normalized.endsWith("/dist/bundle/cli.js");
+  return path.replaceAll("\\", "/").endsWith("/dist/bundle/cli.js");
 }
 
 function resolvePiCliPath(executable) {
@@ -163,7 +101,7 @@ function resolvePiCliPath(executable) {
 
   const marker = shimSource.match(/^# cmd-shim-target=(.+)$/m)?.[1]?.trim();
   if (!marker) {
-    throw new Error(`resolved Pi executable has an unexpected target: ${executableTarget}`);
+    throw new Error(`resolved Pi executable is not a supported Pi ${SUPPORTED_PI_VERSION} command shim`);
   }
 
   const declaredTarget = resolve(dirname(executableTarget), marker);
@@ -174,7 +112,7 @@ function resolvePiCliPath(executable) {
     throw new Error(`Pi command shim target does not exist: ${declaredTarget}`);
   }
   if (!isSupportedCliPath(cliPath)) {
-    throw new Error(`Pi command shim has an unexpected target: ${cliPath}`);
+    throw new Error(`Pi command shim does not target the Pi ${SUPPORTED_PI_VERSION} bundled CLI: ${cliPath}`);
   }
   return cliPath;
 }
@@ -186,7 +124,7 @@ function findPiPackage(cliPath) {
     if (existsSync(packageJsonPath)) {
       const packageJson = JSON.parse(readFileSync(packageJsonPath, "utf8"));
       if (packageJson.name === "@earendil-works/pi-coding-agent") {
-        return { packageRoot: directory, packageJson };
+        return packageJson;
       }
     }
     const parent = dirname(directory);
@@ -211,7 +149,8 @@ function findBundledRuntime(cliPath) {
     .filter((path) => readFileSync(path, "utf8").includes(BUNDLED_SESSION_MARKER));
   if (candidates.length !== 1) {
     throw new Error(
-      `could not locate exactly one bundled AgentSession runtime (found ${candidates.length}) in ${chunksDirectory}`,
+      `could not locate exactly one Pi ${SUPPORTED_PI_VERSION} bundled AgentSession runtime ` +
+        `(found ${candidates.length}) in ${chunksDirectory}`,
     );
   }
   return realpathSync(candidates[0]);
@@ -219,15 +158,15 @@ function findBundledRuntime(cliPath) {
 
 export function discoverInstalledPi(executable = findExecutable("pi")) {
   const cliPath = resolvePiCliPath(executable);
-  const { packageRoot, packageJson } = findPiPackage(cliPath);
-  const normalizedCliPath = cliPath.replaceAll("\\", "/");
-  const targetPath = normalizedCliPath.endsWith("/dist/bundle/cli.js")
-    ? findBundledRuntime(cliPath)
-    : realpathSync(join(packageRoot, "dist", "core", "agent-session.js"));
+  const packageJson = findPiPackage(cliPath);
+  const version = String(packageJson.version ?? "unknown");
+  if (version !== SUPPORTED_PI_VERSION) {
+    throw new Error(`unsupported Pi version ${version}; this patcher only supports ${SUPPORTED_PI_VERSION}`);
+  }
   return {
     executable,
-    version: String(packageJson.version ?? "unknown"),
-    targetPath,
+    version,
+    targetPath: findBundledRuntime(cliPath),
   };
 }
 
@@ -244,8 +183,8 @@ export function patchFile(targetPath) {
   if (patch.state === "already-applied") return patch.state;
 
   const mode = statSync(targetPath).mode;
-  const temporaryPath = join(dirname(targetPath), `.agent-session.bang-dont-ghost.${process.pid}.js`);
-  const rollbackPath = join(dirname(targetPath), `.agent-session.bang-dont-ghost.rollback.${process.pid}.js`);
+  const temporaryPath = join(dirname(targetPath), `.pi-bang-dont-ghost.${process.pid}.js`);
+  const rollbackPath = join(dirname(targetPath), `.pi-bang-dont-ghost.rollback.${process.pid}.js`);
   let replaced = false;
   try {
     writeFileSync(temporaryPath, patch.source, { encoding: "utf8", mode });
@@ -295,7 +234,7 @@ export function run(args = process.argv.slice(2)) {
   try {
     const options = parseArguments(args);
     const discovered = options.targetPath
-      ? { executable: undefined, version: "explicit target", targetPath: options.targetPath }
+      ? { executable: undefined, version: `${SUPPORTED_PI_VERSION} explicit target`, targetPath: options.targetPath }
       : discoverInstalledPi();
     const state = patchFile(discovered.targetPath);
     const action = state === "applied" ? "Applied" : "Already applied";
