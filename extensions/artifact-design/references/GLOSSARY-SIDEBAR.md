@@ -1,33 +1,34 @@
 # Glossary sidebar
 
-A pinned, collapsible, filterable term list beside a jargon-dense document.
+A pinned, collapsible, filterable term list beside a document with many specialist terms.
 
-Proposed upstream as [anthropics/claude-code#90263](https://github.com/anthropics/claude-code/issues/90263);
-documented here so it is usable now.
+This pattern is proposed upstream as
+[anthropics/claude-code#90263](https://github.com/anthropics/claude-code/issues/90263)
+and documented here for use now.
 
 ## When to use it
 
-A reference or explainer carrying **~15+ domain terms** a reader may not know:
-protocol comparisons, architecture decision records, incident post-mortems, migration
-guides, spec summaries, onboarding docs.
+Use this pattern for a reference or explainer with approximately 15 or more domain terms
+a reader may not know. Examples include protocol comparisons, architecture decision
+records, incident post-mortems, migration guides, spec summaries, and onboarding docs.
 
-Not for a short memo, not for a dashboard, not for a page with five pieces of jargon —
-inline definitions serve those better. Over-applying this is worse than not having it.
+Use inline definitions instead for a short memo, a dashboard, or a page with only a few
+specialist terms. Avoid adding a glossary where it is unnecessary.
 
-## Why not the obvious alternatives
+## Why use a sidebar
 
-| Approach                         | Problem                                                 |
-| -------------------------------- | ------------------------------------------------------- |
-| Inline parenthetical at each use | Repeats at every occurrence; bloats the prose           |
-| Glossary section at the bottom   | Destroys scroll position — the actual problem           |
-| `<abbr title>` / tooltips        | No touch support, not searchable, invisible until hover |
-| `<details>` after each term      | Interrupts the reading flow                             |
+| Approach                       | Problem                                                 |
+| ------------------------------ | ------------------------------------------------------- |
+| Inline definition at each use  | Repeats the definition at every occurrence              |
+| Glossary section at the bottom | Makes readers leave their scroll position               |
+| `<abbr title>` / tooltips      | No touch support, not searchable, invisible until hover |
+| `<details>` after each term    | Interrupts reading                                      |
 
 ## 1. Only the main column scrolls
 
-Above ~1040px the page becomes a fixed-height two-column shell, so paging through the
-body never moves the glossary. Below it, the aside stacks underneath as a normal
-section — never a floating overlay on mobile.
+Above approximately 1040px, the page uses a fixed-height two-column layout. Scrolling
+through the body does not move the glossary. Below that width, the sidebar stacks
+underneath as a normal section. Never use a floating overlay on mobile.
 
 ```css
 .layout {
@@ -60,13 +61,14 @@ section — never a floating overlay on mobile.
 }
 ```
 
-Three requirements, any one of which silently produces a page where nothing scrolls or
-the whole viewport scrolls: `grid-template-rows: minmax(0,1fr)`, `min-height: 0` on the
-scrolling child, `100vh` on the wrapper.
+The layout requires `grid-template-rows: minmax(0,1fr)`, `min-height: 0` on the scrolling
+child, and `100vh` on the wrapper. Omitting any one can prevent scrolling or make the
+whole viewport scroll.
 
 ## 2. Collapsible
 
-Collapses to a ~3rem vertical rail so a wide diagram can reclaim the width.
+The sidebar collapses to a vertical rail approximately 3rem wide, leaving more room for
+wide diagrams.
 
 ```css
 .layout[data-aside="closed"] {
@@ -101,7 +103,8 @@ function setAside(state, moveFocus) {
 
 ## 3. Searchable and filterable
 
-Terms are data, rendered by one function. Text filter, category chips, live count.
+Store terms as data and render them with one function. Provide a text filter, category
+chips, and a live count.
 
 ```js
 const TERMS = [
@@ -120,20 +123,20 @@ function renderGlossary() {
 }
 ```
 
-Categories should carry meaning. In a comparison document `pkce` / `device` / `both`
-tells the reader which half of the argument a term belongs to, and the chip colors tie
-back to the accent colors used in the body.
+Use categories that help readers interpret terms. In a comparison document,
+`pkce` / `device` / `both` identify which protocol a term applies to. Match chip colors
+to the accent colors used in the body.
 
 ## Accessibility
 
-- `aria-expanded` + `aria-controls` on both the collapse button and the rail
-- Focus moved to whichever control is now visible; check `offsetParent` first
-- `aria-pressed` on filter chips
-- `<dl>` / `<dt>` / `<dd>` for the term list
-- `<input type="search">` with an `aria-label`
+- Set `aria-expanded` and `aria-controls` on both the collapse button and the rail.
+- Move focus to the visible control. Check `offsetParent` first.
+- Set `aria-pressed` on filter chips.
+- Use `<dl>` / `<dt>` / `<dd>` for the term list.
+- Use `<input type="search">` with an `aria-label`.
 
 ## Theming
 
-Chip and tag accents need definitions on bare `:root` _and_ in both theme blocks. A
-glossary is dense with small colored labels, so a partial dark palette shows up worst
-here. `validate.mjs` catches the token half of this automatically.
+Define chip and tag accents on bare `:root` and in both theme blocks. A glossary has
+many small colored labels, so an incomplete dark palette is especially visible.
+`validate.mjs` catches missing base token definitions.

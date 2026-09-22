@@ -1,6 +1,6 @@
 {
   "name": "@stagefright5/pi-bang-dont-ghost",
-  "version": "0.0.0",
+  "version": "0.0.2",
   "description": "Automatically continue pi after a user-entered single-bang shell command",
   "license": "Unlicense",
   "type": "module",
@@ -12,14 +12,14 @@
     "follow-up"
   ],
   "files": [
+    "CHANGELOG.md",
     "index.ts",
-    "bang-follow-up.ts",
-    "bang-follow-up.test.ts",
+    "index.test.ts",
     "LICENSE",
     "README.md"
   ],
   "scripts": {
-    "test": "node --test bang-follow-up.test.ts"
+    "test": "node --test index.test.ts scripts/patch-pi-user-bash-result.test.mjs"
   },
   "repository": {
     "type": "git",

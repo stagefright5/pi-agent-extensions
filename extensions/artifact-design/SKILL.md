@@ -6,10 +6,8 @@ compatibility: Requires Node.js 20+ and network access to install vite and vite-
 
 # Artifact design
 
-Approach this as the design lead at a small studio known for versatility, giving every
-client a visual identity pitched at the treatment the task actually calls for. Make
-deliberate choices about palette, typography, and layout specific to this subject, and
-avoid templated designs.
+Choose a palette, typography, and layout that suit the subject and the task. Give each
+artifact its own visual identity rather than reusing a generic template.
 
 All paths below are relative to the directory containing this `SKILL.md`. Resolve them
 to absolute paths before invoking tools; never assume the current working directory is
@@ -19,24 +17,23 @@ the skill directory.
 
 ### 1. Read the request
 
-Calibrate treatment, not whether to design. A doc deserves the same craft as a landing
-page — what changes is the treatment that craft is delivered in. Most requests want a
-_polished but utilitarian_ result: real typographic hierarchy, considered spacing, a
-proper palette, no gigantic hero. Some — a landing page, a game, a tool they will keep
-— want an editorial treatment.
+Design documents as carefully as landing pages, but adapt the style to the request.
+Most requests need clear typographic hierarchy, consistent spacing, and a coordinated
+palette without a large hero section. A landing page, a game, or a tool for repeated
+use may call for an editorial style.
 
 Read [references/FUNDAMENTALS.md](references/FUNDAMENTALS.md) before writing any code.
 It is the full design brief and it governs everything below.
 
 ### 2. Plan before building
 
-Sketch a compact token system first:
+Plan a small token system first:
 
-- **Color** — 4–6 named hex values
-- **Type** — typefaces for 2+ roles: a characterful display face used with restraint, a body face, a utility face for captions or data
-- **Layout** — the concept in one or two sentences
+- Choose 4–6 named hex values for colors.
+- Choose typefaces for at least two roles, such as a distinctive display face used sparingly, a body face, or a utility face for captions or data.
+- Describe the layout in one or two sentences.
 
-Run a **mandatory domain-language preflight** before scaffolding:
+You must check the domain language before scaffolding:
 
 1. Count the distinct domain terms, acronyms, protocol concepts, and specialist
    configuration names that a new reader may not know.
@@ -44,11 +41,11 @@ Run a **mandatory domain-language preflight** before scaffolding:
    - `Glossary: yes — approximately N terms`; read
      [references/GLOSSARY-SIDEBAR.md](references/GLOSSARY-SIDEBAR.md) before building.
    - `Glossary: no — approximately N terms`; state why a glossary is unnecessary.
-3. At approximately 15 or more terms, the glossary pattern is required. This applies to
-   every artifact — including interactive explainers, architecture maps, dashboards,
-   onboarding pages, and UI/document hybrids — not only prose documents.
+3. At approximately 15 or more terms, the glossary pattern is required for every
+   artifact, including interactive explainers, architecture maps, dashboards,
+   onboarding pages, and UI/document hybrids.
 
-Then build, deriving every color and type decision from that plan.
+Use the plan for every color and type decision as you build.
 
 ### 3. Scaffold
 
@@ -57,8 +54,8 @@ node scripts/scaffold.mjs <target-dir> --title "Page Name"
 cd <target-dir> && npm install
 ```
 
-The template already implements the three-state theme pattern correctly. Start from it
-rather than hand-rolling the token structure.
+The template implements the three-state theme pattern. Use it rather than writing the
+token structure from scratch.
 
 ### 4. Develop with the live server
 
@@ -66,12 +63,12 @@ rather than hand-rolling the token structure.
 npm run dev
 ```
 
-Vite with HMR, plus a harness that reproduces what only bites after publish: a theme
-tri-state control, host-ground simulation, artifact CSP headers, and a
+The server runs Vite with HMR. Its harness simulates the published runtime with a
+three-state theme control, host-ground simulation, artifact CSP headers, and a
 `window.artifactAgent` capability stub. See [references/DEV-SERVER.md](references/DEV-SERVER.md).
 
-**Cycle all three theme states before considering the page done.** `system` stamps no
-attribute and is the state most viewers are in.
+Test all three theme states before considering the page done. `system` sets no
+attribute and is the state most viewers use.
 
 ### 5. Build and validate
 
@@ -79,16 +76,16 @@ attribute and is the state most viewers are in.
 npm run build     # or: node scripts/build.mjs <target-dir>
 ```
 
-Inlines everything into `dist/artifact.html` via `vite-plugin-singlefile` and runs the
-validator. It exits non-zero on an off-allowlist reference, a non-inlined asset, a
-theme token defined only inside a theme block, or a page over 16MB.
+The build command inlines everything into `dist/artifact.html` via `vite-plugin-singlefile`
+and runs the validator. It exits non-zero on an off-allowlist reference, a non-inlined
+asset, a theme token defined only inside a theme block, or a page over 16MB.
 
-Repeat the domain-language preflight against the finished copy because terminology
-usually grows during implementation. If the glossary threshold is now met, add it and
-verify desktop pinning, collapse behavior, search, filters, mobile stacking,
-accessibility, and all three theme states before publishing.
+Repeat the domain-language check on the finished copy. Implementation often adds
+terminology. If the glossary threshold is now met, add a glossary and verify desktop
+pinning, collapse behavior, search, filters, mobile stacking, accessibility, and all
+three theme states before publishing.
 
-Never publish a file that has not passed this.
+Never publish a file that has not passed validation and these checks.
 
 ### 6. Publish
 
@@ -97,26 +94,26 @@ source `index.html`.
 
 ## Non-negotiables
 
-1. **One self-contained file.** External stylesheets, images and media are blocked by
-   CSP with no visible error. Only scripts from cdnjs / jsdelivr `/npm/` /
+1. Build one self-contained file. CSP blocks external stylesheets, images and media
+   with no visible error. Only scripts from cdnjs / jsdelivr `/npm/` /
    cdn.tailwindcss.com / code.jquery.com, stylesheets from fonts.googleapis.com, and
-   fonts from fonts.gstatic.com may be external. Everything else inlines.
-2. **Three theme states, not two.** Define the complete palette on bare `:root`;
-   redefine _only tokens_ under `@media (prefers-color-scheme: dark)` guarded as
+   fonts from fonts.gstatic.com may be external. Inline everything else.
+2. Support all three theme states. Define the complete palette on bare `:root`;
+   redefine only tokens under `@media (prefers-color-scheme: dark)` guarded as
    `:root:not([data-theme="light"])`; redefine again under `:root[data-theme="dark"]`.
    Never give a color its only definition inside a themed block.
-3. **Explicit `background` on `body`,** from a token. A transparent body borrows the
-   host's ground and inverts in one theme.
-4. **Real content, never lorem.**
-5. **Name the page like a product.** A short noun phrase specific to the subject — no
-   appended explainer after a dash or colon, no generic category label.
+3. Set an explicit `background` on `body` using a token. A transparent body shows the
+   host's background, which may be the opposite theme.
+4. Use real content, never lorem ipsum.
+5. Name the page like a product. Use a short noun phrase specific to the subject.
+   Do not append an explanation after a dash or colon or use a generic category label.
 
 ## Patterns
 
-- [Glossary sidebar](references/GLOSSARY-SIDEBAR.md) — pinned, collapsible, filterable
-  term list for any artifact carrying ~15+ domain terms, including interactive
-  explainers and UI/document hybrids. Includes the fixed-height scroll shell, which has
-  three non-obvious CSS requirements.
+- [Glossary sidebar](references/GLOSSARY-SIDEBAR.md) provides a pinned, collapsible,
+  filterable term list for any artifact with approximately 15 or more domain terms,
+  including interactive explainers and UI/document hybrids. It includes a fixed-height
+  scrolling layout with three required CSS rules.
 
 ## Scripts
 

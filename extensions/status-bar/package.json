@@ -1,6 +1,6 @@
 {
   "name": "@stagefright5/pi-status-bar",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A compact single-line status bar for pi",
   "license": "Unlicense",
   "type": "module",
@@ -11,9 +11,14 @@
     "tui"
   ],
   "files": [
+    "CHANGELOG.md",
     "index.ts",
+    "status-bar-format.ts",
     "README.md"
   ],
+  "scripts": {
+    "test": "node --test status-bar-format.test.ts"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/stagefright5/pi-agent-extensions.git",

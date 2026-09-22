@@ -1,6 +1,6 @@
 {
   "name": "@stagefright5/pi-artifact-design",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Design self-contained HTML artifacts with a local Vite dev server, theme/CSP harness, and single-file build",
   "license": "Unlicense",
   "type": "module",
@@ -12,6 +12,7 @@
     "design"
   ],
   "files": [
+    "CHANGELOG.md",
     "index.ts",
     "SKILL.md",
     "README.md",

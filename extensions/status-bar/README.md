@@ -1,16 +1,15 @@
 # Compact Status Bar
 
-<!-- prettier-ignore -->
-DISCLAIMER: This is *mostly* vibe-coded using pi agent cli
+Most of this extension was written with the pi agent CLI.
 
-Replaces pi's built-in multi-line footer with a compact, single-line status bar in TUI mode.
+Replaces pi's built-in multi-line footer with a single-line status bar in TUI mode.
 
 [Back to the extension workspace](../../README.md)
 
 ## Display
 
 ```text
-cwd (git-branch) | context percentage/window | cost | extension statuses
+cwd (git-branch) | context percentage/window | cost | provider/model display name (thinking level) | extension statuses
 ```
 
 The footer includes:
@@ -19,16 +18,17 @@ The footer includes:
 - the current Git branch, when available
 - estimated context usage and total model context window
 - cumulative assistant-message cost for the session
+- the active provider, model display name, and thinking level, such as `anthropic/Claude Sonnet 4.6 (high)`; non-reasoning models show `(off)`
 - active statuses published by extensions through `ctx.ui.setStatus()`
 
-It deliberately omits the model name and cumulative input, output, and cache-token metrics. Extension statuses are sorted by status ID, sanitized to one line, and appended after the built-in fields.
+The footer omits cumulative input, output, and cache-token metrics. It sorts extension statuses by status ID, removes line breaks, and appends them after the built-in fields.
 
 ## Colors and width
 
-- normal context usage is dimmed
-- usage above 70% is shown as a warning
-- usage above 90% is shown as an error
-- the complete footer is truncated with an ellipsis to fit the terminal width
+- Normal context usage appears dimmed.
+- Usage above 70% appears as a warning.
+- Usage above 90% appears as an error.
+- The footer truncates with an ellipsis to fit the terminal width.
 
 Plan Mode uses the extension-status area to show its active state, plan title, iteration count, and relevant shortcuts.
 

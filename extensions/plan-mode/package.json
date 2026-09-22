@@ -1,6 +1,6 @@
 {
   "name": "@stagefright5/pi-plan-mode",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Evidence-guided planning and interactive plan review for pi",
   "license": "Unlicense",
   "type": "module",
@@ -10,6 +10,7 @@
     "planning"
   ],
   "files": [
+    "CHANGELOG.md",
     "index.ts",
     "utils.ts",
     "README.md"

@@ -1,9 +1,8 @@
 # Provider URL Logger
 
-<!-- prettier-ignore -->
-DISCLAIMER: This is *mostly* vibe-coded using pi agent cli
+Most of this extension was written with the pi agent CLI.
 
-A small diagnostic extension that records which provider endpoint pi selects for each provider request.
+Records which provider endpoint pi selects for each request.
 
 [Back to the extension workspace](../../README.md)
 
@@ -21,11 +20,11 @@ The fields are:
 2. provider name and model ID
 3. the model's configured base URL
 
-The extension does **not** log prompts, response content, request payloads, headers, or API keys.
+The extension does not log prompts, response content, request payloads, headers, or API keys.
 
 ## Log file
 
-Entries are appended to:
+The extension appends entries to:
 
 ```text
 ~/.pi/agent/provider-urls.log

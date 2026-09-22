@@ -2,13 +2,14 @@
  * Compact Status Bar Extension
  *
  * Replaces pi's multi-line built-in footer with one line:
- *   cwd | context usage | cost | extension statuses
+ *   cwd | context usage | cost | provider/model (thinking level) | extension statuses
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth } from "@earendil-works/pi-tui";
 import { homedir } from "node:os";
 import { isAbsolute, relative, resolve, sep } from "node:path";
+import { buildStatusBarParts, formatModelDisplayLabel } from "./status-bar-format.ts";
 
 function formatCwd(cwd: string): string {
 	const home = homedir();
@@ -70,17 +71,18 @@ export default function statusBarExtension(pi: ExtensionAPI): void {
 								? theme.fg("warning", contextText)
 								: theme.fg("dim", contextText);
 
-					const parts = [
-						theme.fg("dim", cwd),
-						styledContext,
-						theme.fg("dim", `$${getTotalCost(ctx).toFixed(3)}`),
-					];
-
 					const statuses = Array.from(footerData.getExtensionStatuses().entries())
 						.sort(([left], [right]) => left.localeCompare(right))
 						.map(([, text]) => sanitizeStatusText(text))
 						.filter(Boolean);
-					parts.push(...statuses);
+					const modelLabel = formatModelDisplayLabel(ctx.model, ctx.thinkingLevel ?? pi.getThinkingLevel());
+					const parts = buildStatusBarParts(
+						theme.fg("dim", cwd),
+						styledContext,
+						theme.fg("dim", `$${getTotalCost(ctx).toFixed(3)}`),
+						modelLabel ? theme.fg("dim", modelLabel) : undefined,
+						statuses,
+					);
 
 					const separator = theme.fg("dim", " | ");
 					return [truncateToWidth(parts.join(separator), width, theme.fg("dim", "…"))];

@@ -1,9 +1,8 @@
 # Global Prompt History Search
 
-<!-- prettier-ignore -->
-DISCLAIMER: This is *mostly* vibe-coded using pi agent cli
+Most of this extension was written with the pi agent CLI.
 
-Adds shell-style reverse search across textual user prompts from a local persisted prompt index.
+Adds shell-style reverse search across saved user prompts in a local index.
 
 [Back to the extension workspace](../../README.md)
 
@@ -11,37 +10,36 @@ Adds shell-style reverse search across textual user prompts from a local persist
 
 Open the picker in TUI mode:
 
-- `Alt+R` — open search using the current editor draft as the initial query
-- `/prompt-history [initial query]` — open search with an optional explicit query
+- Press `Alt+R` to search using the current editor draft as the initial query.
+- Run `/prompt-history [initial query]` to search with an optional query.
 
 Inside the picker:
 
-- type to filter prompts
-- matching text is highlighted in each prompt preview
-- `Alt+R` or `Down` — select the next match
-- `Up` — select the previous match
-- `Page Up` / `Page Down` — move by one visible page
-- `Right Arrow` — expand the full selected prompt
-- `Left Arrow` — collapse the expanded prompt
-- `Enter` — restore the selected prompt into the editor
-- `Escape` or `Ctrl+C` — cancel and preserve the existing draft
+- Type to filter prompts. The picker highlights matching text in each preview.
+- Press `Alt+R` or `Down` to select the next match.
+- Press `Up` to select the previous match.
+- Press `Page Up` / `Page Down` to move by one visible page.
+- Press `Right Arrow` to expand the full selected prompt.
+- Press `Left Arrow` to collapse the expanded prompt.
+- Press `Enter` to restore the selected prompt into the editor.
+- Press `Escape` or `Ctrl+C` to cancel and preserve the existing draft.
 
-Restoring a prompt does **not** submit it or switch to its source session.
+Restoring a prompt does not submit it or switch to its source session.
 
 ## Search scope
 
-The persisted index contains textual user prompts from the last 30 days. New prompts are added as the user sends them. Slash-style inputs are skipped so extension commands and built-in commands are not indexed as prompts.
+The index contains text from user prompts sent in the last 30 days. The extension adds new prompts as you send them. It skips slash-style inputs so it does not index extension commands or built-in commands as prompts.
 
-On first `Alt+R`, if the index has not yet been bootstrapped from saved sessions, the extension performs a one-time 30-day backfill from local pi session JSONL files and persists the result. Later searches load the persisted index directly instead of scanning all sessions.
+The first time you press `Alt+R`, the extension reads the last 30 days of prompts from local pi session JSONL files and saves the index, unless it has already done so. Later searches load the saved index instead of scanning all sessions.
 
-Image-only prompts and empty text are skipped. With an active query, results are ranked by best match first, with newer prompts used as the tie-breaker. With an empty query, results remain newest-first. Results show:
+The extension skips image-only prompts and empty text. Search results appear best-match-first, with newer prompts first when matches rank equally. An empty query shows the newest prompts first. Results show:
 
 - prompt preview
 - date and time
 - session name and file ID
 - source working directory
 
-Matching is case-insensitive and applies only to the user prompt text. Every whitespace-separated query token must either be a substring of the prompt text or satisfy pi-tui's fuzzy matcher. Ranking favors exact phrase matches, then substring token matches, then fuzzy token matches. Prompt previews are excerpted around the first match so highlighted matching text is visible instead of being hidden behind ellipses.
+Matching is case-insensitive and applies only to the user prompt text. Every whitespace-separated query token must either be a substring of the prompt text or satisfy pi-tui's fuzzy matcher. Ranking favors exact phrase matches, then substring token matches, then fuzzy token matches. Each preview shows the text around the first match.
 
 ## Persistence, retention, and performance
 
@@ -51,11 +49,11 @@ The index is stored locally at:
 ~/.pi/agent/prompt-history-search/index.json
 ```
 
-Entries older than 30 days are purged whenever the index is loaded or updated.
+The extension removes entries older than 30 days whenever it loads or updates the index.
 
-The normal search path only reads the persisted JSON index, so `Alt+R` should be fast after the one-time bootstrap. The bootstrap scanner reads local session files directly with limited concurrency and caches parsed sessions in memory by path and modification time for the current pi process.
+After the initial scan, `Alt+R` reads only the saved JSON index. The scanner limits how many local session files it reads at once. It caches parsed sessions in memory by path and modification time for the current pi process.
 
-Unreadable files are skipped. Partially malformed JSONL files contribute any entries pi can parse and produce a warning in the picker instead of aborting the entire search.
+The scanner skips unreadable files. If a JSONL file is partially malformed, it keeps the entries pi can parse and shows a warning in the picker instead of aborting the search.
 
 ## Privacy
 

@@ -1,10 +1,12 @@
-# Why Polling Exists AKA https://github.com/earendil-works/pi/issues/8530
+# Why polling existed
 
-Bang Don't Ghost starts an agent follow-up after Pi finishes a user-entered single-`!` shell command. The extension polls session entries because Pi 0.84.2 exposes a pre-execution `user_bash` hook, but no post-execution event for the recorded result.
+See https://github.com/earendil-works/pi/issues/8530
 
-## The missing lifecycle event
+> This is a historical design note. Bang Don't Ghost no longer polls on this branch. It now requires the experimental `user_bash_result` Pi event described below.
 
-Pi's extension lifecycle currently provides this interception point:
+## Original gap
+
+Pi 0.84.2–0.84.3 publish a pre-execution `user_bash` hook:
 
 ```text
 user enters !command
@@ -19,9 +21,7 @@ shell execution
 bashExecution result recorded
 ```
 
-`user_bash` fires before execution. It exposes the command, working directory, and whether `!!` was used. A handler may return custom `BashOperations` or a complete replacement result.
-
-What Bang Don't Ghost needs is a notification after the final step:
+The original extension needed to start a new agent turn only after the final `bashExecution` message was available in model context. There was no published completion hook at that point.
 
 ```text
 user enters !command
@@ -36,14 +36,12 @@ shell execution
 bashExecution result recorded
         │
         ▼
-user_bash_result event       ← not currently exposed
+user_bash_result event       ← missing from published Pi 0.84.2–0.84.3
 ```
 
-The timing matters. Pi must record the `bashExecution` message before the extension starts another agent turn so that the command and output are already present in model context.
+## Why interception was not enough
 
-## Why the extension does not intercept execution
-
-Bang Don't Ghost could return its own operations from `user_bash`, but that would make it an execution backend rather than an observer.
+A `user_bash` handler can return custom `BashOperations` or a complete replacement result. Using that capability only to observe completion would make Bang Don't Ghost an execution backend.
 
 ```text
                          ┌── local shell
@@ -52,84 +50,34 @@ user_bash interception ──┼── SSH extension
                          └── container extension
 ```
 
-Pi uses the first `user_bash` handler that returns a result. If Bang Don't Ghost returned operations, it could prevent an SSH, sandbox, container, or other shell-routing extension from handling the command. Reimplementing execution would also risk drifting from Pi's configured shell, command prefix, cancellation, timeout, streaming, and process-tree behavior.
+Pi uses the first `user_bash` handler that returns a result. Returning a result could prevent another extension from routing the command. If Bang Don't Ghost handled execution, it would also have to preserve Pi's configured shell, command prefix, streaming, timeout, cancellation, truncation, and process-tree behavior.
 
-Instead, Bang Don't Ghost returns nothing from `user_bash`:
+The extension returned nothing from `user_bash` and instead observed the result Pi recorded for any backend.
 
-```text
-Bang Don't Ghost observes command start
-                │
-                ├── returns undefined
-                │
-                ▼
-Pi or another extension chooses execution backend
-                │
-                ▼
-Pi records the common bashExecution message
-                │
-                ▼
-Bang Don't Ghost observes the recorded result
-```
+## Historical polling workaround
 
-This keeps execution ownership with Pi and composes with custom backends.
-
-## End-to-end flow
-
-### Command entered while Pi is idle
+The old implementation remembered each single-`!` command and scanned session entries until a matching `bashExecution` appeared.
 
 ```text
-User                 Pi                  Extension              Provider
- │                    │                      │                      │
- │ !npm test          │                      │                      │
- ├───────────────────►│                      │                      │
- │                    │ user_bash            │                      │
- │                    ├─────────────────────►│                      │
- │                    │                      │ remember "npm test" │
- │                    │◄─────────────────────┤ return undefined     │
- │                    │                      │                      │
- │                    │ execute command      │ poll every 50 ms     │
- │                    │───────────────┐      │                      │
- │                    │               │      │                      │
- │                    │◄──────────────┘      │                      │
- │                    │ record bashExecution │                      │
- │                    │                      │                      │
- │                    │                      │ sees recorded result │
- │                    │◄─────────────────────┤ empty hidden message │
- │                    │                      │ triggerTurn: true    │
- │                    ├────────────────────────────────────────────►│
- │                    │       context already contains command     │
- │                    │       and output                            │
+User                 Pi                  Extension
+ │                    │                      │
+ │ !npm test          │                      │
+ ├───────────────────►│                      │
+ │                    │ user_bash            │
+ │                    ├─────────────────────►│
+ │                    │                      │ remember command
+ │                    │◄─────────────────────┤ return undefined
+ │                    │                      │
+ │                    │ execute command      │ poll every 50 ms
+ │                    │───────────────┐      │
+ │                    │◄──────────────┘      │
+ │                    │ record result        │
+ │                    │                      │
+ │                    │                      │ find matching entry
+ │                    │◄─────────────────────┤ trigger follow-up
 ```
 
-### Command entered while an agent turn is active
-
-Pi defers a shell result when necessary to preserve assistant tool-call and tool-result ordering.
-
-```text
-active agent turn ─────────────────────────────── agent_end
-       │                                              │
-       ├── user runs !command                         │
-       ├── command completes                          │
-       └── result waits in Pi's pending messages ─────┘
-                                                      │
-                                                      ▼
-                                           bashExecution recorded
-                                                      │
-                                                      ▼
-                                             tracker detects it
-                                                      │
-                                                      ▼
-                                      empty message delivered as followUp
-                                                      │
-                                                      ▼
-                                          next agent turn starts
-```
-
-Using `deliverAs: "followUp"` avoids steering or interrupting the active turn. If Pi is already idle when the message is sent, `triggerTurn: true` starts the turn immediately.
-
-## Tracker design
-
-`BashCompletionTracker` stores:
+The tracker stored:
 
 ```text
 ┌────────────────────────────────────────────────┐
@@ -137,122 +85,122 @@ Using `deliverAs: "followUp"` avoids steering or interrupting the active turn. I
 │   Index of the first session entry not scanned │
 ├────────────────────────────────────────────────┤
 │ pendingCommands                                │
-│   FIFO-like array of command strings awaiting  │
-│   a matching bashExecution entry               │
+│   Command strings awaiting matching results    │
 └────────────────────────────────────────────────┘
 ```
 
-At session start, existing history is marked as already scanned:
-
-```text
-entries:          [E0] [E1] [E2] [E3]
-nextEntryIndex:                         4
-pendingCommands:  []
-```
-
-After `!echo hello` fires `user_bash`:
+Each scan advanced `nextEntryIndex` to the session snapshot's current length, regardless of whether an entry matched:
 
 ```text
 entries:          [E0] [E1] [E2] [E3]
 nextEntryIndex:                         4
 pendingCommands:  ["echo hello"]
-```
 
-After Pi records the result:
-
-```text
-entries:          [E0] [E1] [E2] [E3] [E4: bashExecution]
-nextEntryIndex:                         4
-pendingCommands:  ["echo hello"]
-                                             │
-                                             ▼ scan
+unrelated E4 arrives
+scan E4, ignore it
 nextEntryIndex:                              5
+pendingCommands:  ["echo hello"]
+
+matching E5 arrives
+scan E5, consume pending command
+nextEntryIndex:                                   6
 pendingCommands:  []
-completion:       { command: "echo hello", entryId: "E4" }
 ```
 
-The scan algorithm is equivalent to:
+Pending commands controlled whether the timer continued. A matching, non-cancelled entry triggered its follow-up immediately; the extension did not wait for every pending command to finish.
+
+## Problems with the workaround
+
+### Missing result could poll forever
+
+If a backend threw before recording `bashExecution`, no completion signal existed. The timer remained active until session shutdown.
+
+### Correlation used command text
+
+`user_bash` did not provide an execution ID shared with the later session entry. Exact command text and pending order were the only available correlation keys.
+
+### Polling had recurring overhead
+
+While any command was pending, the extension called `sessionManager.getEntries()` every 50 ms. A cursor avoided reprocessing old entries, but retrieving the entry list still had a cost.
+
+### Lifecycle code obscured the behavior
+
+To react after a shell result, the extension needed to manage a timer, reset state on session start, clean up on session shutdown, track pending commands, filter entries, and handle cancellation.
+
+## Replacement: `user_bash_result`
+
+The experimental Pi patch emits a notification after Pi appends the matching `bashExecution` message:
 
 ```text
-for each entry after nextEntryIndex:
-    ignore non-message entries
-    ignore messages whose role is not bashExecution
-    ignore entries excluded by !!
-
-    find the first pending command with exactly matching text
-    if none exists:
-        continue
-
-    remove one matching pending command
-    if the result was cancelled:
-        continue
-
-    return a completion
-
-advance nextEntryIndex to the current entry count
+user enters !command
+        │
+        ▼
+Pi executes through the selected backend
+        │
+        ▼
+Pi appends bashExecution
+        │
+        ▼
+Pi emits user_bash_result
+        │
+        ▼
+Bang Don't Ghost handles the final result directly
 ```
 
-An array is used for pending commands so repeated commands remain distinct:
+Expected payload:
+
+```ts
+interface UserBashResultEvent {
+  type: "user_bash_result";
+  command: string;
+  excludeFromContext: boolean;
+  result: {
+    output: string;
+    exitCode: number | undefined;
+    cancelled: boolean;
+    truncated: boolean;
+    fullOutputPath?: string;
+  };
+}
+```
+
+The event must be emitted only after the result is available in session and model context. It should cover:
+
+- TUI and RPC user-bash paths
+- Pi's local backend
+- extension-provided `BashOperations`
+- extension-provided complete results
+- deferred results flushed after an active agent turn
+
+The event reports the result without changing how execution-routing extensions run commands.
+
+## Current event-driven flow
 
 ```text
-pendingCommands = ["pwd", "pwd"]
-
-first recorded pwd  → removes one pending item
-second recorded pwd → removes the other pending item
+user_bash_result
+        │
+        ├── excludeFromContext? ── yes ──► stop
+        │
+        ├── cancelled? ─────────── yes ──► stop
+        │
+        ▼
+create empty hidden custom message
+        │
+        ▼
+deliverAs: followUp
+triggerTurn: true
+        │
+        ▼
+next agent turn
 ```
 
-## Poll lifecycle
+There is no command tracker, session-entry cursor, timer, or lifecycle cleanup.
 
-Only one timer is active per extension instance.
+A nonzero exit still triggers a turn because the failure output can be useful model context. `!!` and cancelled results do not trigger a provider request.
 
-```text
-session_start
-     │
-     ├── mark extension active
-     ├── cancel any old timer
-     └── reset tracker at current history length
+## Why an empty message remains
 
-single-! user_bash
-     │
-     ├── remember command
-     └── schedule immediate scan
-               │
-               ▼
-             scan
-               │
-               ├── pending remains → scan again in 50 ms
-               └── no pending      → stop timer
-
-session_shutdown
-     │
-     ├── mark extension inactive
-     └── cancel timer
-```
-
-The initial `setTimeout(..., 0)` allows Pi to continue into command execution without blocking the `user_bash` handler. Subsequent scans use a 50 ms interval. The tracker advances a cursor, so it only examines session entries added since the previous scan.
-
-## Result policy
-
-```text
-Recorded result                    Automatic follow-up
-──────────────────────────────────────────────────────
-single !, exit code 0              yes
-single !, nonzero exit code        yes
-single !, user cancelled           no
-double !!                          no
-LLM bash tool call                 no
-```
-
-A nonzero exit is still useful model context: the next turn can explain or act on the failure. A cancellation consumes the pending command without starting a provider request.
-
-Double-`!!` commands are excluded twice:
-
-1. The `user_bash` handler does not track events with `excludeFromContext: true`.
-2. The tracker ignores recorded `bashExecution` entries with that flag.
-
-## Why an empty hidden message is sent
-
-Pi's public extension API does not expose a bare "run the agent again using current context" operation. `pi.sendMessage()` can trigger a turn, but it requires a message.
+The event removes polling, but Pi still has no method to run the agent again with existing context without sending a message. `pi.sendMessage()` requires a message to trigger a turn.
 
 Bang Don't Ghost sends:
 
@@ -273,112 +221,27 @@ with:
 }
 ```
 
-The effective ordering is:
+Pi already placed the command and output in the preceding `bashExecution` context. The empty hidden message only starts or queues the next turn; it does not duplicate either value.
+
+## Temporary local typing
+
+The installed runtime patch emits `user_bash_result`, but the published TypeScript declarations for Pi 0.84.2–0.84.3 do not include it. The extension defines the payload locally and isolates one cast around `pi.on`.
 
 ```text
-bashExecution
-  command: echo hello
-  output:  hello
-
-hidden custom message
-  content: []
-
-provider request
+runtime event exists
+        │
+        ├── published ExtensionAPI types do not know it
+        │
+        ▼
+local typed registration adapter
 ```
 
-The extension does not duplicate the command or output. Pi already converts the preceding `bashExecution` entry into model context containing both.
+When Pi publishes the event type and `ExtensionAPI.on` overload, the local event interface and adapter cast can be deleted without changing runtime behavior.
 
-## Alternatives considered
+## Runtime requirement
 
-### Wrap local `BashOperations`
+Stock Pi 0.84.2–0.84.3 never emits `user_bash_result`. On an unpatched runtime, this branch loads but receives no completion event, so it starts no follow-up. It has no polling fallback. Restoring one would also restore the complexity and limitations this refactor removes.
 
-This would reveal completion directly, but it would claim the `user_bash` interception slot and could prevent another extension from routing execution. It would also need to preserve Pi's exact local shell configuration.
+The source checkout provides `scripts/patch-pi-user-bash-result.mjs`. The locally installed `pi-patch-user-bash-result` command invokes that script to verify or reapply the patch after Pi updates. The script is idempotent and uses exact source anchors. It syntax-checks a temporary candidate before atomic replacement. On an unknown Pi build, it fails with terminal and macOS notifications rather than partially modifying the build.
 
-### Return a complete replacement result
-
-The extension would have to execute every command itself and reproduce output streaming, cancellation, timeout, truncation, shell selection, and remote-backend behavior.
-
-### Call the model provider directly
-
-A direct provider call would bypass Pi's agent loop, tool execution, retries, compaction, lifecycle events, queue handling, session persistence, and normal rendering.
-
-### Use `before_agent_start` or `context`
-
-These hooks can modify an agent turn that is already starting. They cannot start a new turn after an otherwise passive `!` command.
-
-### Add a fixed command timeout
-
-A timeout would stop polling leaks, but it would incorrectly abandon legitimate long-running commands. The extension does not silently impose an execution-duration policy.
-
-## Limitations of polling
-
-### No recorded result
-
-If a shell backend throws before Pi records a `bashExecution` entry, the pending command cannot be resolved. Polling continues until the session shuts down.
-
-```text
-pending command
-      │
-      ▼
-backend throws before recording
-      │
-      └── no completion signal exists
-                    │
-                    ▼
-          poll remains active
-```
-
-### Correlation uses command text
-
-`user_bash` does not provide an execution ID that later appears on the session result, so correlation uses exact command text. Repeated successfully recorded commands are handled one at a time. If an execution never records and the identical command is run again, the later result can satisfy the older pending item and leave another pending item unresolved.
-
-### Polling overhead
-
-While at least one command is pending, the extension calls `sessionManager.getEntries()` every 50 ms. The tracker only processes the newly added suffix, but retrieving the session entry list still has a cost.
-
-### Empty-message provider behavior
-
-The trigger message has empty content. Providers that reject or inconsistently serialize an empty final message may not support this approach.
-
-## Removal path
-
-A post-execution event emitted after the result is recorded would remove the timer and tracker entirely. The required extension could be approximately:
-
-```typescript
-pi.on("user_bash_result", (event) => {
-  if (event.excludeFromContext || event.result.cancelled) return;
-
-  const { message, options } = createEmptyFollowUpRequest();
-  pi.sendMessage(message, options);
-});
-```
-
-For this to replace polling safely, the event should:
-
-- fire after `bashExecution` is available in session and model context
-- cover both TUI and RPC user-bash paths
-- cover Pi's local backend and extension-provided operations/results
-- include command, `excludeFromContext`, and final `BashResult`
-- be observational so it composes with execution-routing extensions
-
-Until Pi exposes that completion point, polling the common recorded session message is the least invasive way to observe every backend without taking ownership of shell execution.
-
-## Source map
-
-```text
-index.ts
-  user_bash/session lifecycle handlers
-  50 ms poll scheduling
-  hidden follow-up dispatch
-
-bang-follow-up.ts
-  pending command tracker
-  session-entry cursor
-  result matching and cancellation policy
-
-bang-follow-up.test.ts
-  result policy
-  repeated-command matching
-  hidden follow-up shape
-  single-! and double-!! integration behavior
-```
+The command is manual. It does not run during Pi startup, and neither the patcher nor its global command shim is part of the published npm package.
