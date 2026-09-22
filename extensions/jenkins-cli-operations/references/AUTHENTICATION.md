@@ -1,6 +1,6 @@
 # Authentication and installation
 
-Paths in this reference are relative to the directory containing `SKILL.md`. Resolve script paths before execution rather than assuming the current working directory.
+Paths in this reference are relative to the directory containing `SKILL.md`. Resolve script paths before execution. Do not assume the current working directory is the skill directory.
 
 ## Prerequisites
 
@@ -10,7 +10,7 @@ Paths in this reference are relative to the directory containing `SKILL.md`. Res
 - The official `jenkins-cli.jar` or a `jenkins-cli` launcher on `PATH`
 - A Jenkins user ID and API token with the minimum required permissions
 
-The Jenkins user ID may differ from an email address or display name, particularly with SSO. Find it on the Jenkins user page. Create an API token under **User → Configure → API Token**.
+The Jenkins user ID may differ from an email address or display name, especially with SSO. Find it on the Jenkins user page. To create an API token, open User, then Configure, then API Token.
 
 Never paste the token into chat, tickets, source control, or shell command arguments.
 
@@ -105,7 +105,7 @@ node "scripts/configure.mjs" `
 
 ### Native credential store
 
-The configuration stores a service label and Jenkins user ID. The helper copies the retrieved token into a temporary credential file only for the lifetime of each CLI invocation.
+The configuration stores a service label and Jenkins user ID. For each CLI invocation, the helper retrieves the token and copies it into a temporary credential file. The file exists only for that invocation.
 
 The default service label is `jenkins-cli:<jenkins-host>`.
 
@@ -162,11 +162,11 @@ node "scripts/configure.mjs" `
   --user-id $Credential.UserName
 ```
 
-The helper uses `Get-StoredCredential`; verify availability with `Get-Command Get-StoredCredential`.
+The helper uses `Get-StoredCredential`. Check that it is available with `Get-Command Get-StoredCredential`.
 
 ### Environment injection
 
-Use this provider for ephemeral shells populated by a secret manager:
+Use this provider for temporary shells where a secret manager sets the environment variables:
 
 ```bash
 export JENKINS_USER_ID='...'
@@ -200,6 +200,6 @@ node scripts/jenkins.mjs -- who-am-i
 node scripts/jenkins.mjs -- help
 ```
 
-An HTTP 401 normally means the Jenkins user ID/token pair is invalid. Do not bypass authentication or TLS checks.
+An HTTP 401 usually means the Jenkins user ID and token pair is invalid. Do not bypass authentication or TLS checks.
 
 If a token is exposed, revoke it in Jenkins, create a replacement, update the selected provider, and rerun `who-am-i`.

@@ -1,13 +1,12 @@
-# Jenkins CLI Operations
+# Jenkins CLI operations
 
-<!-- prettier-ignore -->
-DISCLAIMER: This is *mostly* vibe-coded using pi agent cli
+Most of this package was written with the pi agent CLI.
 
-Standalone Pi package for the bundled `jenkins-cli-operations` Agent Skill.
+This standalone Pi package includes the `jenkins-cli-operations` Agent Skill.
 
 [Back to the extension workspace](../../README.md)
 
-The npm package exposes `SKILL.md` directly through its Pi manifest. The colocated `index.ts` wrapper exposes the same skill when this source directory is loaded through Pi's extension auto-discovery. After `/reload` or restart, invoke it with:
+The npm package exposes `SKILL.md` through its Pi manifest. The `index.ts` wrapper in this directory exposes the same skill when Pi's extension auto-discovery loads the directory. After `/reload` or a restart, invoke it with:
 
 ```text
 /skill:jenkins-cli-operations
@@ -15,15 +14,15 @@ The npm package exposes `SKILL.md` directly through its Pi manifest. The colocat
 
 ## Contents
 
-- `SKILL.md` — concise agent workflow and mutation-confirmation policy
-- `references/AUTHENTICATION.md` — installation and credential-provider setup
-- `references/OPERATIONS.md` — command recipes and troubleshooting
-- `scripts/configure.mjs` — writes non-secret controller configuration
-- `scripts/jenkins.mjs` — authenticated pass-through to the official Jenkins CLI
-- `scripts/inspect-job.mjs` — read-only job and parameter inspection
-- `scripts/trigger-build.mjs` — build dry-run, validation, confirmation, and execution
+- `SKILL.md` describes the agent workflow and mutation-confirmation policy.
+- `references/AUTHENTICATION.md` covers installation and credential-provider setup.
+- `references/OPERATIONS.md` contains command recipes and troubleshooting steps.
+- `scripts/configure.mjs` writes non-secret controller configuration.
+- `scripts/jenkins.mjs` authenticates and passes commands to the official Jenkins CLI.
+- `scripts/inspect-job.mjs` inspects jobs and parameters without changing them.
+- `scripts/trigger-build.mjs` handles build dry-runs, validation, confirmation, and execution.
 
-The generic wrapper intentionally supports every upstream Jenkins CLI command without classifying or restricting it. The skill instructs the agent to obtain confirmation before mutating Jenkins.
+The generic wrapper supports every upstream Jenkins CLI command without classifying or restricting it. The skill instructs the agent to obtain confirmation before mutating Jenkins.
 
 ## Requirements
 

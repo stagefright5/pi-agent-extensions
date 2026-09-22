@@ -12,6 +12,7 @@
     "design"
   ],
   "files": [
+    "CHANGELOG.md",
     "index.ts",
     "SKILL.md",
     "README.md",
