@@ -1,7 +1,6 @@
 # Bang Don't Ghost
 
-<!-- prettier-ignore -->
-DISCLAIMER: This is *mostly* vibe-coded using pi agent cli
+Most of this extension was written with the pi agent CLI.
 
 Automatically starts an agent follow-up after a user-entered single-`!` shell command finishes, instead of leaving the recorded result waiting for another prompt.
 
@@ -9,7 +8,7 @@ Automatically starts an agent follow-up after a user-entered single-`!` shell co
 
 ## Runtime requirement
 
-Bang Don't Ghost requires Pi to emit a post-execution `user_bash_result` extension event after the matching `bashExecution` message has been recorded. Stock Pi does not currently provide this event in its published extension API. The local patcher supports only the installed **Pi 0.87.0 bundled runtime** and fails closed for every other version or layout.
+Bang Don't Ghost requires Pi to emit a post-execution `user_bash_result` extension event after recording the matching `bashExecution` message. Stock Pi does not currently provide this event in its published extension API. The local patcher supports only the installed Pi 0.87.0 bundled runtime and fails closed for every other version or layout.
 
 The expected runtime payload is:
 
@@ -28,7 +27,7 @@ interface UserBashResultEvent {
 }
 ```
 
-Without that runtime patch, the event never fires and the extension does nothing. There is deliberately no polling fallback.
+Without that runtime patch, the event never fires and the extension does nothing. There is no polling fallback.
 
 ## Patch command
 
@@ -50,7 +49,7 @@ The command:
 - writes through a same-directory temporary file and runs `node --check` before an atomic rename
 - leaves Pi unchanged, prints diagnostics, shows a macOS notification, and exits nonzero when the version, layout, or exact anchors differ
 
-This is a manual command, not a Pi startup wrapper. Normal Pi startup does not automatically run it. Rerun it after reinstalling Pi 0.87.0. A newer Pi release requires an explicit patcher update rather than falling back to an older patch shape. The patcher and command shim are development-source automation and are not included in the published npm package.
+Run this command manually. Pi startup does not run it. Rerun it after reinstalling Pi 0.87.0. A newer Pi release requires a patcher update, and the patcher will not apply an older patch. The patcher and command shim are development tools and are not included in the published npm package.
 
 For an explicit Pi 0.87.0 bundled runtime test target, the repository script also accepts `--target <runtime.js>`.
 
@@ -69,9 +68,9 @@ Behavior:
 - successful and nonzero command results start a follow-up
 - user-cancelled commands do not start a follow-up
 - `!!command` results do not start a follow-up
-- commands completed while the agent is busy are delivered through Pi's follow-up queue
+- Pi's follow-up queue delivers commands completed while the agent is busy
 - LLM-initiated `bash` tool calls are unaffected
-- no timer, session-entry scan, command tracker, or command-text correlation is used
+- the extension uses no timer, session-entry scan, command tracker, or command-text correlation
 
 The extension has no slash command or configuration; installing it enables the behavior. Every eligible command starts a model-provider request, which may incur usage charges.
 

@@ -4,11 +4,11 @@ description: Configure and operate Jenkins through the official CLI. Use for aut
 compatibility: Requires Node.js 18+, Java compatible with the Jenkins controller, network access to Jenkins, and either jenkins-cli on PATH or a downloaded jenkins-cli.jar.
 ---
 
-# Jenkins CLI Operations
+# Jenkins CLI operations
 
-Use the bundled scripts for repeatable Jenkins CLI configuration, authentication, job inspection, and build execution.
+Use the bundled scripts to configure the Jenkins CLI, authenticate, inspect jobs, and run builds.
 
-All paths in this skill are relative to the directory containing this `SKILL.md`. Resolve them to absolute paths before invoking tools; never assume the current working directory is the skill directory.
+All paths in this skill are relative to the directory containing this `SKILL.md`. Resolve them to absolute paths before invoking tools. Never assume the current working directory is the skill directory.
 
 ## Core rules
 
@@ -22,7 +22,7 @@ All paths in this skill are relative to the directory containing this `SKILL.md`
 
 ### 1. Establish the operation
 
-Determine the requested controller, operation, full job or folder name, build parameters, and whether build execution should return after queueing, follow completion, or stream console output. Ask only for details that cannot be discovered from existing configuration or Jenkins.
+Determine the requested controller, operation, full job or folder name, and build parameters. Check whether build execution should return after queueing, follow completion, or stream console output. Ask only for details you cannot discover from existing configuration or Jenkins.
 
 ### 2. Reuse or create configuration
 
@@ -42,7 +42,7 @@ If configuration is absent or invalid, follow [Authentication and installation](
 
 ### 3. Perform read-only discovery
 
-Use bounded discovery rather than dumping a large controller:
+Limit discovery output rather than listing everything on a large controller:
 
 ```bash
 node scripts/jenkins.mjs -- list-jobs
@@ -91,18 +91,18 @@ Without `--yes`, the helper requires an interactive typed confirmation. Interrup
 
 ### 6. Report the outcome
 
-Report the exact job, build number and URL when available, final status, relevant test/build summary, artifact or report URLs, and non-fatal warnings. Distinguish the Jenkins result from local follow interruption.
+Report the exact job, final status, and build number and URL when available. Include a relevant test or build summary, artifact or report URLs, and non-fatal warnings. Distinguish the Jenkins result from an interruption of the local follow process.
 
 ## Direct CLI commands
 
-The authenticated wrapper intentionally passes through any official Jenkins CLI command:
+The authenticated wrapper passes through any official Jenkins CLI command:
 
 ```bash
 node scripts/jenkins.mjs -- help <command>
 node scripts/jenkins.mjs -- console 'Folder/Job' 123
 ```
 
-Determine whether a command mutates Jenkins before running it. Apply the same summary and confirmation rule to every mutating direct command; the wrapper itself does not classify or restrict commands.
+Determine whether a command mutates Jenkins before running it. Apply the same summary and confirmation rule to every mutating direct command. The wrapper does not classify or restrict commands.
 
 ## References
 

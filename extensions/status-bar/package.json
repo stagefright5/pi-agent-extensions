@@ -11,6 +11,7 @@
     "tui"
   ],
   "files": [
+    "CHANGELOG.md",
     "index.ts",
     "status-bar-format.ts",
     "README.md"

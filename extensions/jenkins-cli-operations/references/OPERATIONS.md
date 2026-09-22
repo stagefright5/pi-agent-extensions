@@ -1,6 +1,6 @@
 # Operational recipes and troubleshooting
 
-Paths in this reference are relative to the directory containing `SKILL.md`. Resolve script paths before execution rather than assuming the current working directory.
+Paths in this reference are relative to the directory containing `SKILL.md`. Resolve script paths before execution. Do not assume the current working directory is the skill directory.
 
 ## Read-only commands
 
@@ -37,7 +37,7 @@ node scripts/trigger-build.mjs \
   --dry-run
 ```
 
-The helper contacts Jenkins, confirms that the job is buildable, validates declared parameter names, prints a build summary, and exits before confirmation or CLI execution. `--yes` has no effect when `--dry-run` is present.
+The helper contacts Jenkins to confirm that the job is buildable and validate declared parameter names. It prints a build summary and exits before confirmation or CLI execution. `--yes` has no effect when `--dry-run` is present.
 
 ## Trigger modes
 
@@ -59,7 +59,7 @@ Follow and stream console output:
 node scripts/trigger-build.mjs --job 'Folder/Job' --params-file params.json --follow --verbose --yes
 ```
 
-`--verbose` requires `--follow`. Follow mode uses Jenkins CLI `build -f`; interrupting the local process does not abort the server-side build. The final local exit status reflects the Jenkins result unless the local process itself is interrupted.
+`--verbose` requires `--follow`. Follow mode uses Jenkins CLI `build -f`. Interrupting the local process does not abort the server-side build. The final local exit status reflects the Jenkins result unless the local process is interrupted.
 
 ## Confirmation summary
 
@@ -86,7 +86,7 @@ A parameter file is a JSON object with scalar values:
 }
 ```
 
-On Linux/macOS, restrict a parameter file containing internal values:
+On Linux/macOS, restrict access to a parameter file containing internal values:
 
 ```bash
 chmod 600 params.json
@@ -109,7 +109,7 @@ node scripts/jenkins.mjs -- help <command>
 node scripts/jenkins.mjs -- <command> [arguments...]
 ```
 
-The wrapper deliberately does not classify or block mutating commands. Determine command semantics first with `help <command>`, and obtain confirmation before mutations.
+The wrapper does not classify or block mutating commands. Check what a command does with `help <command>` before running it, and obtain confirmation before mutations.
 
 ## Finding a build URL
 
@@ -140,7 +140,7 @@ Switch back to `webSocket`. Some controller or proxy combinations reject the dup
 
 ### HTTP 403
 
-Authentication may have succeeded while the identity lacks `Overall/Read`, `Job/Read`, or `Job/Build`. Request the minimum required permissions from a Jenkins administrator.
+Authentication may have succeeded, but the user may lack `Overall/Read`, `Job/Read`, or `Job/Build`. Request the minimum required permissions from a Jenkins administrator.
 
 ### Job not found
 
@@ -179,10 +179,10 @@ If the module is unavailable, use a protected auth file or environment injection
 
 ## Result interpretation
 
-- `SUCCESS`: completed successfully.
-- `UNSTABLE`: completed with unstable quality, test, or reporting conditions.
-- `FAILURE`: the Pipeline failed.
-- `ABORTED`: Jenkins stopped the build.
-- Local exit `125` in follow mode: the local follow was interrupted; the server-side build may still be running.
+- `SUCCESS` means the build completed successfully.
+- `UNSTABLE` means the build completed with unstable quality, test, or reporting conditions.
+- `FAILURE` means the Pipeline failed.
+- `ABORTED` means Jenkins stopped the build.
+- Local exit `125` in follow mode means the local follow process was interrupted. The server-side build may still be running.
 
 Separate test or build failures from post-processing warnings when reporting the result.

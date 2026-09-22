@@ -1,8 +1,8 @@
-# pi Agent Extensions
+# pi agent extensions
 
-A Vite+ monorepo containing independently publishable packages for [pi](https://github.com/earendil-works/pi-mono/tree/main/packages/coding-agent), maintained on GitHub at [`stagefright5/pi-agent-extensions`](https://github.com/stagefright5/pi-agent-extensions). Vite+ provides the developer command surface and uses pnpm as the underlying workspace package manager.
+Independently publishable packages for [pi](https://github.com/earendil-works/pi-mono/tree/main/packages/coding-agent), maintained at [`stagefright5/pi-agent-extensions`](https://github.com/stagefright5/pi-agent-extensions). The workspace uses Vite+ for development commands and pnpm for package management.
 
-The packages are maintained against pi **0.84.2** and use pi's TypeScript extension format without a build step.
+The packages target pi 0.84.2 and use pi's TypeScript extension format without a build step.
 
 > [!WARNING]
 > Pi extensions execute with your user account's full system permissions. Review the source before installing or updating any extension or skill.
@@ -21,7 +21,7 @@ The packages are maintained against pi **0.84.2** and use pi's TypeScript extens
 | [Compact Status Bar](./extensions/status-bar/README.md)                      | `@stagefright5/pi-status-bar`             | Compact cwd, Git, context, cost, and status footer | Automatic in TUI mode                |
 | [Tool Output Browser](./extensions/tool-output-browser/README.md)            | `@stagefright5/pi-tool-output-browser`    | Inspect one complete stored tool result            | `/tool-output`                       |
 
-Each workspace has its own `package.json`, version, Pi manifest, README, and npm release lifecycle. The repository root is private and is never published.
+Each package has its own `package.json`, version, Pi manifest, and README. Packages release independently to npm. The repository root is private and is never published.
 
 ## Install standalone packages
 
@@ -59,7 +59,7 @@ Pi auto-discovers each `extensions/*/index.ts`. The Jenkins wrapper exposes its 
 
 ### Temporary local loading
 
-Load the complete collection from the private aggregate manifest while keeping other installed extensions enabled:
+Load all packages from the root manifest while keeping other installed extensions enabled:
 
 ```bash
 pi -e ~/PersonalDev/pi-agent-extensions
@@ -124,7 +124,7 @@ Commit the generated version and changelog changes before publishing. Every pack
 
 ## Local data and privacy
 
-The collection operates locally or against services explicitly configured by the user, and some packages read or write user data:
+The packages run locally or connect to services you configure. Some read or write user data:
 
 - Bang Don't Ghost starts a normal model-provider request after each eligible single-`!` command; Pi already includes that command and its output in model context.
 - Jenkins CLI Operations connects to the configured Jenkins controller and stores non-secret connection metadata under the platform configuration directory. Credentials remain in the selected auth provider.

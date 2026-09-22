@@ -2,7 +2,7 @@
 
 ## 0.0.1
 
-### Patch Changes
+### Patch changes
 
-- 9d619f4: Add a standalone extension that automatically starts a queued agent follow-up after a completed user-entered single-`!` shell command.
+- 9d619f4: Add a standalone extension that automatically starts a queued agent follow-up when a user-entered single-`!` shell command finishes.
 - d187597: Replace session-entry polling with the experimental post-execution `user_bash_result` event and add source-checkout patch automation.

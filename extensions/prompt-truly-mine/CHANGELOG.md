@@ -2,6 +2,6 @@
 
 ## 0.2.0
 
-### Minor Changes
+### Minor changes
 
-- aed6ce5: Include extension commands in inline slash autocomplete and dispatch the first referenced command while preserving the complete draft, including its inline command verb.
+- aed6ce5: Include extension commands in inline slash autocomplete and dispatch the first referenced command. Preserve the complete draft, including its inline command verb.

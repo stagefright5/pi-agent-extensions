@@ -1,8 +1,8 @@
-# Why Polling Existed
+# Why polling existed
 
 See https://github.com/earendil-works/pi/issues/8530
 
-> Historical design note: Bang Don't Ghost no longer polls on this branch. It now requires the experimental `user_bash_result` Pi event described below.
+> This is a historical design note. Bang Don't Ghost no longer polls on this branch. It now requires the experimental `user_bash_result` Pi event described below.
 
 ## Original gap
 
@@ -50,9 +50,9 @@ user_bash interception ──┼── SSH extension
                          └── container extension
 ```
 
-Pi uses the first `user_bash` handler that returns a result. Taking that slot could prevent another extension from routing the command. Reimplementing execution would also have to preserve Pi's configured shell, command prefix, streaming, timeout, cancellation, truncation, and process-tree behavior.
+Pi uses the first `user_bash` handler that returns a result. Returning a result could prevent another extension from routing the command. If Bang Don't Ghost handled execution, it would also have to preserve Pi's configured shell, command prefix, streaming, timeout, cancellation, truncation, and process-tree behavior.
 
-The extension therefore returned nothing from `user_bash` and observed Pi's common recorded result instead.
+The extension returned nothing from `user_bash` and instead observed the result Pi recorded for any backend.
 
 ## Historical polling workaround
 
@@ -125,11 +125,11 @@ While any command was pending, the extension called `sessionManager.getEntries()
 
 ### Lifecycle code obscured the behavior
 
-The extension needed timer ownership, session-start reset, session-shutdown cleanup, pending-command state, entry filtering, and cancellation handling for one conceptual action: react after a shell result.
+To react after a shell result, the extension needed to manage a timer, reset state on session start, clean up on session shutdown, track pending commands, filter entries, and handle cancellation.
 
 ## Replacement: `user_bash_result`
 
-The experimental Pi patch emits a notification after the matching `bashExecution` message has been appended:
+The experimental Pi patch emits a notification after Pi appends the matching `bashExecution` message:
 
 ```text
 user enters !command
@@ -172,7 +172,7 @@ The event must be emitted only after the result is available in session and mode
 - extension-provided complete results
 - deferred results flushed after an active agent turn
 
-It is observational: execution-routing extensions still own execution.
+The event reports the result without changing how execution-routing extensions run commands.
 
 ## Current event-driven flow
 
@@ -200,7 +200,7 @@ A nonzero exit still triggers a turn because the failure output can be useful mo
 
 ## Why an empty message remains
 
-The event removes polling, but Pi still does not expose a bare "run the agent again with existing context" method. `pi.sendMessage()` requires a message to trigger a turn.
+The event removes polling, but Pi still has no method to run the agent again with existing context without sending a message. `pi.sendMessage()` requires a message to trigger a turn.
 
 Bang Don't Ghost sends:
 
@@ -240,8 +240,8 @@ When Pi publishes the event type and `ExtensionAPI.on` overload, the local event
 
 ## Runtime requirement
 
-Stock Pi 0.84.2–0.84.3 never emits `user_bash_result`. On an unpatched runtime, this branch loads but receives no completion event and therefore starts no follow-up. It deliberately has no polling fallback: restoring one would also restore the complexity and limitations this refactor removes.
+Stock Pi 0.84.2–0.84.3 never emits `user_bash_result`. On an unpatched runtime, this branch loads but receives no completion event, so it starts no follow-up. It has no polling fallback. Restoring one would also restore the complexity and limitations this refactor removes.
 
-The source checkout provides `scripts/patch-pi-user-bash-result.mjs`. The locally installed `pi-patch-user-bash-result` command invokes that script to verify or reapply the patch after Pi updates. It is idempotent, uses exact source anchors, syntax-checks a temporary candidate before atomic replacement, and fails with terminal and macOS notifications rather than partially modifying an unknown Pi build.
+The source checkout provides `scripts/patch-pi-user-bash-result.mjs`. The locally installed `pi-patch-user-bash-result` command invokes that script to verify or reapply the patch after Pi updates. The script is idempotent and uses exact source anchors. It syntax-checks a temporary candidate before atomic replacement. On an unknown Pi build, it fails with terminal and macOS notifications rather than partially modifying the build.
 
 The command is manual. It does not run during Pi startup, and neither the patcher nor its global command shim is part of the published npm package.
