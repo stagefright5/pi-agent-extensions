@@ -10,7 +10,7 @@ Replaces pi's built-in multi-line footer with a compact, single-line status bar 
 ## Display
 
 ```text
-cwd (git-branch) | context percentage/window | cost | extension statuses
+cwd (git-branch) | context percentage/window | cost | provider/model display name (thinking level) | extension statuses
 ```
 
 The footer includes:
@@ -19,9 +19,10 @@ The footer includes:
 - the current Git branch, when available
 - estimated context usage and total model context window
 - cumulative assistant-message cost for the session
+- the active provider, model display name, and thinking level, such as `anthropic/Claude Sonnet 4.6 (high)`; non-reasoning models show `(off)`
 - active statuses published by extensions through `ctx.ui.setStatus()`
 
-It deliberately omits the model name and cumulative input, output, and cache-token metrics. Extension statuses are sorted by status ID, sanitized to one line, and appended after the built-in fields.
+It deliberately omits cumulative input, output, and cache-token metrics. Extension statuses are sorted by status ID, sanitized to one line, and appended after the built-in fields.
 
 ## Colors and width
 
