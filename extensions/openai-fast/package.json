@@ -1,0 +1,36 @@
+{
+  "name": "@stagefright5/pi-openai-fast",
+  "version": "0.1.0",
+  "description": "Toggle OpenAI Fast mode (priority service tier) in pi",
+  "license": "Unlicense",
+  "type": "module",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "openai",
+    "fast-mode"
+  ],
+  "files": [
+    "index.ts",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stagefright5/pi-agent-extensions.git",
+    "directory": "extensions/openai-fast"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "catalog:"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

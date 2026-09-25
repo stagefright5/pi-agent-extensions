@@ -60,6 +60,12 @@ importers:
         specifier: 'catalog:'
         version: 0.84.2(ws@8.21.3)
 
+  extensions/openai-fast:
+    devDependencies:
+      '@earendil-works/pi-coding-agent':
+        specifier: 'catalog:'
+        version: 0.84.2(ws@8.21.3)
+
   extensions/plan-mode:
     devDependencies:
       '@earendil-works/pi-coding-agent':
