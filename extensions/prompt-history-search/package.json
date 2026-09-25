@@ -1,6 +1,6 @@
 {
   "name": "@stagefright5/pi-prompt-history-search",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Fuzzy reverse search across prompts in saved pi sessions",
   "type": "module",
   "keywords": [

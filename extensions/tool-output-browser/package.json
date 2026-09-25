@@ -1,6 +1,6 @@
 {
   "name": "@stagefright5/pi-tool-output-browser",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Browse complete stored tool results without expanding every pi transcript row",
   "type": "module",
   "keywords": [

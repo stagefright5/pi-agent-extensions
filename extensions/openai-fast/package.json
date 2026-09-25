@@ -1,6 +1,6 @@
 {
   "name": "@stagefright5/pi-openai-fast",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Toggle OpenAI Fast mode (priority service tier) in pi",
   "type": "module",
   "keywords": [

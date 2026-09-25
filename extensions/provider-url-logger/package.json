@@ -1,6 +1,6 @@
 {
   "name": "@stagefright5/pi-provider-url-logger",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Log the provider, model, and base URL selected for pi provider requests",
   "type": "module",
   "keywords": [

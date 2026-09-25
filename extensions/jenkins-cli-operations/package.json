@@ -1,6 +1,6 @@
 {
   "name": "@stagefright5/pi-jenkins-cli-operations",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Guarded Jenkins operations for pi using the official Jenkins CLI",
   "type": "module",
   "keywords": [
