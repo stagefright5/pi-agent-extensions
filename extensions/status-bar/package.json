@@ -2,27 +2,14 @@
   "name": "@stagefright5/pi-status-bar",
   "version": "0.2.0",
   "description": "A compact single-line status bar for pi",
-  "license": "Unlicense",
   "type": "module",
   "keywords": [
-    "pi-package",
-    "pi-extension",
     "status-bar",
     "tui"
   ],
-  "files": [
-    "CHANGELOG.md",
-    "index.ts",
-    "status-bar-format.ts",
-    "README.md"
-  ],
   "scripts": {
-    "test": "node --test status-bar-format.test.ts"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/stagefright5/pi-agent-extensions.git",
-    "directory": "extensions/status-bar"
+    "test": "node --test status-bar-format.test.ts",
+    "prepack": "node ../../scripts/package-tools.mjs stage-package"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
@@ -38,6 +25,11 @@
     ]
   },
   "publishConfig": {
-    "access": "public"
+    "directory": "../../.tmp/publish/status-bar",
+    "linkDirectory": false
+  },
+  "packageTools": {
+    "title": "Compact Status Bar",
+    "interface": "Automatic in TUI mode"
   }
 }

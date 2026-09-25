@@ -2,39 +2,55 @@
 
 Independently publishable packages for [pi](https://github.com/earendil-works/pi-mono/tree/main/packages/coding-agent), maintained at [`stagefright5/pi-agent-extensions`](https://github.com/stagefright5/pi-agent-extensions). The workspace uses Vite+ for development commands and pnpm for package management.
 
-The packages target pi 0.84.2 and use pi's TypeScript extension format without a build step.
+The packages target pi 0.84.2 and use pi's TypeScript extension format without a compilation step. Local development loads source directly; packing and publishing generate distribution metadata and assets.
 
 > [!WARNING]
 > Pi extensions execute with your user account's full system permissions. Review the source before installing or updating any extension or skill.
 
 ## Packages
 
-| Workspace                                                                    | npm package                               | Purpose                                            | Primary interface                    |
-| ---------------------------------------------------------------------------- | ----------------------------------------- | -------------------------------------------------- | ------------------------------------ |
-| [Ask](./extensions/ask/README.md)                                            | `@stagefright5/pi-ask`                    | Apply an ask-before-deciding policy to one task    | `/ask <task>`                        |
-| [Bang Don't Ghost](./extensions/bang-dont-ghost/README.md)                   | `@stagefright5/pi-bang-dont-ghost`        | Continue after user-entered single-`!` commands    | Automatic                            |
-| [Jenkins CLI Operations](./extensions/jenkins-cli-operations/README.md)      | `@stagefright5/pi-jenkins-cli-operations` | Guarded Jenkins workflows using the official CLI   | `/skill:jenkins-cli-operations`      |
-| [OpenAI Fast](./extensions/openai-fast/README.md)                            | `@stagefright5/pi-openai-fast`            | Request OpenAI priority tier (Fast mode)           | `/fast`, `pi --fast`                 |
-| [Plan Mode](./extensions/plan-mode/README.md)                                | `@stagefright5/pi-plan-mode`              | Evidence-guided planning and interactive review    | `/plan`, `Alt+P`                     |
-| [Global Prompt History Search](./extensions/prompt-history-search/README.md) | `@stagefright5/pi-prompt-history-search`  | Fuzzy reverse search across saved prompts          | `Alt+R`, `/prompt-history`           |
-| [Prompt Truly Mine](./extensions/prompt-truly-mine/README.md)                | `@stagefright5/pi-prompt-truly-mine`      | Inline extension commands and skill/prompt context | inline `/`, `Ctrl+Z`, redo shortcuts |
-| [Provider URL Logger](./extensions/provider-url-logger/README.md)            | `@stagefright5/pi-provider-url-logger`    | Log selected provider endpoints locally            | Automatic                            |
-| [Compact Status Bar](./extensions/status-bar/README.md)                      | `@stagefright5/pi-status-bar`             | Compact cwd, Git, context, cost, and status footer | Automatic in TUI mode                |
-| [Tool Output Browser](./extensions/tool-output-browser/README.md)            | `@stagefright5/pi-tool-output-browser`    | Inspect one complete stored tool result            | `/tool-output`                       |
+<!-- package-tools:catalogue:start -->
 
-Each package has its own `package.json`, version, Pi manifest, and README. Packages release independently to npm. The repository root is private and is never published.
+<!-- prettier-ignore -->
+| Workspace                                                                    | npm package                               | Purpose                                                                                                     | Primary interface                    |
+| ---------------------------------------------------------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| [Artifact Design](./extensions/artifact-design/README.md)                    | `@stagefright5/pi-artifact-design`        | Design self-contained HTML artifacts with a local Vite dev server, theme/CSP harness, and single-file build | `/skill:artifact-design`             |
+| [Ask](./extensions/ask/README.md)                                            | `@stagefright5/pi-ask`                    | Ask before decisions by applying a one-turn interaction policy in pi                                        | `/ask <task>`                        |
+| [Bang Don't Ghost](./extensions/bang-dont-ghost/README.md)                   | `@stagefright5/pi-bang-dont-ghost`        | Automatically continue pi after a user-entered single-bang shell command                                    | Automatic                            |
+| [Jenkins CLI Operations](./extensions/jenkins-cli-operations/README.md)      | `@stagefright5/pi-jenkins-cli-operations` | Guarded Jenkins operations for pi using the official Jenkins CLI                                            | `/skill:jenkins-cli-operations`      |
+| [OpenAI Fast](./extensions/openai-fast/README.md)                            | `@stagefright5/pi-openai-fast`            | Toggle OpenAI Fast mode (priority service tier) in pi                                                       | `/fast`, `pi --fast`                 |
+| [Plan Mode](./extensions/plan-mode/README.md)                                | `@stagefright5/pi-plan-mode`              | Evidence-guided planning and interactive plan review for pi                                                 | `/plan`, `Alt+P`                     |
+| [Global Prompt History Search](./extensions/prompt-history-search/README.md) | `@stagefright5/pi-prompt-history-search`  | Fuzzy reverse search across prompts in saved pi sessions                                                    | `Alt+R`, `/prompt-history`           |
+| [Prompt Truly Mine](./extensions/prompt-truly-mine/README.md)                | `@stagefright5/pi-prompt-truly-mine`      | Inline extension commands and composable skill/prompt context with cursor-restoring undo and redo for pi    | inline `/`, `Ctrl+Z`, redo shortcuts |
+| [Provider URL Logger](./extensions/provider-url-logger/README.md)            | `@stagefright5/pi-provider-url-logger`    | Log the provider, model, and base URL selected for pi provider requests                                     | Automatic                            |
+| [Compact Status Bar](./extensions/status-bar/README.md)                      | `@stagefright5/pi-status-bar`             | A compact single-line status bar for pi                                                                     | Automatic in TUI mode                |
+| [Tool Output Browser](./extensions/tool-output-browser/README.md)            | `@stagefright5/pi-tool-output-browser`    | Browse complete stored tool results without expanding every pi transcript row                               | `/tool-output`                       |
+
+<!-- package-tools:catalogue:end -->
+
+Each package has its own source `package.json`, version, Pi manifest, and README. Packages release independently to npm. The repository root is private and is never published.
 
 ## Install standalone packages
 
 After a package is published, install only the extension or skill you want:
 
+<!-- package-tools:install:start -->
+
 ```bash
+pi install npm:@stagefright5/pi-artifact-design
 pi install npm:@stagefright5/pi-ask
 pi install npm:@stagefright5/pi-bang-dont-ghost
-pi install npm:@stagefright5/pi-plan-mode
-pi install npm:@stagefright5/pi-status-bar
 pi install npm:@stagefright5/pi-jenkins-cli-operations
+pi install npm:@stagefright5/pi-openai-fast
+pi install npm:@stagefright5/pi-plan-mode
+pi install npm:@stagefright5/pi-prompt-history-search
+pi install npm:@stagefright5/pi-prompt-truly-mine
+pi install npm:@stagefright5/pi-provider-url-logger
+pi install npm:@stagefright5/pi-status-bar
+pi install npm:@stagefright5/pi-tool-output-browser
 ```
+
+<!-- package-tools:install:end -->
 
 Use `pi config` to enable or disable resources from installed packages.
 
@@ -76,7 +92,7 @@ If the same package is already loaded through the global symlink or npm, disable
 
 ## Tests and package validation
 
-Run every package's Node test script through the Vite+ task runner:
+Check generated indexes, test the packaging tooling, and run every package's Node test script through the Vite+ task runner:
 
 ```bash
 vp run test
@@ -89,7 +105,7 @@ vp run @stagefright5/pi-prompt-truly-mine#test
 vp run @stagefright5/pi-jenkins-cli-operations#test
 ```
 
-Inspect the files that each workspace would publish:
+Stage all packages and inspect the files that each workspace would publish (without uploading anything):
 
 ```bash
 vp run pack:check
@@ -109,6 +125,29 @@ The `staged` block in `vite.config.ts` runs safe Oxlint fixes before Oxfmt for s
 
 For an interactive Pi smoke test, start Pi normally through the development symlink, or pass the package path with `-e`. TUI-specific editors, overlays, footers, and shortcuts must be tested interactively.
 
+## Generated package files
+
+`scripts/package-tools.mjs` maintains two kinds of generated output:
+
+- **Tracked indexes:** this package table and installation list, the root Pi manifest, and marked installation sections in package READMEs. These stay tracked so a fresh checkout works without a build.
+- **Ignored distribution directories:** `.tmp/publish/<package>/`, containing runtime source/resources, a copied root `LICENSE`, a complete npm manifest, and a README with generated installation instructions and repository URLs.
+
+The packaging integration tests require `pnpm` and `tar` on `PATH`. They pack all packages in a temporary workspace and inspect the tarballs without contacting a registry.
+
+```bash
+vp run packages:sync   # Update tracked indexes after changing package metadata
+vp run packages:check  # Fail on drift without changing files
+vp run packages:stage  # Check indexes and regenerate all distribution directories
+```
+
+Source manifests retain names, versions, descriptions, module type, package-specific keywords, dependencies, local Pi resources, and development scripts. `packageTools.title` and `packageTools.interface` supply catalogue labels. License and repository defaults come from the root manifest; `pi-package` and extension/skill keywords are derived from each package's Pi resources. Publication access and the branch used in README repository links come from the Changesets configuration.
+
+The shared publication policy includes root JavaScript/TypeScript source, `README.md`, `CHANGELOG.md` when present, and `SKILL.md` when present. Skill packages additionally include `references/`, `scripts/`, and `template/`. Tests, dependencies, build output, and hidden files (except template `.gitignore` files) are excluded. The Bang Don't Ghost patcher remains source-only. Package-local `packageTools.include` and `packageTools.exclude` arrays accept explicit package-relative file/directory paths for exceptions; exclusions still apply to includes. Symlinks and paths outside the package are rejected.
+
+Each package's `publishConfig.directory` points to its generated directory. `linkDirectory: false` keeps workspace dependency links pointed at source. A `prepack` hook refreshes that package's output for direct pnpm packing/publishing; use the root release command for Changesets. Published manifests omit development scripts, development dependencies and generator metadata. Source dependency requirements and release versions remain explicit; unresolved local/catalog runtime dependency references fail staging rather than leaking into npm.
+
+Do not edit `.tmp/publish/` by hand or publish a source directory with a tool that ignores `publishConfig.directory`. Run `packages:sync` after adding or renaming a package or changing catalogue metadata, then commit the generated index changes. Root staging and per-package packing check drift before proceeding. Changelogs, templates, skill wrappers and the lockfile remain tracked. Changes to shared publication defaults may require Changesets for all affected packages.
+
 ## Versioning and publishing
 
 The packages use independent Changesets releases:
@@ -118,10 +157,11 @@ vp run changeset
 vp run version-packages
 vp install
 vp run test
+vp run pack:check
 vp run release
 ```
 
-Commit the generated version and changelog changes before publishing. Every package includes the `pi-package` keyword for Pi package-gallery discovery.
+Commit the generated version and changelog changes before publishing. The release command regenerates distribution directories before Changesets publishes them. Every published package includes the `pi-package` keyword for Pi package-gallery discovery. Packing and staging never publish or create release tags.
 
 ## Local data and privacy
 

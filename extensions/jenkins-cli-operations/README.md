@@ -31,6 +31,8 @@ The generic wrapper supports every upstream Jenkins CLI command without classify
 - Official `jenkins-cli.jar` or a `jenkins-cli` launcher on `PATH`
 - Jenkins network access and credentials
 
+<!-- package-tools:install:start -->
+
 ## Installation
 
 Install the standalone package:
@@ -39,9 +41,11 @@ Install the standalone package:
 pi install npm:@stagefright5/pi-jenkins-cli-operations
 ```
 
+<!-- package-tools:install:end -->
+
 For source development, load this directory with `pi -e ./extensions/jenkins-cli-operations` or expose it through the workspace's development symlink.
 
-## Tests
+## Tests (source checkout)
 
 The tests use Node's built-in test runner and do not require a live Jenkins controller:
 

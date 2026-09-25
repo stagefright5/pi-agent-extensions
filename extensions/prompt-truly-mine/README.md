@@ -114,6 +114,8 @@ Shortcut conflicts:
 
 Automatic inline autocomplete requires interactive TUI mode. Context-tag expansion also applies to prompts submitted through other modes when the extension is loaded.
 
+<!-- package-tools:install:start -->
+
 ## Installation
 
 Install the standalone package:
@@ -121,5 +123,7 @@ Install the standalone package:
 ```bash
 pi install npm:@stagefright5/pi-prompt-truly-mine
 ```
+
+<!-- package-tools:install:end -->
 
 For source development, load this directory with `pi -e ./extensions/prompt-truly-mine` or expose it through the workspace's development symlink. Run `/reload` after source changes.

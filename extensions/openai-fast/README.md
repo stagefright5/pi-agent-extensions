@@ -4,6 +4,18 @@ Adds `service_tier: "priority"` (OpenAI Fast mode) to requests for the `openai` 
 
 [Back to the extension workspace](../../README.md)
 
+<!-- package-tools:install:start -->
+
+## Installation
+
+Install the standalone package:
+
+```bash
+pi install npm:@stagefright5/pi-openai-fast
+```
+
+<!-- package-tools:install:end -->
+
 ## Usage
 
 - `/fast` toggles it and saves the choice as `"openaiFast": true` in `~/.pi/agent/settings.json`.

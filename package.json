@@ -4,18 +4,25 @@
   "private": true,
   "description": "Workspace for independently published pi extensions and skills",
   "license": "Unlicense",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stagefright5/pi-agent-extensions.git"
+  },
   "type": "module",
   "scripts": {
-    "test": "vp run -r test",
+    "test": "node scripts/package-tools.mjs check && node --test scripts/*.test.mjs && vp run --filter './extensions/*' test",
+    "packages:sync": "node scripts/package-tools.mjs sync",
+    "packages:check": "node scripts/package-tools.mjs check",
+    "packages:stage": "node scripts/package-tools.mjs stage",
     "lint": "vp lint",
     "lint:fix": "vp lint --fix",
     "format": "vp fmt",
     "format:check": "vp fmt --check",
     "lint:staged": "vp staged",
-    "pack:check": "vp pm pack -r --filter './extensions/*' -- --dry-run",
+    "pack:check": "node scripts/package-tools.mjs stage && vp pm pack -r --filter './extensions/*' -- --dry-run",
     "changeset": "changeset",
     "version-packages": "changeset version",
-    "release": "changeset publish",
+    "release": "node scripts/package-tools.mjs stage && changeset publish",
     "prepare": "vp config"
   },
   "devDependencies": {
@@ -25,6 +32,10 @@
   },
   "packageManager": "pnpm@11.22.0",
   "pi": {
+    "skills": [
+      "./extensions/artifact-design/SKILL.md",
+      "./extensions/jenkins-cli-operations/SKILL.md"
+    ],
     "extensions": [
       "./extensions/ask/index.ts",
       "./extensions/bang-dont-ghost/index.ts",
@@ -35,10 +46,6 @@
       "./extensions/provider-url-logger/index.ts",
       "./extensions/status-bar/index.ts",
       "./extensions/tool-output-browser/index.ts"
-    ],
-    "skills": [
-      "./extensions/artifact-design/SKILL.md",
-      "./extensions/jenkins-cli-operations/SKILL.md"
     ]
   }
 }

@@ -2,23 +2,12 @@
   "name": "@stagefright5/pi-plan-mode",
   "version": "0.1.1",
   "description": "Evidence-guided planning and interactive plan review for pi",
-  "license": "Unlicense",
   "type": "module",
   "keywords": [
-    "pi-package",
-    "pi-extension",
     "planning"
   ],
-  "files": [
-    "CHANGELOG.md",
-    "index.ts",
-    "utils.ts",
-    "README.md"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/stagefright5/pi-agent-extensions.git",
-    "directory": "extensions/plan-mode"
+  "scripts": {
+    "prepack": "node ../../scripts/package-tools.mjs stage-package"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
@@ -36,6 +25,11 @@
     ]
   },
   "publishConfig": {
-    "access": "public"
+    "directory": "../../.tmp/publish/plan-mode",
+    "linkDirectory": false
+  },
+  "packageTools": {
+    "title": "Plan Mode",
+    "interface": "`/plan`, `Alt+P`"
   }
 }

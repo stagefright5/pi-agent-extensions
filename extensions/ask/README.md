@@ -33,6 +33,8 @@ The extension normalizes quoted arguments using the same parsing rules as pi pro
 
 `/ask` remains a normal extension command. Prompt Truly Mine provides the optional inline autocomplete and promotion behavior described above.
 
+<!-- package-tools:install:start -->
+
 ## Installation
 
 Install the standalone package:
@@ -40,6 +42,8 @@ Install the standalone package:
 ```bash
 pi install npm:@stagefright5/pi-ask
 ```
+
+<!-- package-tools:install:end -->
 
 For source development, load this directory with `pi -e ./extensions/ask` or expose it through the workspace's development symlink. Run `/reload` after source changes.
 

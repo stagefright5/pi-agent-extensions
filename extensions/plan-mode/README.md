@@ -117,6 +117,8 @@ Plan Mode excludes the display-only plan message created after closing review fr
 - [`index.ts`](./index.ts) contains the extension entry point, planning prompt, tool and event registration, persistence, and TUI screens.
 - [`utils.ts`](./utils.ts) generates plan-title slugs.
 
+<!-- package-tools:install:start -->
+
 ## Installation
 
 Install the standalone package:
@@ -124,5 +126,7 @@ Install the standalone package:
 ```bash
 pi install npm:@stagefright5/pi-plan-mode
 ```
+
+<!-- package-tools:install:end -->
 
 For source development, load this directory with `pi -e ./extensions/plan-mode` or expose it through the workspace's development symlink. Run `/reload` after source changes.

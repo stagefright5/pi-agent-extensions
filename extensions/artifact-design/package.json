@@ -2,32 +2,15 @@
   "name": "@stagefright5/pi-artifact-design",
   "version": "0.2.0",
   "description": "Design self-contained HTML artifacts with a local Vite dev server, theme/CSP harness, and single-file build",
-  "license": "Unlicense",
   "type": "module",
   "keywords": [
-    "pi-package",
-    "pi-skill",
     "artifact",
     "vite",
     "design"
   ],
-  "files": [
-    "CHANGELOG.md",
-    "index.ts",
-    "SKILL.md",
-    "README.md",
-    "references",
-    "scripts",
-    "template",
-    "tests"
-  ],
   "scripts": {
-    "test": "node --test tests/*.test.mjs"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/stagefright5/pi-agent-extensions.git",
-    "directory": "extensions/artifact-design"
+    "test": "node --test tests/*.test.mjs",
+    "prepack": "node ../../scripts/package-tools.mjs stage-package"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*"
@@ -41,6 +24,11 @@
     ]
   },
   "publishConfig": {
-    "access": "public"
+    "directory": "../../.tmp/publish/artifact-design",
+    "linkDirectory": false
+  },
+  "packageTools": {
+    "title": "Artifact Design",
+    "interface": "`/skill:artifact-design`"
   }
 }

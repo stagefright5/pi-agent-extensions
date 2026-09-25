@@ -66,6 +66,8 @@ Anyone with access to your terminal or local index file can inspect saved prompt
 - Interactive TUI mode is required; the custom picker is unavailable in RPC, JSON, and print modes.
 - `Alt+R` must not be claimed by a later-loaded shortcut extension.
 
+<!-- package-tools:install:start -->
+
 ## Installation
 
 Install the standalone package:
@@ -73,5 +75,7 @@ Install the standalone package:
 ```bash
 pi install npm:@stagefright5/pi-prompt-history-search
 ```
+
+<!-- package-tools:install:end -->
 
 For source development, load this directory with `pi -e ./extensions/prompt-history-search` or expose it through the workspace's development symlink. Run `/reload` after source changes.

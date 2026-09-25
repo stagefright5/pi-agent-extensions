@@ -32,6 +32,8 @@ The extension appends entries to:
 
 The file is never truncated or rotated automatically. Remove or rotate it yourself if it grows too large. A base URL may still reveal private infrastructure or query parameters, so treat the log as potentially sensitive.
 
+<!-- package-tools:install:start -->
+
 ## Installation
 
 Install the standalone package:
@@ -39,6 +41,8 @@ Install the standalone package:
 ```bash
 pi install npm:@stagefright5/pi-provider-url-logger
 ```
+
+<!-- package-tools:install:end -->
 
 For source development, load this directory with `pi -e ./extensions/provider-url-logger` or expose it through the workspace's development symlink. Run `/reload` after source changes.
 

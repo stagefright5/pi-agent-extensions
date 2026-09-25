@@ -38,6 +38,8 @@ The extension runs only when `ctx.mode === "tui"`. It installs the custom footer
 
 Because pi supports only one custom footer at a time, another footer extension loaded later can replace this one.
 
+<!-- package-tools:install:start -->
+
 ## Installation
 
 Install the standalone package:
@@ -45,5 +47,7 @@ Install the standalone package:
 ```bash
 pi install npm:@stagefright5/pi-status-bar
 ```
+
+<!-- package-tools:install:end -->
 
 For source development, load this directory with `pi -e ./extensions/status-bar` or expose it through the workspace's development symlink. Run `/reload` after source changes.

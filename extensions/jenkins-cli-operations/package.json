@@ -2,30 +2,14 @@
   "name": "@stagefright5/pi-jenkins-cli-operations",
   "version": "0.1.1",
   "description": "Guarded Jenkins operations for pi using the official Jenkins CLI",
-  "license": "Unlicense",
   "type": "module",
   "keywords": [
-    "pi-package",
-    "pi-skill",
     "jenkins",
     "ci"
   ],
-  "files": [
-    "CHANGELOG.md",
-    "index.ts",
-    "SKILL.md",
-    "README.md",
-    "references",
-    "scripts",
-    "tests"
-  ],
   "scripts": {
-    "test": "node --test tests/*.test.mjs"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/stagefright5/pi-agent-extensions.git",
-    "directory": "extensions/jenkins-cli-operations"
+    "test": "node --test tests/*.test.mjs",
+    "prepack": "node ../../scripts/package-tools.mjs stage-package"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*"
@@ -39,6 +23,11 @@
     ]
   },
   "publishConfig": {
-    "access": "public"
+    "directory": "../../.tmp/publish/jenkins-cli-operations",
+    "linkDirectory": false
+  },
+  "packageTools": {
+    "title": "Jenkins CLI Operations",
+    "interface": "`/skill:jenkins-cli-operations`"
   }
 }

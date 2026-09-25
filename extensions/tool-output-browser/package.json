@@ -2,23 +2,13 @@
   "name": "@stagefright5/pi-tool-output-browser",
   "version": "0.1.1",
   "description": "Browse complete stored tool results without expanding every pi transcript row",
-  "license": "Unlicense",
   "type": "module",
   "keywords": [
-    "pi-package",
-    "pi-extension",
     "tool-output",
     "tui"
   ],
-  "files": [
-    "CHANGELOG.md",
-    "index.ts",
-    "README.md"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/stagefright5/pi-agent-extensions.git",
-    "directory": "extensions/tool-output-browser"
+  "scripts": {
+    "prepack": "node ../../scripts/package-tools.mjs stage-package"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
@@ -34,6 +24,11 @@
     ]
   },
   "publishConfig": {
-    "access": "public"
+    "directory": "../../.tmp/publish/tool-output-browser",
+    "linkDirectory": false
+  },
+  "packageTools": {
+    "title": "Tool Output Browser",
+    "interface": "`/tool-output`"
   }
 }

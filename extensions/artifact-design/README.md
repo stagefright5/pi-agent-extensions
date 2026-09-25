@@ -16,6 +16,18 @@ src/main.js + src/style.css + index.html
 dist/artifact.html   ← publish this
 ```
 
+<!-- package-tools:install:start -->
+
+## Installation
+
+Install the standalone package:
+
+```bash
+pi install npm:@stagefright5/pi-artifact-design
+```
+
+<!-- package-tools:install:end -->
+
 ## Use
 
 ```bash

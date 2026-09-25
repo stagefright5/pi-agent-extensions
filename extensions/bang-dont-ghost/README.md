@@ -74,6 +74,8 @@ Behavior:
 
 The extension has no slash command or configuration; installing it enables the behavior. Every eligible command starts a model-provider request, which may incur usage charges.
 
+<!-- package-tools:install:start -->
+
 ## Installation
 
 Install the standalone package:
@@ -81,6 +83,8 @@ Install the standalone package:
 ```bash
 pi install npm:@stagefright5/pi-bang-dont-ghost
 ```
+
+<!-- package-tools:install:end -->
 
 For source development, load this directory with `pi -e ./extensions/bang-dont-ghost` or expose it through the workspace's development symlink. Run `/reload` after source changes.
 

@@ -50,6 +50,8 @@ The extension reads only the active in-memory session branch and does not write 
 
 Interactive TUI mode is required; overlays are unavailable in RPC, JSON, and print modes.
 
+<!-- package-tools:install:start -->
+
 ## Installation
 
 Install the standalone package:
@@ -57,5 +59,7 @@ Install the standalone package:
 ```bash
 pi install npm:@stagefright5/pi-tool-output-browser
 ```
+
+<!-- package-tools:install:end -->
 
 For source development, load this directory with `pi -e ./extensions/tool-output-browser` or expose it through the workspace's development symlink. Run `/reload` after source changes.

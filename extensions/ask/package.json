@@ -2,28 +2,14 @@
   "name": "@stagefright5/pi-ask",
   "version": "0.1.1",
   "description": "Ask before decisions by applying a one-turn interaction policy in pi",
-  "license": "Unlicense",
   "type": "module",
   "keywords": [
-    "pi-package",
-    "pi-extension",
     "ask",
     "prompt-policy"
   ],
-  "files": [
-    "CHANGELOG.md",
-    "index.ts",
-    "ask-prompt.ts",
-    "ask-prompt.test.ts",
-    "README.md"
-  ],
   "scripts": {
-    "test": "node --test ask-prompt.test.ts"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/stagefright5/pi-agent-extensions.git",
-    "directory": "extensions/ask"
+    "test": "node --test ask-prompt.test.ts",
+    "prepack": "node ../../scripts/package-tools.mjs stage-package"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*"
@@ -37,6 +23,11 @@
     ]
   },
   "publishConfig": {
-    "access": "public"
+    "directory": "../../.tmp/publish/ask",
+    "linkDirectory": false
+  },
+  "packageTools": {
+    "title": "Ask",
+    "interface": "`/ask <task>`"
   }
 }

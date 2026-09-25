@@ -2,27 +2,13 @@
   "name": "@stagefright5/pi-prompt-truly-mine",
   "version": "0.2.1",
   "description": "Inline extension commands and composable skill/prompt context with cursor-restoring undo and redo for pi",
-  "license": "Unlicense",
   "type": "module",
   "keywords": [
-    "pi-package",
-    "pi-extension",
     "prompt-editor"
   ],
-  "files": [
-    "CHANGELOG.md",
-    "index.ts",
-    "inline-context.ts",
-    "inline-context.test.ts",
-    "README.md"
-  ],
   "scripts": {
-    "test": "node --test inline-context.test.ts"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/stagefright5/pi-agent-extensions.git",
-    "directory": "extensions/prompt-truly-mine"
+    "test": "node --test inline-context.test.ts",
+    "prepack": "node ../../scripts/package-tools.mjs stage-package"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
@@ -38,6 +24,11 @@
     ]
   },
   "publishConfig": {
-    "access": "public"
+    "directory": "../../.tmp/publish/prompt-truly-mine",
+    "linkDirectory": false
+  },
+  "packageTools": {
+    "title": "Prompt Truly Mine",
+    "interface": "inline `/`, `Ctrl+Z`, redo shortcuts"
   }
 }

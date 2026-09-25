@@ -2,22 +2,12 @@
   "name": "@stagefright5/pi-prompt-history-search",
   "version": "0.1.1",
   "description": "Fuzzy reverse search across prompts in saved pi sessions",
-  "license": "Unlicense",
   "type": "module",
   "keywords": [
-    "pi-package",
-    "pi-extension",
     "prompt-history"
   ],
-  "files": [
-    "CHANGELOG.md",
-    "index.ts",
-    "README.md"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/stagefright5/pi-agent-extensions.git",
-    "directory": "extensions/prompt-history-search"
+  "scripts": {
+    "prepack": "node ../../scripts/package-tools.mjs stage-package"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*",
@@ -33,6 +23,11 @@
     ]
   },
   "publishConfig": {
-    "access": "public"
+    "directory": "../../.tmp/publish/prompt-history-search",
+    "linkDirectory": false
+  },
+  "packageTools": {
+    "title": "Global Prompt History Search",
+    "interface": "`Alt+R`, `/prompt-history`"
   }
 }
