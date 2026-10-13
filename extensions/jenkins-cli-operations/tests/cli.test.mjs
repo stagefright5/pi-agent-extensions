@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,11 +12,12 @@ import { cliInvocation, isSensitiveName, jobApiPath } from '../scripts/lib/confi
 const skillDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const triggerScript = path.join(skillDir, 'scripts', 'trigger-build.mjs');
 
-function runNode(args) {
+function runNode(args, env = {}) {
     return new Promise((resolve, reject) => {
         const child = spawn(process.execPath, args, {
             stdio: ['ignore', 'pipe', 'pipe'],
             windowsHide: true,
+            env: { ...process.env, JENKINS_SKILL_PROFILE: undefined, ...env },
         });
         let stdout = '';
         let stderr = '';
@@ -207,3 +208,201 @@ test('dry-run rejects a non-buildable job', async (t) => {
     assert.equal(result.code, 1);
     assert.match(result.stderr, /Job Folder\/Build is not buildable/);
 });
+
+const entryScript = path.join(skillDir, 'scripts', 'jenkins.mjs');
+
+test('unified build selects credentials on the same controller and reports the profile', async (t) => {
+    const fixture = await fakeJenkins(t);
+    const connection = JSON.parse(await readFile(fixture.configPath, 'utf8'));
+    await writeFile(
+        fixture.configPath,
+        JSON.stringify({
+            version: 2,
+            defaultProfile: 'reader',
+            profiles: {
+                reader: connection,
+                builder: {
+                    ...connection,
+                    auth: { provider: 'env', userVariable: 'TEST_JENKINS_USER', tokenVariable: 'TEST_JENKINS_TOKEN' },
+                },
+            },
+        }),
+    );
+    const result = await runNode(
+        [
+            entryScript,
+            '--config',
+            fixture.configPath,
+            '--profile',
+            'builder',
+            'build',
+            'Folder/Build',
+            '--param',
+            'BRANCH=release',
+            '--follow',
+            '--dry-run',
+        ],
+        { TEST_JENKINS_USER: 'builder', TEST_JENKINS_TOKEN: 'second-token' },
+    );
+    assert.equal(result.code, 0, result.stderr);
+    assert.match(result.stdout, /Profile: builder/);
+    assert.match(result.stdout, /Authentication: env/);
+    assert.match(result.stdout, /BRANCH="release"/);
+    assert.doesNotMatch(result.stdout + result.stderr, /second-token|test-token/);
+    assert.equal(fixture.requests.length, 1);
+    assert.equal(fixture.requests[0].authorization, `Basic ${Buffer.from('builder:second-token').toString('base64')}`);
+
+    const denied = await runNode(
+        [entryScript, '--config', fixture.configPath, '--profile', 'builder', 'build', 'Folder/Build'],
+        { TEST_JENKINS_USER: 'builder', TEST_JENKINS_TOKEN: 'second-token' },
+    );
+    assert.equal(denied.code, 1);
+    assert.match(denied.stderr, /Refusing non-interactive build without --yes/);
+
+    const missing = await runNode([
+        entryScript,
+        '--config',
+        fixture.configPath,
+        '--profile',
+        'typo',
+        'inspect',
+        'Folder/Build',
+    ]);
+    assert.equal(missing.code, 1);
+    assert.match(missing.stderr, /Unknown Jenkins profile/);
+    assert.equal(fixture.requests.length, 2);
+    const unavailable = await runNode(
+        [entryScript, '--config', fixture.configPath, '--profile', 'builder', 'inspect', 'Folder/Build'],
+        { TEST_JENKINS_USER: undefined, TEST_JENKINS_TOKEN: undefined },
+    );
+    assert.equal(unavailable.code, 1);
+    assert.match(unavailable.stderr, /Environment auth requires/);
+    assert.equal(fixture.requests.length, 2, 'must not retry with the reader credential');
+});
+
+test('unified inspect and profile discovery remain read-only and credential-safe', async (t) => {
+    const fixture = await fakeJenkins(t);
+    const inspection = await runNode([
+        entryScript,
+        '--config',
+        fixture.configPath,
+        'inspect',
+        'Folder/Build',
+        '--json',
+    ]);
+    assert.equal(inspection.code, 0, inspection.stderr);
+    assert.equal(JSON.parse(inspection.stdout).profile, 'default');
+    await rm(fixture.authPath);
+    const listing = await runNode([entryScript, '--config', fixture.configPath, 'profiles', '--json']);
+    assert.equal(listing.code, 0, listing.stderr);
+    assert.deepEqual(JSON.parse(listing.stdout).profiles, [
+        { name: 'default', url: fixture.controllerUrl, provider: 'file' },
+    ]);
+    assert.doesNotMatch(listing.stdout, /test-token|test-user/);
+    assert.equal(fixture.requests.length, 1);
+});
+
+test(
+    'unified interface routes known read-only commands and preserves raw CLI arguments',
+    { skip: process.platform === 'win32' },
+    async (t) => {
+        const fixture = await fakeJenkins(t);
+        const launcher = path.join(path.dirname(fixture.configPath), 'fake-cli');
+        await writeFile(launcher, '#!/usr/bin/env node\nconsole.log(JSON.stringify(process.argv.slice(2)));\n', {
+            mode: 0o700,
+        });
+        const connection = JSON.parse(await readFile(fixture.configPath, 'utf8'));
+        connection.command = launcher;
+        await writeFile(fixture.configPath, JSON.stringify(connection));
+        for (const [args, expected] of [
+            [['whoami'], ['who-am-i']],
+            [
+                ['jobs', 'Folder Name'],
+                ['list-jobs', 'Folder Name'],
+            ],
+            [
+                ['console', 'Folder/Build', '42'],
+                ['console', 'Folder/Build', '42'],
+            ],
+            [
+                ['--', 'help', '--config', 'upstream', '--profile', 'upstream'],
+                ['help', '--config', 'upstream', '--profile', 'upstream'],
+            ],
+            [
+                ['cli', '--', 'help', 'build'],
+                ['help', 'build'],
+            ],
+        ]) {
+            const result = await runNode([entryScript, '--config', fixture.configPath, ...args]);
+            assert.equal(result.code, 0, result.stderr);
+            assert.deepEqual(JSON.parse(result.stdout).slice(5), expected);
+        }
+        const unknown = await runNode([entryScript, '--config', fixture.configPath, 'groovy', '=']);
+        assert.equal(unknown.code, 1);
+        assert.match(unknown.stderr, /Unknown command/);
+    },
+);
+
+test(
+    'confirmed build passes the selected credential and execution options to a local fake CLI',
+    { skip: process.platform === 'win32' },
+    async (t) => {
+        const fixture = await fakeJenkins(t);
+        const launcher = path.join(path.dirname(fixture.configPath), 'fake-build-cli');
+        await writeFile(
+            launcher,
+            `#!/usr/bin/env node
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+const authFile = args[args.indexOf('-auth') + 1].slice(1);
+if (fs.readFileSync(authFile, 'utf8') !== 'builder:build-token') process.exit(42);
+console.log(JSON.stringify(args));
+`,
+            { mode: 0o700 },
+        );
+        const connection = JSON.parse(await readFile(fixture.configPath, 'utf8'));
+        await writeFile(
+            fixture.configPath,
+            JSON.stringify({
+                version: 2,
+                defaultProfile: 'reader',
+                profiles: {
+                    reader: connection,
+                    builder: {
+                        ...connection,
+                        command: launcher,
+                        auth: { provider: 'env', userVariable: 'TEST_BUILD_USER', tokenVariable: 'TEST_BUILD_TOKEN' },
+                    },
+                },
+            }),
+        );
+        const result = await runNode(
+            [
+                entryScript,
+                '--config',
+                fixture.configPath,
+                '--profile',
+                'builder',
+                'build',
+                'Folder/Build',
+                '--param',
+                'BRANCH=release',
+                '--follow',
+                '--verbose',
+                '--yes',
+            ],
+            { TEST_BUILD_USER: 'builder', TEST_BUILD_TOKEN: 'build-token' },
+        );
+        assert.equal(result.code, 0, result.stderr);
+        assert.match(result.stdout, /Profile: builder/);
+        assert.doesNotMatch(result.stdout + result.stderr, /build-token/);
+        const args = JSON.parse(result.stdout.trim().split('\n').at(-1));
+        assert.deepEqual(args.slice(5), ['build', 'Folder/Build', '-p', 'BRANCH=release', '-f', '-v']);
+        assert.equal(args[1], fixture.controllerUrl);
+        await assert.rejects(readFile(args[4].slice(1)), { code: 'ENOENT' });
+        assert.equal(
+            fixture.requests[0].authorization,
+            `Basic ${Buffer.from('builder:build-token').toString('base64')}`,
+        );
+    },
+);

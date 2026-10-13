@@ -12,32 +12,131 @@ export function defaultConfigPath() {
     return path.join(root, 'jenkins-cli-operations', 'config.json');
 }
 
+// Wrapper options stop at -- so upstream CLI arguments are never consumed.
 export function consumeConfigArg(argv) {
     const args = [...argv];
-    let configPath = defaultConfigPath();
-    const index = args.indexOf('--config');
-    if (index >= 0) {
-        if (!args[index + 1]) throw new Error('--config requires a path');
-        configPath = path.resolve(args[index + 1]);
-        args.splice(index, 2);
+    const values = {};
+    for (let i = 0; i < args.length && args[i] !== '--'; i++) {
+        const name = args[i];
+        if (!['--config', '--profile'].includes(name)) continue;
+        if (Object.hasOwn(values, name)) throw new Error(`${name} may only be specified once`);
+        if (!args[i + 1] || args[i + 1].startsWith('--')) throw new Error(`${name} requires a value`);
+        values[name] = args[i + 1];
+        args.splice(i, 2);
+        i--;
     }
-    return { configPath, args };
+    return {
+        configPath: values['--config'] ? path.resolve(values['--config']) : defaultConfigPath(),
+        profile: values['--profile'],
+        args,
+    };
 }
 
-export async function loadConfig(configPath = defaultConfigPath()) {
+export function validateProfileName(name) {
+    if (
+        typeof name !== 'string' ||
+        !/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(name) ||
+        ['__proto__', 'constructor', 'prototype'].includes(name)
+    ) {
+        throw new Error(
+            'Profile names must start with a letter or number and contain only letters, numbers, ., _, or -',
+        );
+    }
+    return name;
+}
+
+export function validateConnection(parsed) {
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || !parsed.url)
+        throw new Error('Jenkins connection is missing url');
+    let url;
+    try {
+        url = new URL(parsed.url);
+    } catch {
+        throw new Error('Invalid Jenkins URL');
+    }
+    if (url.username || url.password || url.search || url.hash)
+        throw new Error('Jenkins URL must not contain credentials, a query, or a fragment');
+    if (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(url.hostname)))
+        throw new Error('Jenkins URL must use HTTPS (HTTP is allowed only for localhost)');
+    if (!['file', 'env', 'keychain'].includes(parsed.auth?.provider))
+        throw new Error('Jenkins connection requires auth.provider: file, env, or keychain');
+    if (!['websocket', 'http'].includes(String(parsed.transport || 'webSocket').toLowerCase()))
+        throw new Error('Unsupported transport; use webSocket or http');
+    return { ...parsed, url: url.href.replace(/\/+$/, '') };
+}
+
+export function normalizeConfig(parsed) {
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+        throw new Error('Jenkins configuration must be an object');
+    if (!Object.hasOwn(parsed, 'profiles')) {
+        return { version: 2, defaultProfile: 'default', profiles: { default: validateConnection(parsed) } };
+    }
+    if (parsed.version !== 2) throw new Error('Unsupported Jenkins configuration version');
+    if (!parsed.profiles || typeof parsed.profiles !== 'object' || Array.isArray(parsed.profiles))
+        throw new Error('profiles must be an object');
+    for (const [name, connection] of Object.entries(parsed.profiles)) {
+        validateProfileName(name);
+        validateConnection(connection);
+    }
+    if (
+        parsed.defaultProfile !== undefined &&
+        (typeof parsed.defaultProfile !== 'string' || !Object.hasOwn(parsed.profiles, parsed.defaultProfile))
+    )
+        throw new Error('defaultProfile does not name a configured profile');
+    return parsed;
+}
+
+export async function readConfigDocument(configPath = defaultConfigPath()) {
+    let content;
+    try {
+        content = await readFile(configPath, 'utf8');
+    } catch (error) {
+        throw new Error(
+            `Unable to read Jenkins skill config at ${configPath} (${error.code || 'read failure'}); run configure`,
+            { cause: error },
+        );
+    }
     let parsed;
     try {
-        parsed = JSON.parse(await readFile(configPath, 'utf8'));
-    } catch (error) {
-        throw new Error(`Unable to read Jenkins skill config at ${configPath}: ${error.message}`);
+        parsed = JSON.parse(content);
+    } catch {
+        throw new Error(`Invalid JSON in Jenkins skill config at ${configPath}`);
     }
-    if (!parsed.url) throw new Error(`Jenkins config ${configPath} is missing url`);
-    const url = String(parsed.url).replace(/\/+$/, '');
-    if (!/^https:\/\//i.test(url) && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(url)) {
-        throw new Error('Jenkins URL must use HTTPS (HTTP is allowed only for localhost)');
-    }
-    if (!parsed.auth?.provider) throw new Error(`Jenkins config ${configPath} is missing auth.provider`);
-    return { ...parsed, url, configPath };
+    normalizeConfig(parsed);
+    return parsed;
+}
+
+export async function loadConfig(configPath = defaultConfigPath(), profile) {
+    const document = normalizeConfig(await readConfigDocument(configPath));
+    const names = Object.keys(document.profiles);
+    const selected =
+        profile ??
+        process.env.JENKINS_SKILL_PROFILE ??
+        document.defaultProfile ??
+        (names.length === 1 ? names[0] : undefined);
+    if (!selected)
+        throw new Error(
+            'Multiple or no Jenkins profiles configured; select one with --profile NAME (use profiles to list)',
+        );
+    if (!Object.hasOwn(document.profiles, selected))
+        throw new Error(`Unknown Jenkins profile: ${selected}; use profiles to list`);
+    return { ...validateConnection(document.profiles[selected]), configPath, profile: selected };
+}
+
+// Deliberately allowlist metadata; never resolve credentials while listing profiles.
+export async function listProfiles(configPath = defaultConfigPath()) {
+    const document = normalizeConfig(await readConfigDocument(configPath));
+    return {
+        configPath,
+        defaultProfile: document.defaultProfile ?? null,
+        environmentProfile: process.env.JENKINS_SKILL_PROFILE ?? null,
+        profiles: Object.entries(document.profiles).map(([name, connection]) => ({
+            name,
+            url: validateConnection(connection).url,
+            provider: connection.auth.provider,
+            ...(connection.auth.provider === 'keychain' ? { userId: connection.auth.userId } : {}),
+        })),
+    };
 }
 
 function runCapture(command, args, options = {}) {

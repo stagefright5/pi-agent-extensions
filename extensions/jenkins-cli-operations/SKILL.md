@@ -1,110 +1,46 @@
 ---
 name: jenkins-cli-operations
-description: Configure and operate Jenkins through the official CLI. Use for authentication setup, job and folder discovery, parameter inspection, build preparation and triggering, build monitoring, console output, and CLI transport or permission troubleshooting.
+description: Configure and operate Jenkins with named credential/controller profiles. Use for authentication setup, job discovery, parameter inspection, guarded builds, console output, and CLI troubleshooting.
 compatibility: Requires Node.js 18+, Java compatible with the Jenkins controller, network access to Jenkins, and either jenkins-cli on PATH or a downloaded jenkins-cli.jar.
 ---
 
 # Jenkins CLI operations
 
-Use the bundled scripts to configure the Jenkins CLI, authenticate, inspect jobs, and run builds.
+Use `node scripts/jenkins.mjs` for routine operations. Replace the script path in each command with its absolute path under the directory containing this file. Never assume the working directory.
 
-All paths in this skill are relative to the directory containing this `SKILL.md`. Resolve them to absolute paths before invoking tools. Never assume the current working directory is the skill directory.
+## Safety
 
-## Core rules
-
-1. Never ask the user to paste an API token into chat. Never print credentials, auth-file contents, Authorization headers, or cookies.
-2. Read-only operations may run without confirmation.
-3. Before any Jenkins mutation, show the controller, exact job or command, parameters, execution behavior, and known or unknown side effects. Obtain fresh explicit confirmation after showing that summary.
-4. Pass `--yes` to a mutating helper only after that confirmation. An initial request establishes intent but does not replace the post-summary confirmation.
-5. Do not weaken TLS verification with `-noCertificateCheck`; fix certificate trust or proxy configuration instead.
+- Never ask for tokens in chat or print credentials, auth-file contents, Authorization headers, or cookies. Never disable TLS verification.
+- Read-only operations need no confirmation. Before **any Jenkins mutation**, show the selected profile, controller, exact job/command, parameters, execution mode, and known or unknown side effects. Obtain fresh explicit confirmation after that summary; only then use `--yes`.
+- Never guess between profiles or retry using a different identity after an authentication/permission failure. Keep the same explicit `--profile NAME` for discovery, dry-run, and execution. If the profile, controller, credentials, parameters, or mode changes, prepare and confirm again.
 
 ## Workflow
 
-### 1. Establish the operation
+1. Run `node scripts/jenkins.mjs profiles --json`. It lists profile metadata without retrieving credentials. Reuse existing configuration. If it is missing or invalid, read [Authentication](references/AUTHENTICATION.md). Do not read credential files.
+2. Use the requested profile. Otherwise use the environment selection, configured default, or sole profile, in that order. Ask if the choice is ambiguous or conflicts with the request. Run `node scripts/jenkins.mjs --profile NAME whoami` and keep that profile for the operation.
+3. Use `jobs [FOLDER]` to find jobs. Filter large output locally. Use `inspect JOB --json` when you need parameter definitions. Ask only for details you cannot discover.
+4. Run `build JOB ... --dry-run` to prepare a build. It inspects and validates the job, so skip a separate inspection when you already know the parameters. Present the summary and state whether the build uses only defaults. Include known or unknown effects on deployments, notifications, test data, infrastructure, and cost. Confirm, then rerun the same command with `--yes` instead of `--dry-run`.
+5. Report the profile, exact job, Jenkins result, build number and URL when available, relevant reports, and warnings. A queued build has not yet succeeded. Interrupting local follow does not necessarily stop the server-side build.
 
-Determine the requested controller, operation, full job or folder name, and build parameters. Check whether build execution should return after queueing, follow completion, or stream console output. Ask only for details you cannot discover from existing configuration or Jenkins.
-
-### 2. Reuse or create configuration
-
-Check the configured path before asking setup questions:
-
-- Windows: `%APPDATA%\jenkins-cli-operations\config.json`
-- Linux/macOS: `$XDG_CONFIG_HOME/jenkins-cli-operations/config.json`, or `~/.config/jenkins-cli-operations/config.json` when `XDG_CONFIG_HOME` is unset
-- Override: `JENKINS_SKILL_CONFIG` or `--config PATH`
-
-If configuration exists, do not recreate it. Verify access:
+## Commands
 
 ```bash
-node scripts/jenkins.mjs -- who-am-i
+node scripts/jenkins.mjs profiles --json
+node scripts/jenkins.mjs --profile NAME whoami
+node scripts/jenkins.mjs --profile NAME jobs 'Folder'
+node scripts/jenkins.mjs --profile NAME inspect 'Folder/Job' --json
+node scripts/jenkins.mjs --profile NAME build 'Folder/Job' --param BRANCH=main --follow --dry-run
+# Only after fresh confirmation of the preceding summary:
+node scripts/jenkins.mjs --profile NAME build 'Folder/Job' --param BRANCH=main --follow --yes
+node scripts/jenkins.mjs --profile NAME console 'Folder/Job' 123
 ```
 
-If configuration is absent or invalid, follow [Authentication and installation](references/AUTHENTICATION.md). Do not inspect or display credential-file contents.
+Repeat `--param NAME=VALUE` for build parameters, or pass a JSON object with `--params-file PATH`. Omitted parameters use Jenkins defaults. Builds queue and return unless you pass `--follow`. Add `--verbose` with `--follow` to stream console output. Ask which behavior the user wants if unspecified.
 
-### 3. Perform read-only discovery
+## Advanced operations
 
-Limit discovery output rather than listing everything on a large controller:
+`node scripts/jenkins.mjs --profile NAME cli -- help COMMAND` discovers upstream CLI behavior. `cli -- COMMAND ...` passes arguments through without classifying or enforcing mutation confirmation. Apply the safety rules above before using it. Unknown convenience commands fail instead of passing through silently.
 
-```bash
-node scripts/jenkins.mjs -- list-jobs
-node scripts/jenkins.mjs -- list-jobs 'Folder Name'
-node scripts/inspect-job.mjs --job 'Folder/Job Name'
-```
+All commands accept `--config PATH`. Normal operation does not require it. An explicit `--profile` takes precedence over `JENKINS_SKILL_PROFILE`, then the configured default, then a sole profile. Unknown or ambiguous selections fail. `profiles --json` lists both the configured default and the environment selection.
 
-Filter large job lists locally. Always inspect a job before preparing a parameterized build.
-
-### 4. Prepare a build
-
-Run the intended build command with `--dry-run`. This performs live job inspection and parameter validation, prints the execution summary, and exits without queueing a build:
-
-```bash
-node scripts/trigger-build.mjs \
-  --job 'Folder/Job Name' \
-  --param BRANCH=main \
-  --param RUN_TESTS=true \
-  --follow \
-  --dry-run
-```
-
-For a larger parameter set, use `--params-file PATH` with a JSON object. The dry-run must use the same job, parameters, and follow/verbose options intended for execution.
-
-### 5. Confirm and execute
-
-Present the dry-run summary to the user, including:
-
-- Jenkins controller and full job name;
-- submitted parameters and defaults-only behavior;
-- queue-only, follow, and console-streaming behavior;
-- known or unknown deployment, notification, test-data, infrastructure, or cost effects.
-
-After fresh explicit confirmation, rerun the same command without `--dry-run` and with `--yes`:
-
-```bash
-node scripts/trigger-build.mjs \
-  --job 'Folder/Job Name' \
-  --param BRANCH=main \
-  --param RUN_TESTS=true \
-  --follow \
-  --yes
-```
-
-Without `--yes`, the helper requires an interactive typed confirmation. Interrupting a followed CLI process does not necessarily stop the server-side build.
-
-### 6. Report the outcome
-
-Report the exact job, final status, and build number and URL when available. Include a relevant test or build summary, artifact or report URLs, and non-fatal warnings. Distinguish the Jenkins result from an interruption of the local follow process.
-
-## Direct CLI commands
-
-The authenticated wrapper passes through any official Jenkins CLI command:
-
-```bash
-node scripts/jenkins.mjs -- help <command>
-node scripts/jenkins.mjs -- console 'Folder/Job' 123
-```
-
-Determine whether a command mutates Jenkins before running it. Apply the same summary and confirmation rule to every mutating direct command. The wrapper does not classify or restrict commands.
-
-## References
-
-- [Authentication and installation](references/AUTHENTICATION.md)
-- [Operational recipes and troubleshooting](references/OPERATIONS.md)
+Existing single-connection configs and standalone scripts remain supported. Read [Operational recipes](references/OPERATIONS.md) only for advanced commands, compatibility, or troubleshooting.

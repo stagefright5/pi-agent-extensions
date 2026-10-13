@@ -1,12 +1,17 @@
 #!/usr/bin/env node
-import { chmod, mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { consumeConfigArg, defaultConfigPath } from './lib/config.mjs';
+import { consumeConfigArg, validateConnection } from './lib/config.mjs';
+import { saveConnection } from './lib/save-config.mjs';
 
 function usage() {
     console.log(`Usage:
-  node configure.mjs --url URL [launcher] [auth] [--transport webSocket|http] [--config PATH]
+  node configure.mjs [--profile NAME] --url URL [launcher] [auth] [--transport webSocket|http] [--config PATH]
+
+Profiles:
+  --profile NAME             Add a named connection without changing other profiles
+  --replace                  Explicitly replace an existing named profile
+  --default                  Make this profile the default
 
 Launcher (choose at most one):
   --jar PATH                 Invoke java -jar PATH
@@ -44,11 +49,13 @@ async function main() {
     const tokenVariable = option(args, '--token-variable');
     const userId = option(args, '--user-id');
     const service = option(args, '--service');
+    const replace = args.includes('--replace');
+    if (replace) args.splice(args.indexOf('--replace'), 1);
+    const makeDefault = args.includes('--default');
+    if (makeDefault) args.splice(args.indexOf('--default'), 1);
     if (args.length) throw new Error(`Unknown arguments: ${args.join(' ')}`);
     if (!url) throw new Error('--url is required');
-    if (!/^https:\/\//i.test(url) && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(url)) {
-        throw new Error('Use an HTTPS Jenkins URL (HTTP is allowed only for localhost)');
-    }
+    validateConnection({ url, auth: { provider: 'env' } });
     if (!['webSocket', 'http'].includes(transport)) throw new Error('--transport must be webSocket or http');
     if (jarPath && command) throw new Error('Choose either --jar or --command, not both');
     if (!['file', 'env', 'keychain'].includes(provider))
@@ -79,12 +86,9 @@ async function main() {
         ...(jarPath ? { jarPath: path.resolve(jarPath) } : { command: command || 'jenkins-cli' }),
         auth,
     };
-    const configPath = consumed.configPath || defaultConfigPath();
-    await mkdir(path.dirname(configPath), { recursive: true });
-    await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
-    if (process.platform !== 'win32') await chmod(configPath, 0o600);
-    console.log(`Wrote non-secret Jenkins configuration to ${configPath}`);
-    console.log('Next: node scripts/jenkins.mjs -- who-am-i');
+    await saveConnection(consumed.configPath, config, { profile: consumed.profile, replace, makeDefault });
+    console.log(`Wrote non-secret Jenkins configuration to ${consumed.configPath}`);
+    console.log(`Next: node scripts/jenkins.mjs${consumed.profile ? ` --profile ${consumed.profile}` : ''} whoami`);
 }
 
 main().catch((error) => {

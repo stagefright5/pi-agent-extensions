@@ -16,7 +16,7 @@ import {
 
 function usage() {
     console.log(`Usage:
-  node trigger-build.mjs [--config PATH] --job JOB [parameters] [--follow] [--verbose] [--dry-run] [--yes]
+  node trigger-build.mjs [--config PATH] [--profile NAME] --job JOB [parameters] [--follow] [--verbose] [--dry-run] [--yes]
 
 Parameters:
   --param NAME=VALUE          Repeatable build parameter
@@ -104,7 +104,7 @@ async function main() {
         parameters[name] = String(value);
     }
 
-    const config = await loadConfig(consumed.configPath);
+    const config = await loadConfig(consumed.configPath, consumed.profile);
     const job = await inspectJob(config, jobName);
     if (!job.buildable) throw new Error(`Job ${jobName} is not buildable`);
     const definitions = parameterDefinitions(job);
@@ -113,6 +113,8 @@ async function main() {
     if (unknown.length && definitions.length) throw new Error(`Unknown job parameter(s): ${unknown.join(', ')}`);
 
     console.log('Build execution summary:');
+    console.log(`  Profile: ${config.profile}`);
+    console.log(`  Authentication: ${config.auth.provider}${config.auth.userId ? ` (${config.auth.userId})` : ''}`);
     console.log(`  Controller: ${config.url}`);
     console.log(`  Job: ${jobName}`);
     console.log(`  Job URL: ${job.url}`);

@@ -2,7 +2,7 @@
 import { consumeConfigArg, inspectJob, isSensitiveName, loadConfig, parameterDefinitions } from './lib/config.mjs';
 
 function usage() {
-    console.log('Usage: node inspect-job.mjs [--config PATH] --job "Folder/Job Name" [--json]');
+    console.log('Usage: node inspect-job.mjs [--config PATH] [--profile NAME] --job "Folder/Job Name" [--json]');
 }
 
 function takeOption(args, name) {
@@ -24,7 +24,7 @@ async function main() {
     if (args.length) throw new Error(`Unknown arguments: ${args.join(' ')}`);
     if (!jobName) throw new Error('--job is required');
 
-    const config = await loadConfig(consumed.configPath);
+    const config = await loadConfig(consumed.configPath, consumed.profile);
     const job = await inspectJob(config, jobName);
     const parameters = parameterDefinitions(job).map((definition) => ({
         name: definition.name,
@@ -38,6 +38,8 @@ async function main() {
                 : (definition.defaultParameterValue?.value ?? null),
     }));
     const output = {
+        profile: config.profile,
+        controller: config.url,
         name: job.name,
         url: job.url,
         buildable: job.buildable,
@@ -47,6 +49,7 @@ async function main() {
     };
     if (json) console.log(JSON.stringify(output, null, 2));
     else {
+        console.log(`Profile: ${output.profile}; controller: ${output.controller}`);
         console.log(`Job: ${output.name}`);
         console.log(`URL: ${output.url}`);
         console.log(
