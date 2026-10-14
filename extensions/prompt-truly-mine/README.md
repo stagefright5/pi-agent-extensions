@@ -70,6 +70,12 @@ Every selected prompt template receives the complete original draft as its argum
 
 The expanded template uses pi-style normalized arguments, while the separately appended user task remains byte-for-byte unchanged.
 
+## Copy-friendly composer
+
+The editor uses thin horizontal separators without a composer label. Shell commands retain a quiet `shell` mode indicator. There are **no added prompt glyphs, side borders, per-line prefixes, or content indentation**. Decoration is restricted to pi's dedicated border hooks; content, cursor markers, and autocomplete rows are left intact. Native scroll indicators take precedence over decorative labels. Thinking-level and shell-mode border colors continue to come from pi.
+
+Undo/redo hints (`ctrl+z undo` and `ctrl+y redo`) appear at the top right only when available and when they fit. The bottom border stays clean. Shortcut, shell, and overflow labels use the active theme's `muted` text color independently of the thinking-level border color, so thin-rule styling cannot make labels unreadable. Theme changes are read at render time. Hints never overwrite the final autocomplete row. The chrome follows the selected theme, including Obsidian Ice.
+
 ## Undo and redo
 
 Shortcuts:
@@ -87,7 +93,7 @@ Behavior:
 - History records programmatic text replacement, inserted text, and autocomplete selections.
 - The editor retains up to 200 undo and 200 redo snapshots.
 - The editor clears history after submission so you cannot accidentally restore a sent message into the empty editor.
-- Undo and redo hints appear in the editor's bottom border when those actions are available.
+- Undo and redo hints appear at the top right of the editor border when those actions are available.
 
 ## Context size and trust
 
@@ -97,7 +103,7 @@ Loading several full resources and substituting the whole draft into prompt temp
 
 ## Compatibility and limitations
 
-This extension targets pi and pi-tui 0.84.2.
+This extension targets pi and pi-tui **1.2.0**. The composer uses the protected editor-border hooks introduced in the newer runtime. On older runtimes without these hooks, native rendering remains unchanged and the new chrome is not applied; older runtime compatibility is not covered by this version's tests.
 
 Cursor restoration, inline `/` autocomplete, and Enter selection without submission use compatibility shims because pi-tui does not currently expose complete public APIs for those operations. If internals change:
 

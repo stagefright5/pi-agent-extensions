@@ -1,13 +1,13 @@
 {
   "name": "@stagefright5/pi-prompt-truly-mine",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Inline extension commands and composable skill/prompt context with cursor-restoring undo and redo for pi",
   "type": "module",
   "keywords": [
     "prompt-editor"
   ],
   "scripts": {
-    "test": "node --test inline-context.test.ts",
+    "test": "node --experimental-transform-types --test *.test.ts",
     "prepack": "node ../../scripts/package-tools.mjs stage-package"
   },
   "peerDependencies": {
@@ -15,8 +15,8 @@
     "@earendil-works/pi-tui": "*"
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "catalog:",
-    "@earendil-works/pi-tui": "catalog:"
+    "@earendil-works/pi-coding-agent": "1.2.0",
+    "@earendil-works/pi-tui": "1.2.0"
   },
   "pi": {
     "extensions": [

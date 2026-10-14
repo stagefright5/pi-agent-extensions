@@ -29,7 +29,7 @@ export default function (pi: ExtensionAPI) {
 
 	const isOpenAI = (model: ExtensionContext["model"]) => PROVIDERS.includes(model?.provider ?? "");
 	const show = (ctx: ExtensionContext, model = ctx.model) =>
-		ctx.ui.setStatus("fast", on && isOpenAI(model) ? "fast" : undefined);
+		ctx.ui.setStatus("fast", on && isOpenAI(model) ? "⚡︎" : undefined);
 
 	pi.registerFlag("fast", { description: "Turn on OpenAI Fast mode for this run", type: "boolean", default: false });
 

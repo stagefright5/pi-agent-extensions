@@ -60,7 +60,11 @@ test("checked-in indexes are current and sync is idempotent", () => {
   const workspace = loadWorkspace();
   assert.deepEqual(syncWorkspace(workspace, { check: true }), []);
   const pi = renderPiManifest(workspace.packages);
-  assert.equal(pi.extensions.length, 9);
+  assert.equal(
+    pi.extensions.length,
+    workspace.packages.reduce((count, pkg) => count + (pkg.source.pi.extensions?.length ?? 0), 0),
+  );
+  assert.deepEqual(pi.themes, ["./extensions/obsidian-ui/themes/obsidian-ice.json"]);
   assert.deepEqual(pi.skills, [
     "./extensions/artifact-design/SKILL.md",
     "./extensions/jenkins-cli-operations/SKILL.md",
@@ -70,8 +74,8 @@ test("checked-in indexes are current and sync is idempotent", () => {
 
 test("check detects drift without writing; sync repairs all indexes without changing authored prose", (t) => {
   const workspace = fixture(t);
-  const pkg = get(workspace, "ask");
-  pkg.source.name = "@example/renamed-ask";
+  const pkg = get(workspace, "tool-output-browser");
+  pkg.source.name = "@example/renamed-browser";
   pkg.source.description = "Updated | purpose";
   workspace.manifest.pi = {};
   const readme = join(workspace.root, "README.md");
@@ -80,10 +84,10 @@ test("check detects drift without writing; sync repairs all indexes without chan
   assert.equal(read(readme), before);
   assert.deepEqual(
     syncWorkspace(workspace).map((path) => path.split(/[\\/]/).join("/")),
-    ["package.json", "README.md", "extensions/ask/README.md"],
+    ["package.json", "README.md", "extensions/tool-output-browser/README.md"],
   );
   assert.match(read(readme), /Updated \\\| purpose/);
-  assert.match(read(join(pkg.dir, "README.md")), /pi install npm:@example\/renamed-ask/);
+  assert.match(read(join(pkg.dir, "README.md")), /pi install npm:@example\/renamed-browser/);
   assert.match(read(join(pkg.dir, "README.md")), /For source development, load this directory/);
   workspace.manifest = json(join(workspace.root, "package.json"));
   assert.deepEqual(syncWorkspace(workspace), []);
@@ -155,7 +159,7 @@ test("all staged packages carry shared defaults, unchanged release identity, and
 
 test("staging removes stale output, preserves source, and supports safe package-local exceptions", (t) => {
   const workspace = fixture(t);
-  const pkg = get(workspace, "ask");
+  const pkg = get(workspace, "tool-output-browser");
   const sourceBefore = read(join(pkg.dir, "package.json"));
   writeFileSync(join(pkg.dir, "old-helper.js"), "export const value = 1;\n");
   const destination = stagePackage(workspace, pkg);
@@ -163,10 +167,10 @@ test("staging removes stale output, preserves source, and supports safe package-
   unlinkSync(join(pkg.dir, "old-helper.js"));
   writeFileSync(join(pkg.dir, "extra.txt"), "runtime resource");
   pkg.metadata.include = ["extra.txt"];
-  pkg.metadata.exclude = ["ask-prompt.ts"];
+  pkg.metadata.exclude = ["browser-layout.ts"];
   stagePackage(workspace, pkg);
   assert.ok(!existsSync(join(destination, "old-helper.js")));
-  assert.ok(!existsSync(join(destination, "ask-prompt.ts")));
+  assert.ok(!existsSync(join(destination, "browser-layout.ts")));
   assert.equal(read(join(destination, "extra.txt")), "runtime resource");
   assert.equal(read(join(pkg.dir, "package.json")), sourceBefore);
   pkg.metadata.include = ["../secret"];
@@ -181,7 +185,7 @@ test("staging removes stale output, preserves source, and supports safe package-
 
 test("staging rejects missing entry points and unresolved runtime dependency protocols", (t) => {
   const workspace = fixture(t);
-  const pkg = get(workspace, "ask");
+  const pkg = get(workspace, "tool-output-browser");
   pkg.source.dependencies = { runtime: "catalog:" };
   assert.throws(() => publicationManifest(workspace, pkg, []), /Resolve dependencies/);
   pkg.source.dependencies = { runtime: "^1.0.0" };
@@ -194,15 +198,17 @@ test("staging rejects missing entry points and unresolved runtime dependency pro
 
 test("published README rewrites repository links, preserves usage and leaves code examples untouched", (t) => {
   const workspace = fixture(t);
-  const pkg = get(workspace, "ask");
+  const pkg = get(workspace, "tool-output-browser");
   const path = join(pkg.dir, "README.md");
   writeFileSync(
     path,
-    `${read(path)}\n[helper](./ask-prompt.ts#example) [external](https://example.org) [anchor](#usage)\n\n\`\`\`md\n[example](./leave-this-alone.md)\nFor source development, keep this example verbatim.\n\`\`\`\n`,
+    `${read(path)}\n[helper](./browser-layout.ts#example) [external](https://example.org) [anchor](#usage)\n\n\`\`\`md\n[example](./leave-this-alone.md)\nFor source development, keep this example verbatim.\n\`\`\`\n`,
   );
   const before = read(path);
   const published = publishedReadme(workspace, pkg);
-  assert.ok(published.includes(`${workspace.repositoryUrl}/blob/main/extensions/ask/ask-prompt.ts#example`));
+  assert.ok(
+    published.includes(`${workspace.repositoryUrl}/blob/main/extensions/tool-output-browser/browser-layout.ts#example`),
+  );
   assert.ok(published.includes(`${workspace.repositoryUrl}/blob/main/README.md`));
   assert.ok(published.includes("[external](https://example.org) [anchor](#usage)"));
   assert.ok(published.includes("[example](./leave-this-alone.md)"));
@@ -217,11 +223,11 @@ test("published README rewrites repository links, preserves usage and leaves cod
 test("stage-package rejects unrelated directories and stale indexes", (t) => {
   const workspace = fixture(t);
   assert.throws(() => main("stage-package", workspace.root, workspace.root), /must run from a workspace package/);
-  const pkg = get(workspace, "ask");
+  const pkg = get(workspace, "tool-output-browser");
   pkg.source.description = "drift";
   saveJson(join(pkg.dir, "package.json"), pkg.source);
   assert.throws(() => main("stage-package", workspace.root, pkg.dir), /Generated indexes are stale/);
-  assert.ok(!existsSync(join(workspace.root, ".tmp/publish/ask")));
+  assert.ok(!existsSync(join(workspace.root, ".tmp/publish/tool-output-browser")));
 });
 
 test("pnpm packs every source package through prepack and publishConfig.directory without publishing", (t) => {

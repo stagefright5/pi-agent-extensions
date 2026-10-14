@@ -2,14 +2,13 @@
  * Compact Status Bar Extension
  *
  * Replaces pi's multi-line built-in footer with one line:
- *   cwd | context usage | cost | provider/model (thinking level) | extension statuses
+ *   cwd · branch · extension statuses       model · thinking · context · cost
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { truncateToWidth } from "@earendil-works/pi-tui";
 import { homedir } from "node:os";
-import { isAbsolute, relative, resolve, sep } from "node:path";
-import { buildStatusBarParts, formatModelDisplayLabel } from "./status-bar-format.ts";
+import { basename, isAbsolute, relative, resolve, sep } from "node:path";
+import { layoutStatusBar } from "./status-bar-format.ts";
 
 function formatCwd(cwd: string): string {
 	const home = homedir();
@@ -49,16 +48,20 @@ export default function statusBarExtension(pi: ExtensionAPI): void {
 	pi.on("session_start", (_event, ctx) => {
 		if (ctx.mode !== "tui") return;
 
-		ctx.ui.setFooter((tui, theme, footerData) => {
+		ctx.ui.setFooter((tui, _theme, footerData) => {
 			const unsubscribeFromBranchChanges = footerData.onBranchChange(() => tui.requestRender());
 
 			return {
 				dispose: unsubscribeFromBranchChanges,
 				invalidate() {},
 				render(width: number): string[] {
-					let cwd = formatCwd(ctx.sessionManager.getCwd());
+					const theme = ctx.ui.theme;
+					const cwd = formatCwd(ctx.sessionManager.getCwd());
+					const separator = theme.fg("borderMuted", " · ");
 					const branch = footerData.getGitBranch();
-					if (branch) cwd += ` (${branch})`;
+					const branchLabel = branch ? separator + theme.fg("accent", sanitizeStatusText(branch)) : "";
+					const location = theme.fg("muted", sanitizeStatusText(cwd)) + branchLabel;
+					const shortLocation = theme.fg("muted", sanitizeStatusText(basename(cwd) || cwd)) + branchLabel;
 
 					const usage = ctx.getContextUsage();
 					const contextWindow = formatContextWindow(usage?.contextWindow ?? ctx.model?.contextWindow ?? 0);
@@ -71,21 +74,34 @@ export default function statusBarExtension(pi: ExtensionAPI): void {
 								? theme.fg("warning", contextText)
 								: theme.fg("dim", contextText);
 
-					const statuses = Array.from(footerData.getExtensionStatuses().entries())
+					const extensionStatuses = footerData.getExtensionStatuses();
+					const fast = extensionStatuses.get("fast") ? theme.fg("accent", "⚡︎") : "";
+					const statuses = Array.from(extensionStatuses.entries())
+						.filter(([id]) => id !== "fast")
 						.sort(([left], [right]) => left.localeCompare(right))
 						.map(([, text]) => sanitizeStatusText(text))
 						.filter(Boolean);
-					const modelLabel = formatModelDisplayLabel(ctx.model, ctx.thinkingLevel ?? pi.getThinkingLevel());
-					const parts = buildStatusBarParts(
-						theme.fg("dim", cwd),
-						styledContext,
-						theme.fg("dim", `$${getTotalCost(ctx).toFixed(3)}`),
-						modelLabel ? theme.fg("dim", modelLabel) : undefined,
-						statuses,
-					);
-
-					const separator = theme.fg("dim", " | ");
-					return [truncateToWidth(parts.join(separator), width, theme.fg("dim", "…"))];
+					const thinking = ctx.model?.reasoning ? (ctx.thinkingLevel ?? pi.getThinkingLevel()) : "off";
+					const modelName = ctx.model ? sanitizeStatusText(ctx.model.name) : "";
+					const effort = theme.fg("dim", thinking) + (fast ? separator + fast : "");
+					const model = ctx.model
+						? theme.fg("dim", `${ctx.model.provider}/`) + theme.fg("muted", modelName) + separator + effort
+						: "";
+					return [
+						layoutStatusBar(
+							{
+								location,
+								shortLocation,
+								model,
+								shortModel: modelName ? theme.fg("muted", modelName) + separator + effort : "",
+								context: styledContext,
+								cost: theme.fg("dim", `$${getTotalCost(ctx).toFixed(3)}`),
+								statuses,
+								separator,
+							},
+							width,
+						),
+					];
 				},
 			};
 		});

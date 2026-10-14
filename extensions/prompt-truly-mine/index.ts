@@ -26,8 +26,6 @@ import {
 	decodeKittyPrintable,
 	Key,
 	matchesKey,
-	truncateToWidth,
-	visibleWidth,
 	type AutocompleteItem,
 	type AutocompleteProvider,
 	type EditorOptions,
@@ -48,6 +46,8 @@ import {
 	type InlineCommand,
 	type LoadedContextResource,
 } from "./inline-context.ts";
+
+import { composerBorder, readableScrollBorder } from "./editor-chrome.ts";
 
 type Snapshot = {
 	text: string;
@@ -271,7 +271,7 @@ async function loadContextResources(
 	return loaded;
 }
 
-class UndoRedoEditor extends CustomEditor {
+export class UndoRedoEditor extends CustomEditor {
 	private undoHistory: Snapshot[] = [];
 	private redoHistory: Snapshot[] = [];
 	private lastEditWasTyping = false;
@@ -284,6 +284,7 @@ class UndoRedoEditor extends CustomEditor {
 		keybindings: KeybindingsManager,
 		isComposableCommand: (value: string) => boolean,
 		options?: EditorOptions,
+		private readonly labelColor: (text: string) => string = (text) => text,
 	) {
 		super(tui, theme, keybindings, options);
 		this.appKeybindings = keybindings;
@@ -361,21 +362,31 @@ class UndoRedoEditor extends CustomEditor {
 		}
 	}
 
-	override render(width: number): string[] {
-		const lines = super.render(width);
-		if (lines.length === 0) return lines;
-
-		const hints: string[] = [];
-		if (this.undoHistory.length > 0) hints.push("↶ Ctrl+Z undo");
-		if (this.redoHistory.length > 0) hints.push("↷ Ctrl+Shift+Z redo");
-		if (hints.length === 0) return lines;
-
-		const label = ` ${hints.join("  ")} `;
-		const last = lines.length - 1;
-		if (visibleWidth(lines[last]!) >= label.length + 4) {
-			lines[last] = truncateToWidth(lines[last]!, Math.max(0, width - label.length), "") + label;
+	protected override renderTopBorder(width: number, hiddenLineCount: number): string {
+		// Keep pi's overflow and embedded-working indicators authoritative.
+		if (this.embedWorkingStatus) return super.renderTopBorder(width, hiddenLineCount);
+		if (hiddenLineCount > 0) {
+			return readableScrollBorder(
+				super.renderTopBorder(width, hiddenLineCount),
+				this.borderColor,
+				this.labelColor,
+			);
 		}
-		return lines;
+		const hints: string[] = [];
+		if (this.undoHistory.length > 0) hints.push("ctrl+z undo");
+		if (this.redoHistory.length > 0) hints.push("ctrl+y redo");
+		return composerBorder(
+			width,
+			this.getText().startsWith("!") ? ["shell"] : [],
+			this.borderColor,
+			hints,
+			this.labelColor,
+		);
+	}
+
+	protected override renderBottomBorder(width: number, hiddenLineCount: number): string {
+		const border = super.renderBottomBorder(width, hiddenLineCount);
+		return hiddenLineCount > 0 ? readableScrollBorder(border, this.borderColor, this.labelColor) : border;
 	}
 
 	private currentSnapshot(): Snapshot {
@@ -491,7 +502,9 @@ export default function promptTrulyMineExtension(pi: ExtensionAPI): void {
 
 		previousEditorFactory = ctx.ui.getEditorComponent();
 		installedEditorFactory = (tui, theme, keybindings) =>
-			new UndoRedoEditor(tui, theme, keybindings, isComposableCommand);
+			new UndoRedoEditor(tui, theme, keybindings, isComposableCommand, undefined, (text) =>
+				ctx.ui.theme.fg("muted", text),
+			);
 		ctx.ui.setEditorComponent(installedEditorFactory);
 	});
 

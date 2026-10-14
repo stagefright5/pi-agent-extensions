@@ -32,6 +32,12 @@ In an opened result:
 
 Pi's normal `Ctrl+O` remains unchanged and still expands or collapses every tool row in the transcript.
 
+## Appearance
+
+Open-sided panels use thin horizontal separators rather than enclosing boxes. Selection is highlighted with the theme's selection surface; active detail tabs use an understated accent underline. Metadata stays quiet, errors remain conspicuous, and narrow windows get compact help text. The overlay reads the current theme when rendering, so switching themes does not leave cached colors behind.
+
+Rendering and navigation are tested against pi 1.2.0, including tiny widths and 40/80/120/160 columns, long output, CJK, combining characters, and emoji. The interface retains all navigation keys listed above even when short help text omits them.
+
 ## Scope and limitations
 
 The browser reads tool-result messages from the current active branch. Newest results appear first; results that exist only on alternate branches are not shown.

@@ -11,12 +11,14 @@ import {
 	type TUI,
 } from "@earendil-works/pi-tui";
 
+import { browserFrame } from "./browser-layout.ts";
+
 type ToolCallInfo = {
 	name: string;
 	arguments: Record<string, unknown>;
 };
 
-type ToolOutputRecord = {
+export type ToolOutputRecord = {
 	entryId: string;
 	sequence: number;
 	toolCallId: string;
@@ -157,7 +159,7 @@ function formatTimestamp(timestamp: number): string {
 	});
 }
 
-class ToolOutputBrowser implements Component, Focusable {
+export class ToolOutputBrowser implements Component, Focusable {
 	private readonly input = new Input();
 	private filtered: ToolOutputRecord[];
 	private selectedIndex = 0;
@@ -169,7 +171,7 @@ class ToolOutputBrowser implements Component, Focusable {
 
 	constructor(
 		private readonly tui: TUI,
-		private readonly theme: Theme,
+		private readonly getTheme: () => Theme,
 		private readonly keybindings: KeybindingsManager,
 		private readonly records: ToolOutputRecord[],
 		initialQuery: string,
@@ -177,6 +179,10 @@ class ToolOutputBrowser implements Component, Focusable {
 	) {
 		this.input.setValue(initialQuery.trim());
 		this.filtered = this.filterRecords();
+	}
+
+	private get theme(): Theme {
+		return this.getTheme();
 	}
 
 	get focused(): boolean {
@@ -207,7 +213,10 @@ class ToolOutputBrowser implements Component, Focusable {
 	}
 
 	render(width: number): string[] {
-		return this.mode === "detail" ? this.renderDetail(width) : this.renderList(width);
+		if (width <= 0) return [];
+		return (this.mode === "detail" ? this.renderDetail(width) : this.renderList(width)).map((line) =>
+			truncateToWidth(line, width, "…"),
+		);
 	}
 
 	private handleListInput(data: string): void {
@@ -303,27 +312,22 @@ class ToolOutputBrowser implements Component, Focusable {
 	}
 
 	private renderList(width: number): string[] {
-		const innerWidth = Math.max(1, width - 2);
+		const innerWidth = Math.max(1, width);
 		const pageSize = this.listPageSize();
 		const lines: string[] = [];
-		const border = (text: string) => this.theme.fg("border", text);
-		const row = (content: string, selected = false) => {
-			const fitted = truncateToWidth(content, innerWidth, "…", true);
-			const body = selected ? this.theme.bg("selectedBg", fitted) : fitted;
-			return border("│") + body + border("│");
-		};
+		const { row, rule } = browserFrame(width, this.theme);
 
-		lines.push(border(`╭${"─".repeat(innerWidth)}╮`));
+		lines.push(rule());
 		lines.push(
 			row(
-				` ${this.theme.fg("accent", this.theme.bold("Tool Output Browser"))} ${this.theme.fg("dim", `(${this.filtered.length}/${this.records.length})`)}`,
+				` ${this.theme.fg("accent", this.theme.bold("tool output"))} ${this.theme.fg("dim", `(${this.filtered.length}/${this.records.length})`)}`,
 			),
 		);
 
-		const prefix = this.theme.fg("muted", " filter: ");
+		const prefix = this.theme.fg("dim", " filter  ");
 		const inputWidth = Math.max(1, innerWidth - visibleWidth(prefix));
 		lines.push(row(prefix + (this.input.render(inputWidth)[0] ?? "")));
-		lines.push(border(`├${"─".repeat(innerWidth)}┤`));
+		lines.push(rule());
 
 		if (this.filtered.length === 0) {
 			lines.push(row(` ${this.theme.fg("warning", "No matching tool outputs")}`));
@@ -336,7 +340,7 @@ class ToolOutputBrowser implements Component, Focusable {
 			for (let index = start; index < end; index++) {
 				const record = this.filtered[index]!;
 				const selected = index === this.selectedIndex;
-				const marker = selected ? " ›" : "  ";
+				const marker = selected ? this.theme.fg("accent", " ·") : "  ";
 				const status = record.isError ? this.theme.fg("error", "✗") : this.theme.fg("success", "✓");
 				const name = this.theme.fg(selected ? "accent" : "toolTitle", record.toolName);
 				const preview = argumentsPreview(record);
@@ -353,15 +357,18 @@ class ToolOutputBrowser implements Component, Focusable {
 			}
 		}
 
-		lines.push(border(`├${"─".repeat(innerWidth)}┤`));
-		lines.push(row(` ${this.theme.fg("dim", "type to filter · ↑↓/PgUp/PgDn navigate · Enter open · Esc close")}`));
-		lines.push(border(`╰${"─".repeat(innerWidth)}╯`));
+		lines.push(rule());
+		lines.push(
+			row(
+				` ${this.theme.fg("dim", width < 80 ? "↑↓ select · enter open · esc close" : "type to filter · ↑↓/PgUp/PgDn navigate · enter open · esc close")}`,
+			),
+		);
+		lines.push(rule());
 		return lines;
 	}
 
 	private renderDetail(width: number): string[] {
-		const innerWidth = Math.max(1, width - 2);
-		const contentWidth = Math.max(1, innerWidth - 2);
+		const contentWidth = Math.max(1, width - 1);
 		const record = this.filtered[this.selectedIndex];
 		if (!record) {
 			this.mode = "list";
@@ -369,11 +376,10 @@ class ToolOutputBrowser implements Component, Focusable {
 		}
 
 		const lines: string[] = [];
-		const border = (text: string) => this.theme.fg(record.isError ? "error" : "border", text);
-		const row = (content: string) => border("│") + truncateToWidth(content, innerWidth, "…", true) + border("│");
+		const { row, rule } = browserFrame(width, this.theme, record.isError);
 		const contentRow = (content: string) => row(` ${content}`);
 
-		lines.push(border(`╭${"─".repeat(innerWidth)}╮`));
+		lines.push(rule());
 		const status = record.isError ? this.theme.fg("error", "error") : this.theme.fg("success", "success");
 		lines.push(
 			row(` ${this.theme.fg("accent", this.theme.bold(`#${record.sequence} ${record.toolName}`))} · ${status}`),
@@ -385,12 +391,10 @@ class ToolOutputBrowser implements Component, Focusable {
 		);
 
 		const tabs = DETAIL_VIEWS.map((view) =>
-			view === this.detailView
-				? this.theme.fg("accent", this.theme.bold(`[${view}]`))
-				: this.theme.fg("dim", view),
+			view === this.detailView ? this.theme.fg("accent", this.theme.underline(view)) : this.theme.fg("dim", view),
 		).join("  ");
 		lines.push(row(` ${tabs}`));
-		lines.push(border(`├${"─".repeat(innerWidth)}┤`));
+		lines.push(rule());
 
 		const wrapped = this.detailLines(record, contentWidth);
 		const pageSize = this.detailPageSize();
@@ -400,17 +404,17 @@ class ToolOutputBrowser implements Component, Focusable {
 		for (const line of visible) lines.push(contentRow(this.theme.fg("toolOutput", line)));
 		for (let index = visible.length; index < pageSize; index++) lines.push(contentRow(""));
 
-		lines.push(border(`├${"─".repeat(innerWidth)}┤`));
+		lines.push(rule());
 		const position =
 			wrapped.length === 0
 				? "0/0"
 				: `${this.scrollOffset + 1}-${Math.min(this.scrollOffset + pageSize, wrapped.length)}/${wrapped.length}`;
 		lines.push(
 			row(
-				` ${this.theme.fg("dim", `${position} · ↑↓/j k scroll · PgUp/PgDn page · Tab/→ view · n/p result · Esc/← back · Ctrl+C close`)}`,
+				` ${this.theme.fg("dim", width < 80 ? `${position} · tab view · esc back` : `${position} · ↑↓ scroll · tab view · n/p result · esc back · ctrl+c close`)}`,
 			),
 		);
-		lines.push(border(`╰${"─".repeat(innerWidth)}╯`));
+		lines.push(rule());
 		return lines;
 	}
 
@@ -497,7 +501,8 @@ async function openToolOutputBrowser(ctx: ExtensionContext, initialQuery = ""): 
 	}
 
 	await ctx.ui.custom<void>(
-		(tui, theme, keybindings, done) => new ToolOutputBrowser(tui, theme, keybindings, records, initialQuery, done),
+		(tui, _theme, keybindings, done) =>
+			new ToolOutputBrowser(tui, () => ctx.ui.theme, keybindings, records, initialQuery, done),
 		{
 			overlay: true,
 			overlayOptions: {

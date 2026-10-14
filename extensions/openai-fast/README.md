@@ -20,7 +20,7 @@ pi install npm:@stagefright5/pi-openai-fast
 
 - `/fast` toggles it and saves the choice as `"openaiFast": true` in `~/.pi/agent/settings.json`.
 - `pi --fast` turns it on for one run without saving.
-- The footer shows `fast` while it is on and the current model is OpenAI.
+- The footer shows `⚡︎` while it is on and the current model is OpenAI. With Compact Status Bar, it appears immediately after the thinking/effort level.
 
 It is off by default. `/fast` only turns on while an OpenAI model is selected.
 

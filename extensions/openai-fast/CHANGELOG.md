@@ -1,5 +1,11 @@
 # @stagefright5/pi-openai-fast
 
+## 0.1.2
+
+### Patch Changes
+
+- Display OpenAI Fast mode as the text-style ⚡︎ glyph immediately after effort in the compact footer, without duplicating the generic extension status. Keep it attached to effort in shortened model labels and remove it when Fast mode is off.
+
 ## 0.1.1
 
 ### Patch Changes

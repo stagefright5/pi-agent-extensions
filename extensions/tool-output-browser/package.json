@@ -1,6 +1,6 @@
 {
   "name": "@stagefright5/pi-tool-output-browser",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Browse complete stored tool results without expanding every pi transcript row",
   "type": "module",
   "keywords": [
@@ -8,6 +8,7 @@
     "tui"
   ],
   "scripts": {
+    "test": "node --experimental-transform-types --test *.test.ts",
     "prepack": "node ../../scripts/package-tools.mjs stage-package"
   },
   "peerDependencies": {
@@ -15,8 +16,8 @@
     "@earendil-works/pi-tui": "*"
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "catalog:",
-    "@earendil-works/pi-tui": "catalog:"
+    "@earendil-works/pi-coding-agent": "1.2.0",
+    "@earendil-works/pi-tui": "1.2.0"
   },
   "pi": {
     "extensions": [

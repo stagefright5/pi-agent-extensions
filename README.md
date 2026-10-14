@@ -2,7 +2,7 @@
 
 Independently publishable packages for [pi](https://github.com/earendil-works/pi-mono/tree/main/packages/coding-agent), maintained at [`stagefright5/pi-agent-extensions`](https://github.com/stagefright5/pi-agent-extensions). The workspace uses Vite+ for development commands and pnpm for package management.
 
-The packages target pi 0.84.2 and use pi's TypeScript extension format without a compilation step. Local development loads source directly; packing and publishing generate distribution metadata and assets.
+The Obsidian UI, Prompt Truly Mine, Compact Status Bar, and Tool Output Browser packages are tested against pi 1.2.0; other packages retain their existing version targets. Packages use pi's TypeScript extension format without a compilation step. Local development loads source directly; packing and publishing generate distribution metadata and assets.
 
 > [!WARNING]
 > Pi extensions execute with your user account's full system permissions. Review the source before installing or updating any extension or skill.
@@ -12,19 +12,19 @@ The packages target pi 0.84.2 and use pi's TypeScript extension format without a
 <!-- package-tools:catalogue:start -->
 
 <!-- prettier-ignore -->
-| Workspace                                                                    | npm package                               | Purpose                                                                                                     | Primary interface                    |
-| ---------------------------------------------------------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| [Artifact Design](./extensions/artifact-design/README.md)                    | `@stagefright5/pi-artifact-design`        | Design self-contained HTML artifacts with a local Vite dev server, theme/CSP harness, and single-file build | `/skill:artifact-design`             |
-| [Ask](./extensions/ask/README.md)                                            | `@stagefright5/pi-ask`                    | Ask before decisions by applying a one-turn interaction policy in pi                                        | `/ask <task>`                        |
-| [Bang Don't Ghost](./extensions/bang-dont-ghost/README.md)                   | `@stagefright5/pi-bang-dont-ghost`        | Automatically continue pi after a user-entered single-bang shell command                                    | Automatic                            |
-| [Jenkins CLI Operations](./extensions/jenkins-cli-operations/README.md)      | `@stagefright5/pi-jenkins-cli-operations` | Guarded Jenkins operations for pi using the official Jenkins CLI                                            | `/skill:jenkins-cli-operations`      |
-| [OpenAI Fast](./extensions/openai-fast/README.md)                            | `@stagefright5/pi-openai-fast`            | Toggle OpenAI Fast mode (priority service tier) in pi                                                       | `/fast`, `pi --fast`                 |
-| [Plan Mode](./extensions/plan-mode/README.md)                                | `@stagefright5/pi-plan-mode`              | Evidence-guided planning and interactive plan review for pi                                                 | `/plan`, `Alt+P`                     |
-| [Global Prompt History Search](./extensions/prompt-history-search/README.md) | `@stagefright5/pi-prompt-history-search`  | Fuzzy reverse search across prompts in saved pi sessions                                                    | `Alt+R`, `/prompt-history`           |
-| [Prompt Truly Mine](./extensions/prompt-truly-mine/README.md)                | `@stagefright5/pi-prompt-truly-mine`      | Inline extension commands and composable skill/prompt context with cursor-restoring undo and redo for pi    | inline `/`, `Ctrl+Z`, redo shortcuts |
-| [Provider URL Logger](./extensions/provider-url-logger/README.md)            | `@stagefright5/pi-provider-url-logger`    | Log the provider, model, and base URL selected for pi provider requests                                     | Automatic                            |
-| [Compact Status Bar](./extensions/status-bar/README.md)                      | `@stagefright5/pi-status-bar`             | A compact single-line status bar for pi                                                                     | Automatic in TUI mode                |
-| [Tool Output Browser](./extensions/tool-output-browser/README.md)            | `@stagefright5/pi-tool-output-browser`    | Browse complete stored tool results without expanding every pi transcript row                               | `/tool-output`                       |
+| Workspace                                                                    | npm package                               | Purpose                                                                                                     | Primary interface                            |
+| ---------------------------------------------------------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| [Artifact Design](./extensions/artifact-design/README.md)                    | `@stagefright5/pi-artifact-design`        | Design self-contained HTML artifacts with a local Vite dev server, theme/CSP harness, and single-file build | `/skill:artifact-design`                     |
+| [Bang Don't Ghost](./extensions/bang-dont-ghost/README.md)                   | `@stagefright5/pi-bang-dont-ghost`        | Automatically continue pi after a user-entered single-bang shell command                                    | Automatic                                    |
+| [Jenkins CLI Operations](./extensions/jenkins-cli-operations/README.md)      | `@stagefright5/pi-jenkins-cli-operations` | Guarded Jenkins operations for pi using the official Jenkins CLI                                            | `/skill:jenkins-cli-operations`              |
+| [Obsidian UI](./extensions/obsidian-ui/README.md)                            | `@stagefright5/pi-obsidian-ui`            | A copy-friendly graphite and ice theme with compact tool presentation for pi                                | Automatic tool styling; `obsidian-ice` theme |
+| [OpenAI Fast](./extensions/openai-fast/README.md)                            | `@stagefright5/pi-openai-fast`            | Toggle OpenAI Fast mode (priority service tier) in pi                                                       | `/fast`, `pi --fast`                         |
+| [Plan Mode](./extensions/plan-mode/README.md)                                | `@stagefright5/pi-plan-mode`              | Evidence-guided planning and interactive plan review for pi                                                 | `/plan`, `Alt+P`                             |
+| [Global Prompt History Search](./extensions/prompt-history-search/README.md) | `@stagefright5/pi-prompt-history-search`  | Fuzzy reverse search across prompts in saved pi sessions                                                    | `Alt+R`, `/prompt-history`                   |
+| [Prompt Truly Mine](./extensions/prompt-truly-mine/README.md)                | `@stagefright5/pi-prompt-truly-mine`      | Inline extension commands and composable skill/prompt context with cursor-restoring undo and redo for pi    | inline `/`, `Ctrl+Z`, redo shortcuts         |
+| [Provider URL Logger](./extensions/provider-url-logger/README.md)            | `@stagefright5/pi-provider-url-logger`    | Log the provider, model, and base URL selected for pi provider requests                                     | Automatic                                    |
+| [Compact Status Bar](./extensions/status-bar/README.md)                      | `@stagefright5/pi-status-bar`             | A compact single-line status bar for pi                                                                     | Automatic in TUI mode                        |
+| [Tool Output Browser](./extensions/tool-output-browser/README.md)            | `@stagefright5/pi-tool-output-browser`    | Browse complete stored tool results without expanding every pi transcript row                               | `/tool-output`                               |
 
 <!-- package-tools:catalogue:end -->
 
@@ -38,9 +38,9 @@ After a package is published, install only the extension or skill you want:
 
 ```bash
 pi install npm:@stagefright5/pi-artifact-design
-pi install npm:@stagefright5/pi-ask
 pi install npm:@stagefright5/pi-bang-dont-ghost
 pi install npm:@stagefright5/pi-jenkins-cli-operations
+pi install npm:@stagefright5/pi-obsidian-ui
 pi install npm:@stagefright5/pi-openai-fast
 pi install npm:@stagefright5/pi-plan-mode
 pi install npm:@stagefright5/pi-prompt-history-search

@@ -37,8 +37,8 @@
       "./extensions/jenkins-cli-operations/SKILL.md"
     ],
     "extensions": [
-      "./extensions/ask/index.ts",
       "./extensions/bang-dont-ghost/index.ts",
+      "./extensions/obsidian-ui/index.ts",
       "./extensions/openai-fast/index.ts",
       "./extensions/plan-mode/index.ts",
       "./extensions/prompt-history-search/index.ts",
@@ -46,6 +46,9 @@
       "./extensions/provider-url-logger/index.ts",
       "./extensions/status-bar/index.ts",
       "./extensions/tool-output-browser/index.ts"
+    ],
+    "themes": [
+      "./extensions/obsidian-ui/themes/obsidian-ice.json"
     ]
   }
 }

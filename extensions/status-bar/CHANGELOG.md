@@ -1,5 +1,15 @@
 # @stagefright5/pi-status-bar
 
+## 0.3.0
+
+### Minor Changes
+
+- Introduce the Obsidian Ice theme and presentation-only compact tool renderers for pi 1.2. Style the existing composer through border-only hooks without adding content prefixes, balance the footer with context/status priority, and give the output browser open-sided panels. Preserve native edit/shell/specialized rendering and add Unicode, width, cursor, autocomplete, streaming/error, theme, and navigation regression tests.
+
+### Patch Changes
+
+- Display OpenAI Fast mode as the text-style ⚡︎ glyph immediately after effort in the compact footer, without duplicating the generic extension status. Keep it attached to effort in shortened model labels and remove it when Fast mode is off.
+
 ## 0.2.1
 
 ### Patch Changes
