@@ -4,7 +4,7 @@ import { stripVTControlCharacters as plain } from "node:util";
 import { CustomEditor } from "@earendil-works/pi-coding-agent";
 import { CURSOR_MARKER, visibleWidth, type TUI } from "@earendil-works/pi-tui";
 import { UndoRedoEditor } from "./index.ts";
-import { composerBorder } from "./editor-chrome.ts";
+import { composerHeader } from "./editor-chrome.ts";
 
 const host = new URL(".", import.meta.resolve("@earendil-works/pi-coding-agent"));
 const { KeybindingsManager } = await import(new URL("core/keybindings.js", host).href);
@@ -24,26 +24,25 @@ const theme = {
 const tui = { terminal: { rows: 40, columns: 80 }, requestRender() {} } as unknown as TUI;
 const make = () => new UndoRedoEditor(tui, theme, keybindings, () => false);
 
-test("border labels never exceed available width", () => {
+test("rule-free header labels never exceed available width", () => {
 	for (const width of [0, 1, 2, 10, 40, 80, 120, 160]) {
-		assert.equal(visibleWidth(composerBorder(width, ["shell", "ctrl+z undo", "世界"], identity)), width);
-		assert.equal(
-			visibleWidth(composerBorder(width, ["shell"], identity, ["ctrl+z undo", "ctrl+y redo", "世界"])),
-			width,
-		);
+		assert.equal(visibleWidth(composerHeader(width, ["shell", "ctrl+z undo", "世界"])), width);
+		const header = composerHeader(width, ["shell"], ["ctrl+z undo", "ctrl+y redo", "世界"]);
+		assert.equal(visibleWidth(header), width);
+		assert.doesNotMatch(header, /[─│]/u);
 	}
 });
 
-test("undo and redo hints are top-right, with a clean bottom border", () => {
+test("undo and redo hints are top-right, with blank top/bottom padding instead of rules", () => {
 	const editor = make();
-	assert.equal(plain(editor.render(80)[0]!), "─".repeat(80));
+	assert.equal(plain(editor.render(80)[0]!), " ".repeat(80));
 	editor.setText("draft");
-	assert.equal(plain(editor.render(80)[0]!), "─".repeat(66) + " ctrl+z undo ─");
+	assert.equal(plain(editor.render(80)[0]!), " ".repeat(66) + " ctrl+z undo  ");
 	editor.insertTextAtCursor(" change");
 	editor.handleInput("\x1a");
 	const rows = editor.render(80).map(plain);
-	assert.match(rows[0]!, /^─+ ctrl\+z undo · ctrl\+y redo ─$/);
-	assert.equal(rows.at(-1), "─".repeat(80));
+	assert.match(rows[0]!, /^ +ctrl\+z undo · ctrl\+y redo  $/);
+	assert.equal(rows.at(-1), " ".repeat(80));
 	editor.handleInput("\x19");
 	assert.doesNotMatch(plain(editor.render(80)[0]!), /redo/);
 });
@@ -114,8 +113,8 @@ test("autocomplete rows are not mistaken for the bottom border", async () => {
 	const helpIndex = expected.findIndex((line: string) => line.includes("menu untouched"));
 	assert.ok(helpIndex > 2);
 	assert.deepEqual(actual.slice(helpIndex), expected.slice(helpIndex));
-	assert.match(actual[0]!, /ctrl\+z undo ─$/);
-	assert.equal(actual[2], expected[2]);
+	assert.match(actual[0]!, /ctrl\+z undo  $/);
+	assert.equal(plain(actual[2]!), " ".repeat(80));
 	for (const item of [editor, native]) item.handleInput("\x1b");
 });
 
@@ -161,8 +160,10 @@ test("native overflow text gets readable label colors without moving its positio
 	}
 	for (const width of [2, 10, 40, 80, 120, 160]) {
 		const actual = editor.render(width)[0]!;
-		assert.equal(plain(actual), plain(native.render(width)[0]!));
-		const label = plain(actual).replace(/─/gu, "");
+		const original = plain(native.render(width)[0]!);
+		assert.equal(plain(actual), original.replace(/─/gu, " "));
+		assert.doesNotMatch(plain(actual), /─/u);
+		const label = original.replace(/─/gu, "");
 		if (label) assert.ok(actual.includes(palette.fg("muted", label)));
 	}
 });

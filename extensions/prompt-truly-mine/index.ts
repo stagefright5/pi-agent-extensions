@@ -20,6 +20,7 @@ import {
 	type ExtensionAPI,
 	type ExtensionContext,
 	type KeybindingsManager,
+	type Theme,
 } from "@earendil-works/pi-coding-agent";
 import {
 	decodeKittyPrintable,
@@ -46,7 +47,7 @@ import {
 	type LoadedContextResource,
 } from "./inline-context.ts";
 
-import { composerBorder, readableScrollBorder } from "./editor-chrome.ts";
+import { composerHeader, readableScrollChrome } from "./editor-chrome.ts";
 
 type EditorFactory = NonNullable<ReturnType<ExtensionContext["ui"]["getEditorComponent"]>>;
 
@@ -286,6 +287,7 @@ export class UndoRedoEditor extends CustomEditor {
 		isComposableCommand: (value: string) => boolean,
 		options?: EditorOptions,
 		private readonly labelColor: (text: string) => string = (text) => text,
+		private readonly getSurfaceTheme?: () => Theme,
 	) {
 		super(tui, theme, keybindings, options);
 		this.appKeybindings = keybindings;
@@ -363,31 +365,31 @@ export class UndoRedoEditor extends CustomEditor {
 		}
 	}
 
+	override render(width: number): string[] {
+		if (width <= 0) return [];
+		const lines = super.render(width);
+		const theme = this.getSurfaceTheme?.();
+		if (!theme) return lines;
+		// Reuse user-message tokens: the draft and sent message share one visual surface.
+		// Only wrap native rows in ANSI styling; do not change text, spacing, cursor
+		// markers, autocomplete geometry, or add any prefix/padding.
+		return lines.map((line) => theme.style(line, { fg: "userMessageText", bg: "userMessageBg" }));
+	}
+
 	protected override renderTopBorder(width: number, hiddenLineCount: number): string {
 		// Keep pi's overflow and embedded-working indicators authoritative.
-		if (this.embedWorkingStatus) return super.renderTopBorder(width, hiddenLineCount);
+		if (this.embedWorkingStatus) return super.renderTopBorder(width, hiddenLineCount).replace(/─/gu, " ");
 		if (hiddenLineCount > 0) {
-			return readableScrollBorder(
-				super.renderTopBorder(width, hiddenLineCount),
-				this.borderColor,
-				this.labelColor,
-			);
+			return readableScrollChrome(super.renderTopBorder(width, hiddenLineCount), this.labelColor);
 		}
 		const hints: string[] = [];
 		if (this.undoHistory.length > 0) hints.push("ctrl+z undo");
 		if (this.redoHistory.length > 0) hints.push("ctrl+y redo");
-		return composerBorder(
-			width,
-			this.getText().startsWith("!") ? ["shell"] : [],
-			this.borderColor,
-			hints,
-			this.labelColor,
-		);
+		return composerHeader(width, this.getText().startsWith("!") ? ["shell"] : [], hints, this.labelColor);
 	}
 
 	protected override renderBottomBorder(width: number, hiddenLineCount: number): string {
-		const border = super.renderBottomBorder(width, hiddenLineCount);
-		return hiddenLineCount > 0 ? readableScrollBorder(border, this.borderColor, this.labelColor) : border;
+		return readableScrollChrome(super.renderBottomBorder(width, hiddenLineCount), this.labelColor);
 	}
 
 	private currentSnapshot(): Snapshot {
@@ -506,8 +508,14 @@ export default function promptTrulyMineExtension(pi: ExtensionAPI): void {
 
 		previousEditorFactory = ctx.ui.getEditorComponent();
 		installedEditorFactory = (tui, theme, keybindings) =>
-			new UndoRedoEditor(tui, theme, keybindings, isComposableCommand, undefined, (text) =>
-				ctx.ui.theme.fg("muted", text),
+			new UndoRedoEditor(
+				tui,
+				theme,
+				keybindings,
+				isComposableCommand,
+				undefined,
+				(text) => ctx.ui.theme.fg("muted", text),
+				() => ctx.ui.theme,
 			);
 		ctx.ui.setEditorComponent(installedEditorFactory);
 	});

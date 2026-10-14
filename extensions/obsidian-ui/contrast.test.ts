@@ -103,9 +103,25 @@ for (const mode of ["truecolor", "256color"]) {
 		}
 	});
 
+	test(`${mode}: dark cool surfaces stay separate without becoming bright gray cards`, () => {
+		// A design-regression threshold, not a WCAG requirement for adjacent backgrounds.
+		// The dark cool treatment intentionally uses subtler surface contrast than the gray cards.
+		// A narrow cool tint keeps pi\'s 256-color mapping on separate dark grayscale entries.
+		const user = background("userMessageBg");
+		assert.ok(Math.max(...user) < 64, "user/composer surface must remain dark");
+		if (mode === "truecolor") assert.ok(user[2] > user[1] && user[1] > user[0], "cool, not neutral gray");
+		for (const token of ["toolPendingBg", "toolSuccessBg"]) {
+			check(`user/composer versus ${token}`, user, background(token), 1.25);
+			check(`${token} versus configured terminal`, background(token), terminal, 1.1);
+			assert.ok(Math.max(...background(token)) < 40, "tools must remain near-black");
+			assert.ok(background("userMessageBg").every((channel, index) => channel > background(token)[index]!));
+		}
+	});
+
 	test(`${mode}: shortcut/shell label color meets 4.5:1 independently of thinking-mode borders`, () => {
 		// The editor regression tests separately verify that every mode uses this text token.
 		check("muted label on configured terminal", foreground("muted"), terminal, 4.5);
+		check("muted label on composer", foreground("muted"), background("userMessageBg"), 4.5);
 		check("muted label on selected surface", foreground("muted"), background("selectedBg"), 4.5);
 	});
 

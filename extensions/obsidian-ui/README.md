@@ -10,7 +10,9 @@ Select **obsidian-ice** in `/settings`. The package exposes `themes/obsidian-ice
 
 The terminal still controls its overall background, font, and native selection behavior. This palette is designed for a dark terminal; it does not modify Ghostty or other terminal settings. The contrast tests cover normal text, syntax, secondary metadata, and selection/search text at **4.5:1**, plus meaningful borders, mode indicators, selection markers, and the scrollbar thumb at **3:1**. Tests measure pi's emitted colors in both truecolor and 256-color modes rather than assuming RGB values survive palette approximation.
 
-Selection/search and scrollbar-track surfaces use neutral graphite so 256-color conversion does not turn them into unexpectedly bright blue-gray backgrounds. Secondary text uses silver; decorative separators can remain subtle. The matching composer colors shortcut/shell/overflow text separately from the border.
+User messages and the companion composer share a dark, cool-charcoal surface (`#2e3337`); normal tool calls use near-black blue-charcoal (`#191e22`). This deliberately avoids medium-gray cards. The subtle cool tint becomes separate dark grayscale entries in 256-color mode instead of collapsing both surfaces to black. Separate surface-separation regression checks require **1.25:1 between user and tool surfaces** and **1.1:1 between normal tool surfaces and the reference terminal background**, with darkness limits to prevent the gray-card treatment returning. These are design thresholds, not WCAG requirements for adjacent backgrounds. Tool errors retain their rose-tinted surface and status indicators.
+
+Selection/search and scrollbar-track surfaces also use a narrow cool tint so 256-color conversion does not turn them into unexpectedly bright blue-gray backgrounds. Secondary text uses silver; decorative separators can remain subtle. The matching composer has no horizontal rules or side rails; shortcut/shell/overflow labels remain readable within its filled surface.
 
 These checks use the theme's panel backgrounds, the export-page background, and the configured Arizona Monsoon terminal background (`#0a0f14`) as **opaque references**. Window transparency, wallpaper, terminal palette overrides, and third-party hardcoded styles can affect actual contrast. This is not a claim of complete WCAG conformance. No terminal opacity or configuration is changed.
 
@@ -32,7 +34,7 @@ Renderer state is scoped to each call; there are no timers or background process
 
 The companion packages in this workspace own their respective UI surfaces:
 
-- [Prompt Truly Mine](../prompt-truly-mine/README.md): border-only composer styling, with no leading glyph, side rails, or added content indentation.
+- [Prompt Truly Mine](../prompt-truly-mine/README.md): matching user-message surface and text colors, without horizontal rules, leading glyphs, side rails, or added content indentation.
 - [Compact Status Bar](../status-bar/README.md): balanced metadata with context and extension-status priority on narrow terminals.
 - [Tool Output Browser](../tool-output-browser/README.md): open-sided, lightly framed output panels.
 
