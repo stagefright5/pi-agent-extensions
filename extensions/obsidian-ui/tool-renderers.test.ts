@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stripVTControlCharacters as plain } from "node:util";
 import {
@@ -8,13 +11,13 @@ import {
 	createEditToolDefinition,
 	type ToolRenderers,
 } from "@earendil-works/pi-coding-agent";
-import { Text, visibleWidth } from "@earendil-works/pi-tui";
+import { Text, visibleWidth, TuiMainScreen, type Terminal } from "@earendil-works/pi-tui";
 import extension from "./index.ts";
 import { callSubject, compactRenderers, formatDuration, resolveRenderers, resultNotices } from "./tool-renderers.ts";
 
 // Tests intentionally use pi's real schema/loader. Production imports only public APIs.
 const host = new URL(".", import.meta.resolve("@earendil-works/pi-coding-agent"));
-const { loadThemeFromPath, setThemeJsonValidator, setThemeInstance } = await import(
+const { loadThemeFromPath, setThemeJsonValidator, setThemeInstance, getThemeByName } = await import(
 	new URL("modes/interactive/theme/theme.js", host).href
 );
 const { validateThemeJson } = await import(new URL("modes/interactive/theme/theme-schema.js", host).href);
@@ -182,6 +185,101 @@ test("partial results stay pending, older results omit timing, and generic expan
 test("ordinary source mentioning truncation is not duplicated as a warning", () => {
 	assert.deepEqual(resultNotices(result("const truncated = truncateToWidth(text, 10);\n// full output is kept")), []);
 	assert.equal(callSubject("read", { path: "file", offset: "1\\nBAD", limit: Number.NaN }, "/project"), "file");
+});
+
+test("real read-tool limit notices remain visible while collapsed", async () => {
+	const root = await mkdtemp(join(tmpdir(), "obsidian-read-"));
+	try {
+		await writeFile(join(root, "data.txt"), Array.from({ length: 30 }, (_, i) => `line ${i}`).join("\n"));
+		const native = createReadToolDefinition(root);
+		const renderer = compactRenderers("read", native);
+		const data = await native.execute("test", { path: "data.txt", limit: 8 });
+		const body = renderer.renderResult!(data, { expanded: false, isPartial: false }, theme, context());
+		assert.match(render(body), /22 more lines in file\. Use offset=9 to continue\./);
+		await writeFile(join(root, "huge.txt"), "x".repeat(60_000));
+		const huge = await native.execute("test", { path: "huge.txt" });
+		assert.ok(resultNotices(huge).some((notice) => /Use bash:/.test(notice)));
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test("expanded native calls, results and errors fit zero- and one-column widths", () => {
+	for (const native of [createReadToolDefinition("/project"), createWriteToolDefinition("/project")]) {
+		for (const isError of [false, true]) {
+			const renderer = compactRenderers(native.name, native);
+			const ctx = context({
+				args: { path: "世界.ts", content: "世界🧊".repeat(20) },
+				expanded: true,
+				isError,
+				isPartial: false,
+			});
+			const components = [
+				renderer.renderCall!(ctx.args, theme, ctx),
+				renderer.renderResult!(result("世界🧊".repeat(20)), { expanded: true, isPartial: false }, theme, ctx),
+			];
+			for (const width of [0, 1, 2, 4, 10, 80])
+				for (const component of components) {
+					for (const line of component.render(width))
+						assert.ok(visibleWidth(line) <= width, `${native.name}/${isError} overflow at ${width}`);
+				}
+		}
+	}
+});
+
+test("host tool components refresh colors and native expansion after streaming", async () => {
+	const { ToolExecutionComponent } = await import(
+		new URL("modes/interactive/components/tool-execution.js", host).href
+	);
+	const terminal: Terminal = {
+		rows: 40,
+		columns: 80,
+		kittyProtocolActive: false,
+		start() {},
+		stop() {},
+		async drainInput() {},
+		write() {},
+		moveBy() {},
+		hideCursor() {},
+		showCursor() {},
+		clearLine() {},
+		clearFromCursor() {},
+		clearScreen() {},
+		setTitle() {},
+		setProgress() {},
+		setProgramStatus() {},
+	};
+	const tui = new TuiMainScreen(terminal);
+	const component = new ToolExecutionComponent(
+		"read",
+		"host-test",
+		{ path: "data.txt" },
+		{ showImages: false },
+		compactRenderers("read", createReadToolDefinition("/project")),
+		tui,
+		"/project",
+	);
+	try {
+		component.markExecutionStarted();
+		component.updateResult({ ...result("first\nsecond\nthird\nlast"), isError: false }, true);
+		assert.match(render(component, 120), /streaming/);
+		component.updateResult({ ...result("first\nsecond\nthird\nlast"), isError: false, durationMs: 1250 }, false);
+		assert.match(render(component, 120), /✓.*1\.3s/);
+		const before = component.render(80).join("\n");
+		const light = getThemeByName("light");
+		setThemeInstance(light);
+		component.invalidate();
+		const after = component.render(80).join("\n");
+		assert.notEqual(after, before);
+		assert.ok(after.includes(light.getBgAnsi("toolSuccessBg")));
+		assert.ok(after.includes(light.getFgAnsi("toolOutput")));
+		component.setExpanded(true);
+		assert.match(render(component), /last/);
+		for (const width of [8, 10, 40, 80])
+			for (const line of component.render(width)) assert.ok(visibleWidth(line) <= width);
+	} finally {
+		setThemeInstance(theme);
+	}
 });
 
 test("extension registers only a resolver, not tools or transcript mutators", () => {

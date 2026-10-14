@@ -24,9 +24,13 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import {
 	decodeKittyPrintable,
+	CURSOR_MARKER,
+	renderFakeCursor,
 	Key,
 	matchesKey,
-	type AutocompleteItem,
+	truncateToWidth,
+	type TuiMouseEvent,
+	type TuiMouseEventResult,
 	type AutocompleteProvider,
 	type EditorOptions,
 	type EditorTheme,
@@ -51,35 +55,40 @@ import { composerHeader, readableScrollChrome } from "./editor-chrome.ts";
 
 type EditorFactory = NonNullable<ReturnType<ExtensionContext["ui"]["getEditorComponent"]>>;
 
-type Snapshot = {
-	text: string;
-	cursor: { line: number; col: number };
-};
+import {
+	captureEditorSnapshot,
+	makeSelectedContextCompletionComposable,
+	requestInlineContextAutocomplete,
+	restoreEditorSnapshotViaInternalState,
+	restorePasteData,
+	type Snapshot,
+} from "./editor-compat.ts";
 
 const MAX_HISTORY = 200;
 const REDO_KEYS = [Key.ctrlShift("z"), Key.ctrl("y")] as const;
 
 function sameSnapshot(a: Snapshot, b: Snapshot): boolean {
-	return a.text === b.text && a.cursor.line === b.cursor.line && a.cursor.col === b.cursor.col;
+	return !snapshotTextChanged(a, b) && a.cursor.line === b.cursor.line && a.cursor.col === b.cursor.col;
 }
 
 function snapshotTextChanged(a: Snapshot, b: Snapshot): boolean {
-	return a.text !== b.text;
+	return a.text !== b.text || a.expandedText !== b.expandedText;
 }
 
 function cloneSnapshot(snapshot: Snapshot): Snapshot {
 	return {
-		text: snapshot.text,
+		...snapshot,
 		cursor: { line: snapshot.cursor.line, col: snapshot.cursor.col },
 	};
 }
 
-const MODIFY_OTHER_KEYS_PRINTABLE_REGEX = /^\x1b\[27;(\d+);(\d+)~$/;
+const MODIFY_OTHER_KEYS_PRINTABLE_REGEX = /^\[27;(\d+);(\d+)~$/;
 const SHIFT_MODIFIER = 1;
 const LOCK_MODIFIERS = 64 + 128;
 
 function decodeModifyOtherKeysPrintable(data: string): string | undefined {
-	const match = data.match(MODIFY_OTHER_KEYS_PRINTABLE_REGEX);
+	if (!data.startsWith("\x1b")) return undefined;
+	const match = data.slice(1).match(MODIFY_OTHER_KEYS_PRINTABLE_REGEX);
 	if (!match) return undefined;
 
 	const modifier = Number.parseInt(match[1]!, 10) - 1;
@@ -101,98 +110,6 @@ function decodePrintableInput(data: string): string | undefined {
 	}
 
 	return decodeKittyPrintable(data) ?? decodeModifyOtherKeysPrintable(data);
-}
-
-type EditorInternals = {
-	state?: { lines: string[]; cursorLine: number; cursorCol: number };
-	scrollOffset?: number;
-	historyIndex?: number;
-	lastAction?: unknown;
-	preferredVisualCol?: number | null;
-	snappedFromCursorCol?: number | null;
-	undoStack?: { clear?: () => void };
-	cancelAutocomplete?: () => void;
-	onChange?: (text: string) => void;
-	tui?: { requestRender?: () => void };
-	autocompletePrefix?: string;
-	autocompleteList?: { getSelectedItem?: () => AutocompleteItem | undefined };
-	requestAutocomplete?: (options: { force: boolean; explicitTab: boolean }) => void;
-};
-
-/**
- * Restore text and cursor as one snapshot.
- *
- * pi-tui currently exposes `getCursor()` but no public `setCursor()` or
- * complete editor snapshot-restore API. To preserve cursor-restoring undo/redo,
- * this shim keeps all private Editor-state access in one defensive place. If a
- * future pi-tui release changes these internals, callers fall back to public
- * `setText()` behavior instead of throwing from input handling.
- */
-function restoreEditorSnapshotViaInternalState(editor: CustomEditor, snapshot: Snapshot): boolean {
-	try {
-		const internal = editor as unknown as EditorInternals;
-		const state = internal.state;
-		if (!state || !Array.isArray(state.lines)) return false;
-		if (typeof state.cursorLine !== "number" || typeof state.cursorCol !== "number") return false;
-
-		internal.cancelAutocomplete?.();
-
-		const lines = snapshot.text.split("\n");
-		state.lines = lines.length > 0 ? lines : [""];
-		state.cursorLine = Math.max(0, Math.min(snapshot.cursor.line, state.lines.length - 1));
-		const currentLine = state.lines[state.cursorLine] ?? "";
-		state.cursorCol = Math.max(0, Math.min(snapshot.cursor.col, currentLine.length));
-
-		internal.historyIndex = -1;
-		internal.lastAction = null;
-		internal.preferredVisualCol = null;
-		internal.snappedFromCursorCol = null;
-		internal.scrollOffset = 0;
-		// Keep pi's built-in one-way undo stack from diverging from this
-		// extension's undo/redo history after a manual snapshot restore.
-		internal.undoStack?.clear?.();
-
-		internal.onChange?.(editor.getText());
-		internal.tui?.requestRender?.();
-		return true;
-	} catch {
-		return false;
-	}
-}
-
-function requestInlineContextAutocomplete(editor: CustomEditor): boolean {
-	try {
-		if (editor.isShowingAutocomplete()) return false;
-		const internal = editor as unknown as EditorInternals;
-		if (!internal.state || typeof internal.requestAutocomplete !== "function") return false;
-		const context = findSlashCompletionContext(
-			internal.state.lines,
-			internal.state.cursorLine,
-			internal.state.cursorCol,
-		);
-		if (!context || context.isInitialCommand) return false;
-		internal.requestAutocomplete({ force: false, explicitTab: false });
-		return true;
-	} catch {
-		return false;
-	}
-}
-
-function makeSelectedContextCompletionComposable(
-	editor: CustomEditor,
-	isComposableCommand: (value: string) => boolean,
-): boolean {
-	try {
-		const internal = editor as unknown as EditorInternals;
-		const prefix = internal.autocompletePrefix;
-		if (!prefix?.startsWith("/")) return false;
-		const selected = internal.autocompleteList?.getSelectedItem?.();
-		if (!selected || !isComposableCommand(selected.value)) return false;
-		internal.autocompletePrefix = encodeComposableCompletionPrefix(prefix);
-		return true;
-	} catch {
-		return false;
-	}
 }
 
 function getInlineCommands(pi: ExtensionAPI): InlineCommand[] {
@@ -277,6 +194,7 @@ export class UndoRedoEditor extends CustomEditor {
 	private undoHistory: Snapshot[] = [];
 	private redoHistory: Snapshot[] = [];
 	private lastEditWasTyping = false;
+	private compactViewport = false;
 	private readonly appKeybindings: KeybindingsManager;
 	private readonly isComposableCommand: (value: string) => boolean;
 
@@ -312,7 +230,24 @@ export class UndoRedoEditor extends CustomEditor {
 		const before = this.currentSnapshot();
 		const wasPlainPrintable = this.isPlainPrintable(data);
 
-		super.handleInput(data);
+		// Submission can also occur via backslash-Enter or an autocomplete action.
+		// Observe the public callback rather than guessing from the pressed key.
+		let submitted = false;
+		const onSubmit = this.onSubmit;
+		const observeSubmit = (text: string) => {
+			submitted = true;
+			onSubmit?.(text);
+		};
+		this.onSubmit = observeSubmit;
+		try {
+			super.handleInput(data);
+		} finally {
+			if (this.onSubmit === observeSubmit) this.onSubmit = onSubmit;
+		}
+		if (submitted) {
+			this.clearPromptEditHistory();
+			return;
+		}
 
 		const after = this.currentSnapshot();
 		if (!sameSnapshot(before, after)) {
@@ -321,7 +256,11 @@ export class UndoRedoEditor extends CustomEditor {
 		if (sameSnapshot(before, after)) return;
 
 		// Do not let a submitted prompt become undoable in the now-empty editor.
-		if (before.text.length > 0 && after.text.length === 0 && this.isSubmitKey(data)) {
+		if (
+			before.text.length > 0 &&
+			after.text.length === 0 &&
+			this.appKeybindings.matches(data, "app.message.followUp")
+		) {
 			this.clearPromptEditHistory();
 			return;
 		}
@@ -346,6 +285,7 @@ export class UndoRedoEditor extends CustomEditor {
 	override setText(text: string): void {
 		const before = this.currentSnapshot();
 		super.setText(text);
+		if (text === before.text) restorePasteData(this, before);
 		const after = this.currentSnapshot();
 		if (!sameSnapshot(before, after) && snapshotTextChanged(before, after)) {
 			this.pushUndo(before);
@@ -365,9 +305,53 @@ export class UndoRedoEditor extends CustomEditor {
 		}
 	}
 
+	override setAutocompleteProvider(provider: AutocompleteProvider): void {
+		// Completion may happen asynchronously after Tab, or from a mouse click.
+		// Capture its boundary here instead of relying solely on handleInput().
+		super.setAutocompleteProvider({
+			triggerCharacters: provider.triggerCharacters,
+			getSuggestions: (...args) => provider.getSuggestions(...args),
+			shouldTriggerFileCompletion: (...args) => provider.shouldTriggerFileCompletion?.(...args) ?? true,
+			applyCompletion: (...args) => {
+				const before = this.currentSnapshot();
+				const result = provider.applyCompletion(...args);
+				if (result.lines.join("\n") !== before.text) {
+					this.pushUndo(before);
+					this.redoHistory = [];
+					this.lastEditWasTyping = false;
+				}
+				return result;
+			},
+		});
+	}
+
+	override handleMouse(event: TuiMouseEvent): TuiMouseEventResult | undefined {
+		if (this.compactViewport) return event.type === "click" ? { handled: true, focus: true } : undefined;
+		const before = this.getCursor();
+		const result = super.handleMouse(event);
+		const after = this.getCursor();
+		if (before.line !== after.line || before.col !== after.col) this.lastEditWasTyping = false;
+		return result;
+	}
+
 	override render(width: number): string[] {
 		if (width <= 0) return [];
-		const lines = super.render(width);
+		const padding = Math.min(this.getPaddingX(), Math.max(0, Math.floor((width - 1) / 2)));
+		this.compactViewport = width - padding * 2 - (padding ? 0 : 1) < 2;
+		// pi-tui 1.2.0 can recurse indefinitely while wrapping a wide grapheme
+		// into one text column. Keep a bounded cursor row until there is room.
+		const cursor = this.getCursor();
+		const prefix = this.compactViewport
+			? truncateToWidth((this.getLines()[cursor.line] ?? "").slice(0, cursor.col), width - 1, "")
+			: "";
+		const rows = this.compactViewport
+			? [
+					this.renderTopBorder(width, cursor.line),
+					prefix + (this.focused ? CURSOR_MARKER : "") + renderFakeCursor(" "),
+					this.renderBottomBorder(width, this.getLines().length - cursor.line - 1),
+				]
+			: super.render(width);
+		const lines = rows.map((line) => truncateToWidth(line, width, ""));
 		const theme = this.getSurfaceTheme?.();
 		if (!theme) return lines;
 		// Reuse user-message tokens: the draft and sent message share one visual surface.
@@ -393,13 +377,12 @@ export class UndoRedoEditor extends CustomEditor {
 	}
 
 	private currentSnapshot(): Snapshot {
-		return {
-			text: this.getText(),
-			cursor: this.getCursor(),
-		};
+		return captureEditorSnapshot(this);
 	}
 
 	private pushUndo(snapshot: Snapshot): void {
+		const last = this.undoHistory.at(-1);
+		if (last && sameSnapshot(last, snapshot)) return;
 		this.undoHistory.push(cloneSnapshot(snapshot));
 		if (this.undoHistory.length > MAX_HISTORY) {
 			this.undoHistory.splice(0, this.undoHistory.length - MAX_HISTORY);
@@ -430,11 +413,11 @@ export class UndoRedoEditor extends CustomEditor {
 	}
 
 	private restoreSnapshot(snapshot: Snapshot): void {
-		if (restoreEditorSnapshotViaInternalState(this, snapshot)) return;
-
-		// Defensive fallback for future pi-tui internals: text is restored through
-		// the public API, but cursor restoration may degrade to pi-tui defaults.
-		super.setText(snapshot.text);
+		if (!restoreEditorSnapshotViaInternalState(this, snapshot)) {
+			// Never restore an orphaned paste marker if the private layout changes.
+			super.setText(snapshot.expandedText);
+		}
+		this.tui.requestRender();
 	}
 
 	private clearPromptEditHistory(): void {
@@ -449,10 +432,6 @@ export class UndoRedoEditor extends CustomEditor {
 
 	private isRedoKey(data: string): boolean {
 		return REDO_KEYS.some((key) => matchesKey(data, key));
-	}
-
-	private isSubmitKey(data: string): boolean {
-		return this.appKeybindings.matches(data, "tui.input.submit");
 	}
 
 	private isPlainPrintable(data: string): boolean {
@@ -499,6 +478,8 @@ export default function promptTrulyMineExtension(pi: ExtensionAPI): void {
 
 	pi.on("session_start", (_event, ctx) => {
 		if (ctx.mode !== "tui") return;
+		if (installedEditorFactory && ctx.ui.getEditorComponent() === installedEditorFactory) return;
+		const draft = ctx.ui.getEditorText();
 
 		ctx.ui.addAutocompleteProvider((current) =>
 			createInlineContextAutocompleteProvider(current, () => getInlineCommands(pi)),
@@ -518,12 +499,16 @@ export default function promptTrulyMineExtension(pi: ExtensionAPI): void {
 				() => ctx.ui.theme,
 			);
 		ctx.ui.setEditorComponent(installedEditorFactory);
+		// The host transfers getText(), which can contain editor-local paste IDs.
+		if (ctx.ui.getEditorText() !== draft) ctx.ui.setEditorText(draft);
 	});
 
 	pi.on("session_shutdown", (_event, ctx) => {
 		if (ctx.mode !== "tui") return;
 		if (installedEditorFactory && ctx.ui.getEditorComponent() === installedEditorFactory) {
+			const draft = ctx.ui.getEditorText();
 			ctx.ui.setEditorComponent(previousEditorFactory);
+			if (ctx.ui.getEditorText() !== draft) ctx.ui.setEditorText(draft);
 		}
 		previousEditorFactory = undefined;
 		installedEditorFactory = undefined;

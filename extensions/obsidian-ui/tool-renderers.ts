@@ -76,7 +76,9 @@ export function resultNotices(result: ToolResult): string[] {
 	// Tool warnings may carry the only continuation offset or recovery path.
 	for (const line of resultText(result).split("\n")) {
 		if (
-			/^\s*\[(?:showing lines|truncated\b|output truncated\b|full output\b|first line\b)/i.test(line) &&
+			/^\s*\[(?:showing lines|\d+ more lines in file\.|line \d+ is .* exceeds .* limit\.|truncated\b|output truncated\b|full output\b|first line\b)/i.test(
+				line,
+			) &&
 			!notices.includes(line)
 		)
 			notices.push(line);
@@ -172,7 +174,8 @@ class DelegateSlot implements Component {
 		this.child?.invalidate();
 	}
 	render(width: number): string[] {
-		return this.child?.render(width) ?? [];
+		if (width <= 0) return [];
+		return (this.child?.render(width) ?? []).map((line) => truncateToWidth(line, width, ""));
 	}
 }
 

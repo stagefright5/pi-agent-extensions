@@ -132,6 +132,18 @@ test("promotes the first inline extension command and preserves the complete dra
 	assert.equal(promoteInlineExtensionCommand("Use /review and https://example.com/ask", inlineCommands), null);
 });
 
+test("slash paths are not commands or resource tags", () => {
+	for (const text of [
+		"Open /ask/file.ts",
+		"Inspect /review/src",
+		"Read /skill:angular-developer/SKILL.md",
+		"Use /ask/",
+	]) {
+		assert.equal(promoteInlineExtensionCommand(text, inlineCommands), null);
+		assert.deepEqual(extractReferencedCommands(text, commands), []);
+	}
+});
+
 test("extracts known references across punctuation boundaries and deduplicates bodies", () => {
 	const text = "Build this with (/skill:terminal-browser), then /review; /review and /skill:angular-developer.";
 	assert.deepEqual(

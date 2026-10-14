@@ -23,12 +23,12 @@ User/assistant messages retain pi's native layout and Markdown. This extension d
 - Native `read`, `write`, `grep`, `find`, and `ls` calls get compact, width-aware headers with path/query, actual result counts, state, and recorded duration when available.
 - Collapsed reads show a three-visual-row preview; expanded reads keep native syntax highlighting and complete stored output.
 - Expanded writes retain their native code preview. Errors and native search-limit notices remain visible.
-- Truncated reads keep continuation instructions and full-output locations visible even while collapsed.
+- Truncated reads keep continuation instructions and full-output locations visible even while collapsed. This includes user-limited reads with more lines available and oversized-line recovery instructions.
 - Native shell rendering remains intact, including its five-row preview and timing. Edit keeps its live diff preview and self-managed shell. Both inherit the palette.
 - Codemode, interactive tools, and custom/MCP tools with specialized renderers retain those renderers. Unknown tools without renderers receive a compact fallback with full stored text and arguments on expansion.
 - Native expansion controls, click handling, and inline images are owned by pi. No executable tools, schemas, results, or model-facing content are replaced.
 
-Renderer state is scoped to each call; there are no timers or background processes. Switching themes, streaming, parallel calls, and resumed sessions are supported.
+Renderer state is scoped to each call; there are no timers or background processes. Delegated native output is bounded to the available width, including zero- and one-column viewports with wide characters. Switching themes, streaming, parallel calls, and resumed sessions are supported.
 
 ## Matching composer, footer, and browser
 

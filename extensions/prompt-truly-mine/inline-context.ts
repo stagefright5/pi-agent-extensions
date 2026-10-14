@@ -48,7 +48,8 @@ export type CompletionResult = {
 	cursorCol: number;
 };
 
-const RESOURCE_TOKEN_PATTERN = /(^|[\s([{])\/([^\s/]+)/g;
+// Consume the whole token so /review/file is not mistaken for the /review tag.
+const RESOURCE_TOKEN_PATTERN = /(^|[\s([{])\/([^\s]+)/g;
 
 export function findSlashCompletionContext(
 	lines: string[],

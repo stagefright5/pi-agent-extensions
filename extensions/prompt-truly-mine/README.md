@@ -53,7 +53,7 @@ For this draft, the model receives the full skill and prompt-template content fo
 Implement this with /skill:angular-developer /review
 ```
 
-Repeated tags remain in the original task, but the extension loads each source file only once. Unknown tags remain ordinary text. If a registered resource becomes unreadable, the extension warns, loads the other valid resources, and preserves the draft.
+Repeated tags remain in the original task, but the extension loads each source file only once. Unknown tags and slash paths such as `/review/src` or `/ask/file.ts` remain ordinary text; a path prefix never invokes a command or loads a resource. If a registered resource becomes unreadable, the extension warns, loads the other valid resources, and preserves the draft.
 
 The combined bundle uses pi's existing collapsible skill-invocation envelope. Expanded content labels each section as a skill or prompt template and records its source path. Skill sections also state the base directory for resolving relative references.
 
@@ -87,12 +87,12 @@ Shortcuts:
 
 Behavior:
 
-- Undo history stores both prompt text and cursor position.
+- Undo history stores prompt text, cursor position, and the payloads behind collapsed paste markers. Deleting a paste, replacing the draft, and undoing or redoing those edits retain the actual pasted content.
 - The editor groups normal printable typing into runs. Whitespace, cursor movement, and other edits separate those runs.
 - A new edit clears the redo stack.
-- History records programmatic text replacement, inserted text, and autocomplete selections.
+- History records programmatic text replacement, inserted text, and autocomplete selections, including asynchronous single-match Tab completion and mouse selection. Mouse cursor movement also breaks typing groups.
 - The editor retains up to 200 undo and 200 redo snapshots.
-- The editor clears history after submission so you cannot accidentally restore a sent message into the empty editor.
+- The editor clears history after submission, including remapped submit keys and backslash-Enter, so you cannot accidentally restore a sent message into the empty editor.
 - Undo and redo hints appear at the top right of the editor header when those actions are available.
 
 ## Context size and trust
@@ -105,18 +105,20 @@ Loading several full resources and substituting the whole draft into prompt temp
 
 This extension targets pi and pi-tui **1.2.0**. The composer uses the protected editor-border hooks introduced in the newer runtime. Older runtime compatibility is not covered by this version's tests.
 
-Cursor restoration, inline `/` autocomplete, and Enter selection without submission use compatibility shims because pi-tui does not currently expose complete public APIs for those operations. If internals change:
+Cursor/paste restoration, inline `/` autocomplete, and Enter selection without submission use compatibility shims because pi-tui does not currently expose complete public APIs for those operations. Private access is isolated in `editor-compat.ts` and runtime-validated rather than asserted through an invented SDK type. If internals change:
 
-- undo/redo falls back to restoring text through the public API, possibly losing exact cursor placement
+- undo/redo falls back to restoring expanded text through the public API, preserving pasted content but possibly losing collapsed markers and exact cursor placement
 - inline `/` may require explicit Tab completion until the shim is updated
 - normal editor input remains exception-safe
 
-The extension captures the previously configured editor factory and restores it on session shutdown only if its own factory remains active. While loaded, it replaces rather than wraps an existing custom editor, so editor-extension load order still matters.
+For extremely narrow terminals with fewer than two usable text columns, a bounded cursor row replaces native wrapping to avoid a pi-tui 1.2.0 wide-character recursion bug. The normal editor and autocomplete layout return when the terminal is widened; the stored draft is unchanged.
+
+The extension captures the previously configured editor factory and restores it on session shutdown only if its own factory remains active. Factory handoffs preserve expanded pasted content, and repeated startup/shutdown notifications do not stack editor installations. While loaded, it replaces rather than wraps an existing custom editor, so editor-extension load order still matters.
 
 Shortcut conflicts:
 
 - `Ctrl+Z` performs undo instead of pi's default suspend action while focus is in this editor.
-- `Ctrl+Y` performs redo instead of yank-pop; use `Alt+Y` for yank-pop.
+- `Ctrl+Y` performs redo instead of yank. Rebind `tui.editor.yank` to another key if needed; `Alt+Y` retains native yank-pop behavior after a yank.
 
 Automatic inline autocomplete requires interactive TUI mode. Context-tag expansion also applies to prompts submitted through other modes when the extension is loaded.
 
