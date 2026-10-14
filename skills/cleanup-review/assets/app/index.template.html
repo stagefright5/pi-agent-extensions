@@ -1,0 +1,859 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Cleanup · one decision at a time</title>
+    <link rel="stylesheet" href="bridge.css" />
+    <style>
+      :root {
+        --bg: #f5f6f2;
+        --ink: #223831;
+        --muted: #68766f;
+        --line: #dbe2da;
+        --accent: #27634f;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font:
+          16px/1.55 -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+      }
+      button,
+      select {
+        font: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+      button:focus-visible,
+      a:focus-visible,
+      summary:focus-visible {
+        outline: 3px solid #a8c6af;
+        outline-offset: 4px;
+      }
+      a {
+        color: var(--accent);
+      }
+      .shell {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 32px 24px 64px;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 42px;
+      }
+      .brand {
+        font-size: 18px;
+        font-weight: 650;
+        letter-spacing: -0.4px;
+      }
+      .quiet {
+        background: none;
+        border: 0;
+        color: var(--muted);
+        font-size: 13px;
+        padding: 6px 0;
+      }
+      .quiet:hover {
+        color: var(--accent);
+        text-decoration: underline;
+      }
+      .progress {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 13px;
+        color: var(--muted);
+        margin-bottom: 12px;
+      }
+      .track {
+        height: 3px;
+        border-radius: 3px;
+        background: #e0e6dd;
+        margin-bottom: 26px;
+        overflow: hidden;
+      }
+      .track span {
+        display: block;
+        height: 100%;
+        background: var(--accent);
+      }
+      .card {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: white;
+        padding: 34px 36px;
+        box-shadow: 0 4px 18px #22383104;
+      }
+      .type {
+        font-size: 11px;
+        color: var(--muted);
+        letter-spacing: 1.3px;
+        text-transform: uppercase;
+        font-weight: 600;
+        margin: 0 0 13px;
+      }
+      h1 {
+        font-size: 30px;
+        line-height: 1.18;
+        letter-spacing: -0.7px;
+        margin: 0 0 14px;
+        font-weight: 650;
+      }
+      .description {
+        color: #54645c;
+        font-size: 17px;
+        margin: 0 0 24px;
+      }
+      .footprint {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        padding: 18px 0;
+        border-top: 1px solid #edf0ea;
+        border-bottom: 1px solid #edf0ea;
+        margin: 0 0 22px;
+      }
+      .footprint strong {
+        font-size: 30px;
+        letter-spacing: -0.8px;
+        font-weight: 600;
+      }
+      .footprint span {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .check {
+        font-size: 14px;
+        color: #536459;
+        margin: 0 0 24px;
+      }
+      .check strong {
+        color: var(--ink);
+        font-weight: 600;
+      }
+      .actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1.25fr;
+        gap: 8px;
+      }
+      .actions button,
+      .primary {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: white;
+        padding: 12px 8px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--ink);
+      }
+      .actions button:hover {
+        background: #f1f5ee;
+      }
+      .actions .shortlist,
+      .primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: white;
+      }
+      .actions .shortlist:hover,
+      .primary:hover {
+        background: #194d3a;
+      }
+      .actions button[aria-pressed="true"] {
+        outline: 2px solid #9fc0a8;
+        outline-offset: 2px;
+      }
+      .note {
+        font-size: 12px;
+        color: var(--muted);
+        margin: 15px 0 0;
+        text-align: center;
+      }
+      .below {
+        display: flex;
+        justify-content: space-between;
+        gap: 15px;
+        align-items: center;
+        margin: 14px 4px 28px;
+      }
+      .below .quiet:disabled {
+        opacity: 0.4;
+        cursor: default;
+        text-decoration: none;
+      }
+      details {
+        font-size: 13px;
+        color: #536459;
+      }
+      summary {
+        cursor: pointer;
+      }
+      .details {
+        margin-top: 24px;
+        padding-top: 18px;
+        border-top: 1px solid #edf0ea;
+      }
+      .path {
+        font:
+          12px/1.65 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        overflow-wrap: anywhere;
+        display: block;
+        padding: 9px 0;
+        border-bottom: 1px solid #edf0ea;
+      }
+      .details p {
+        margin: 12px 0;
+      }
+      .areas {
+        border-top: 1px solid var(--line);
+        padding-top: 18px;
+        margin-top: 35px;
+      }
+      .area-buttons {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        margin-top: 16px;
+      }
+      .area-buttons button {
+        border: 1px solid var(--line);
+        background: white;
+        border-radius: 7px;
+        padding: 11px;
+        text-align: left;
+        font-size: 13px;
+        color: var(--ink);
+      }
+      footer {
+        font-size: 11px;
+        color: #839086;
+        margin-top: 22px;
+        line-height: 1.7;
+      }
+      footer a {
+        color: #6d7f70;
+      }
+      .review-row {
+        padding: 17px 0;
+        border-bottom: 1px solid #e6ebe3;
+        display: flex;
+        gap: 14px;
+        align-items: start;
+        justify-content: space-between;
+      }
+      .review-row strong {
+        font-size: 15px;
+        font-weight: 600;
+      }
+      .review-row p {
+        margin: 3px 0;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .review-row button {
+        border: 0;
+        background: none;
+        font-size: 12px;
+        color: var(--accent);
+        padding: 3px 0;
+      }
+      .review-actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 26px;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      .review-actions .primary {
+        padding: 12px 18px;
+      }
+      .finish {
+        padding: 45px 36px;
+      }
+      .finish .description {
+        margin-bottom: 24px;
+      }
+      .saved-line {
+        font-size: 13px;
+        color: var(--accent);
+        margin-bottom: 16px;
+      }
+      .warning {
+        color: #8c5d28;
+        font-size: 12px;
+      }
+      .context {
+        font-size: 12px;
+        color: var(--muted);
+        overflow-wrap: anywhere;
+        margin: 0 0 16px;
+      }
+      .finish h2 {
+        font-size: 18px;
+        margin: 24px 0 5px;
+      }
+      .hidden {
+        display: none;
+      }
+      @media (max-width: 540px) {
+        .shell {
+          padding: 20px 16px 40px;
+        }
+        header {
+          margin-bottom: 30px;
+        }
+        .card {
+          padding: 25px 22px;
+        }
+        h1 {
+          font-size: 26px;
+        }
+        .description {
+          font-size: 16px;
+        }
+        .actions {
+          grid-template-columns: 1fr 1fr;
+        }
+        .actions .shortlist {
+          grid-column: 1/-1;
+        }
+        .area-buttons {
+          grid-template-columns: 1fr;
+        }
+        .footprint strong {
+          font-size: 27px;
+        }
+      }
+      @media print {
+        header,
+        .actions,
+        .below,
+        .areas,
+        footer,
+        .review-actions,
+        .review-row button {
+          display: none;
+        }
+        body {
+          background: white;
+        }
+        .shell {
+          max-width: none;
+        }
+        .card {
+          box-shadow: none;
+        }
+      }
+    </style>
+    <link rel="stylesheet" href="swipe.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header>
+        <span class="brand">Cleanup review</span><button class="quiet" id="saved">Your saved choices</button>
+      </header>
+      <p class="context">
+        Review one item at a time. Your choices and notes are saved locally. Files move only after you approve the exact
+        paths.
+      </p>
+      <div id="storage-warning" class="warning" role="status"></div>
+      <div id="view"></div>
+      <div class="undo-bar">
+        <span id="choice-feedback" role="status">Swipe or use the buttons. You can undo a choice.</span
+        ><button id="undo-choice" disabled>↶ Undo</button>
+      </div>
+      <section id="cleanup-progress" class="cleanup-progress" hidden aria-live="polite"></section>
+      <dialog id="approval-dialog" class="approval-dialog" aria-labelledby="approval-title">
+        <h2 id="approval-title">Review before moving</h2>
+        <p>
+          Only the paths below will move to a dated folder in ~/.Trash. Source and Git history stay in place for
+          dependency-only choices.
+        </p>
+        <div id="approval-paths" class="approval-paths"></div>
+        <p id="approval-status" role="status"></p>
+        <div class="review-actions">
+          <button id="cancel-approval" class="quiet">Back to review</button
+          ><button id="confirm-approval" class="primary">Approve move to Trash</button>
+        </div>
+      </dialog>
+      <section id="conversation" class="conversation">
+        <div class="conversation-head">
+          <h2>Ask me or add a note</h2>
+          <span id="connection-status">Connecting…</span>
+        </div>
+        <label class="composer-context" id="composer-context" for="message-text"></label
+        ><textarea
+          id="message-text"
+          rows="3"
+          placeholder="Ask a question, explain what to keep, or give a different instruction…"
+        ></textarea>
+        <div class="composer-actions">
+          <button id="save-note" class="quiet">Save note for this item</button
+          ><button id="send-message" class="primary" disabled>Send to this chat</button>
+        </div>
+        <p id="message-status" class="composer-hint" role="status"></p>
+        <div id="chat-messages" aria-live="polite"></div>
+      </section>
+      <details class="areas" id="areas">
+        <summary>Review a different area</summary>
+        <div class="area-buttons" id="area-buttons"></div>
+      </details>
+      <footer>
+        Choices stay in this browser and sync to a local file when connected. Moves require explicit approval.<br />Your
+        session folder holds the inventory, notes, approvals, and restore records.
+      </footer>
+    </main>
+    <script>
+      const D = __DATA__,
+        SESSION = __SESSION__,
+        KEY = "cleanup-" + SESSION.id + "-choices",
+        POSITION_KEY = "cleanup-" + SESSION.id + "-position";
+      window.CLEANUP_SESSION = SESSION;
+      const completed = __COMPLETED__;
+      const batches = __BATCHES__;
+      const $ = (id) => document.getElementById(id),
+        escape = (s) =>
+          String(s ?? "").replace(
+            /[&<>"']/g,
+            (c) =>
+              ({
+                "&": "&amp;",
+                "<": "&lt;",
+                ">": "&gt;",
+                '"': "&quot;",
+                "'": "&#39;",
+              })[c],
+          );
+      const all = new Map(
+        [...D.repos, ...D.dependencies, ...D.docs, ...D.appdata, ...D.shortlist].map((r) => [r.id, r]),
+      );
+      let choices = {},
+        batchId = batches[0].id,
+        index = 0,
+        mode = "item",
+        storageOK = true,
+        undoChoice = null;
+      try {
+        const stored = JSON.parse(localStorage.getItem(KEY) || "{}");
+        if (stored && typeof stored === "object" && !Array.isArray(stored)) choices = stored;
+        const position = JSON.parse(localStorage.getItem(POSITION_KEY) || "null");
+        if (position && batches.some((b) => b.id === position.batchId)) {
+          batchId = position.batchId;
+          index = position.index;
+        } else {
+          const first = batches[0].items.findIndex((r) => !choices[r.id]);
+          index = first < 0 ? batches[0].items.length : first;
+        }
+      } catch (e) {
+        storageOK = false;
+      }
+      const labels = {
+        keep: "Keep",
+        investigate: "Review later",
+        shortlist: "Shortlist",
+        dependenciesOnly: "Only node_modules",
+      };
+      const currentBatch = () => batches.find((b) => b.id === batchId);
+      const fmt = (n) =>
+        n >= 1073741824
+          ? (n / 1073741824).toFixed(1) + " GiB"
+          : n >= 1048576
+            ? (n / 1048576).toFixed(1) + " MiB"
+            : Math.max(1, Math.round(n / 1024)) + " KiB";
+      function persist() {
+        document.dispatchEvent(new CustomEvent("cleanup:choices", { detail: { ...choices } }));
+        try {
+          localStorage.setItem(KEY, JSON.stringify(choices));
+          localStorage.setItem(POSITION_KEY, JSON.stringify({ batchId, index }));
+        } catch (e) {
+          storageOK = false;
+        }
+        $("storage-warning").textContent = storageOK
+          ? ""
+          : "Browser storage is unavailable. Export your choices before closing this page.";
+      }
+      function compactCheck(r) {
+        if (r.candidate)
+          return r.check || "Recheck local work, ignored files, and shared Git metadata before moving this project.";
+        return r.check;
+      }
+      function details(r) {
+        const evidence = r.pathEvidence || r.paths.map((path) => ({ path }));
+        return (
+          '<section class="evidence"><h2>Paths &amp; evidence</h2>' +
+          evidence
+            .slice(0, 6)
+            .map(
+              (p) =>
+                '<div class="evidence-path"><code class="path">' +
+                escape(p.path) +
+                "</code>" +
+                (p.bytes !== undefined
+                  ? "<span>" + fmt(p.bytes) + (p.modified ? " · Modified " + escape(p.modified) : "") + "</span>"
+                  : "") +
+                "</div>",
+            )
+            .join("") +
+          (evidence.length > 6
+            ? "<details><summary>Show " +
+              (evidence.length - 6) +
+              " more paths</summary>" +
+              evidence
+                .slice(6)
+                .map((p) => '<code class="path">' + escape(p.path) + "</code>")
+                .join("") +
+              "</details>"
+            : "") +
+          (r.branch
+            ? "<p>Branch: <code>" +
+              escape(r.branch) +
+              "</code>" +
+              (r.last_commit ? " · Last commit: " + escape(r.last_commit) : "") +
+              "</p>"
+            : "") +
+          (r.flags?.length ? "<p>" + r.flags.map(escape).join("<br>") + "</p>" : "") +
+          (r.ignored?.length
+            ? "<p>Ignored files that need review:</p>" +
+              r.ignored
+                .slice(0, 6)
+                .map((p) => '<code class="path">' + escape(p) + "</code>")
+                .join("") +
+              (r.ignored.length > 6
+                ? "<details><summary>Show " +
+                  (r.ignored.length - 6) +
+                  " more ignored paths</summary>" +
+                  r.ignored
+                    .slice(6)
+                    .map((p) => '<code class="path">' + escape(p) + "</code>")
+                    .join("") +
+                  "</details>"
+                : "")
+            : "") +
+          "<p>Sizes show the recorded footprint, not guaranteed savings. Entries elsewhere may overlap. Recheck the current state before cleanup.</p></section>"
+        );
+      }
+      function choose(value) {
+        const r = currentBatch().items[index];
+        if (
+          mode !== "item" ||
+          !r ||
+          completed[r.id] ||
+          window.CleanupReview?.pending?.[r.id] ||
+          !labels[value] ||
+          (value === "dependenciesOnly" && !r.dependencies?.paths?.length)
+        )
+          return;
+        const previous = choices[r.id],
+          savedIndex = index,
+          savedBatch = batchId;
+        const commit = () => {
+          undoChoice = {
+            id: r.id,
+            previous,
+            index: savedIndex,
+            batchId: savedBatch,
+          };
+          choices[r.id] = value;
+          batchId = savedBatch;
+          mode = "item";
+          index = savedIndex + 1;
+          persist();
+          render();
+          $("choice-feedback").textContent = labels[value] + " saved for " + r.title;
+          window.scrollTo(0, 0);
+        };
+        if (window.CleanupSwipe) window.CleanupSwipe.choose(value, commit);
+        else commit();
+      }
+      $("undo-choice").onclick = () => {
+        if (!undoChoice || window.CleanupSwipe?.busy) return;
+        const last = undoChoice;
+        if (last.previous) choices[last.id] = last.previous;
+        else delete choices[last.id];
+        batchId = last.batchId;
+        index = last.index;
+        mode = "item";
+        undoChoice = null;
+        persist();
+        render();
+        $("choice-feedback").textContent = "Choice undone. Review this card again.";
+        window.scrollTo(0, 0);
+      };
+      function render() {
+        $("undo-choice").disabled = !undoChoice;
+        document.dispatchEvent(new Event("cleanup:item"));
+        const b = currentBatch();
+        index = Math.max(0, Math.min(Number.isInteger(index) ? index : 0, b.items.length));
+        const chosen = Object.entries(choices).filter(([id, v]) => all.has(id) && labels[v]);
+        $("saved").textContent = chosen.length ? "Your saved choices · " + chosen.length : "Your saved choices";
+        $("storage-warning").textContent = storageOK
+          ? ""
+          : "Browser storage is unavailable. Export your choices before closing this page.";
+        if (mode === "summary") {
+          renderSummary(chosen);
+          return;
+        }
+        if (index === b.items.length) {
+          renderFinish(b);
+          return;
+        }
+        const r = b.items[index];
+        const isBlocked = b.id === "blocked";
+        const why = isBlocked ? "This project has local work or other reasons to keep it until investigated." : r.why;
+        $("view").innerHTML =
+          '<div class="progress"><span>' +
+          escape(b.label) +
+          "</span><span>" +
+          String(index + 1) +
+          " of " +
+          b.items.length +
+          '</span></div><div class="track"><span style="width:' +
+          ((index + 1) / b.items.length) * 100 +
+          '%"></span></div><div class="swipe-deck"><article class="card swipe-card" tabindex="0" aria-label="Review card. Left arrow keeps, right arrow shortlists, up arrow reviews later."><div class="swipe-hint"><span>← Swipe to keep</span><span>Swipe to shortlist →</span></div><div class="swipe-stamp" aria-hidden="true"></div><p class="type">' +
+          (isBlocked
+            ? "Investigate before removal"
+            : r.verification?.type === "identical-files"
+              ? "Verified duplicates"
+              : r.kind === "worktree"
+                ? "Linked worktree"
+                : r.kind === "repo"
+                  ? "Repository"
+                  : "Cleanup proposal") +
+          "</p><h1>" +
+          escape(r.title) +
+          "</h1>" +
+          (r.branch ? '<p class="context">' + escape(r.paths[0]) + "</p>" : "") +
+          '<h2 class="rationale-heading">Why I picked this</h2><p class="description">' +
+          escape(why) +
+          '</p><div class="footprint"><strong>' +
+          fmt(r.bytes) +
+          "</strong><span>" +
+          (r.verification?.type === "identical-files" ? "duplicate copies" : "recorded size") +
+          '</span></div><p class="check"><strong>' +
+          (isBlocked ? "Needs attention." : "Before cleanup.") +
+          "</strong> " +
+          escape(compactCheck(r)) +
+          "</p>" +
+          (choices[r.id] ? '<div class="saved-line">Saved choice: ' + labels[choices[r.id]] + "</div>" : "") +
+          details(r) +
+          '<div class="actions"><button data-value="keep" aria-pressed="' +
+          (choices[r.id] === "keep") +
+          '"><span class="action-orb"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg></span><span>Keep</span></button><button data-value="investigate" aria-pressed="' +
+          (choices[r.id] === "investigate") +
+          '"><span class="action-orb"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><span>Review later</span></button><button data-value="shortlist" class="shortlist" aria-pressed="' +
+          (choices[r.id] === "shortlist") +
+          '"><span class="action-orb"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13M10 10v7M14 10v7"/></svg></span><span>Shortlist</span></button></div><p class="note">Each choice saves and moves to the next item. Swipes save choices. Review and approve separately.</p>' +
+          (r.dependencies?.paths?.length
+            ? '<button class="deps-only" data-value="dependenciesOnly" aria-pressed="' +
+              (choices[r.id] === "dependenciesOnly") +
+              '">Only node_modules <span>' +
+              fmt(r.dependencies.bytes) +
+              '</span></button><p class="note">Shortlist ' +
+              r.dependencies.paths.length +
+              ' dependency directories. Keep source and Git history. Check they can be reinstalled and contain no manual edits.</p><details class="dependency-paths"><summary>Which node_modules directories?</summary>' +
+              r.dependencies.paths.map((p) => '<code class="path">' + escape(p) + "</code>").join("") +
+              "</details>"
+            : "") +
+          '</article></div><div class="below"><button class="quiet" id="back" ' +
+          (index === 0 ? "disabled" : "") +
+          '>← Previous</button><button class="quiet" id="pause">Stop here for now</button></div>';
+        document
+          .querySelectorAll("[data-value]")
+          .forEach((button) => (button.onclick = () => choose(button.dataset.value)));
+        $("back").onclick = () => {
+          index--;
+          persist();
+          render();
+        };
+        $("pause").onclick = () => {
+          mode = "summary";
+          render();
+        };
+      }
+      function renderFinish(b) {
+        const selected = b.items.filter((r) => choices[r.id]);
+        const shortlisted = selected.filter((r) => ["shortlist", "dependenciesOnly"].includes(choices[r.id])).length;
+        const remaining = b.items.length - selected.length;
+        $("view").innerHTML =
+          '<article class="card finish"><p class="type">' +
+          escape(b.label) +
+          '</p><h1>That is enough for now.</h1><p class="description">' +
+          selected.length +
+          " choices saved" +
+          (shortlisted ? "; " + shortlisted + " shortlisted for cleanup." : ".") +
+          " You do not need to review the rest of your home folder today.</p>" +
+          (remaining ? '<p class="check">' + remaining + " items in this group are still unreviewed.</p>" : "") +
+          '<div class="review-actions"><button class="primary" id="show-choices">Review saved choices</button><button class="quiet" id="restart">Revisit this group</button></div><p class="note">This review does not move files.</p></article>';
+        $("show-choices").onclick = () => {
+          mode = "summary";
+          render();
+        };
+        $("restart").onclick = () => {
+          index = 0;
+          persist();
+          render();
+        };
+      }
+      function renderSummary(chosen) {
+        let html =
+          '<article class="card"><p class="type">Saved in this browser</p><h1>Your choices.</h1><p class="description">Review notes only. You can change your mind before any cleanup.</p>';
+        if (!chosen.length) html += '<p class="check">No choices saved yet.</p>';
+        for (const value of ["shortlist", "dependenciesOnly", "investigate", "keep"]) {
+          const rows = chosen.filter(([id, v]) => v === value);
+          if (!rows.length) continue;
+          html +=
+            '<h2 style="font-size:16px;margin:22px 0 3px">' +
+            labels[value] +
+            "</h2>" +
+            rows
+              .map(([id]) => {
+                const r = all.get(id);
+                return (
+                  '<div class="review-row"><div><strong>' +
+                  escape(r.title) +
+                  "</strong><p>" +
+                  fmt(value === "dependenciesOnly" ? r.dependencies.bytes : r.bytes) +
+                  "</p>" +
+                  (value === "dependenciesOnly" ? "<p>Keep the repo. Dependency directories only.</p>" : "") +
+                  '<code class="path">' +
+                  escape((value === "dependenciesOnly" ? r.dependencies.paths : r.paths)[0]) +
+                  '</code></div><button data-change="' +
+                  escape(id) +
+                  '">Change</button></div>'
+                );
+              })
+              .join("");
+        }
+        html +=
+          '<div class="review-actions">' +
+          (chosen.length
+            ? '<button class="primary" id="send-choices">Send choices to chat</button><button class="quiet" id="export">Export file</button>'
+            : "") +
+          '<button class="quiet" id="resume">Back to review</button></div><p class="note">Send choices to discuss them here. Shortlisting is not permission to delete files.</p></article>';
+        $("view").innerHTML = html;
+        $("resume").onclick = () => {
+          mode = "item";
+          render();
+        };
+        if ($("export")) $("export").onclick = exportChoices;
+        if ($("send-choices"))
+          $("send-choices").onclick = () => document.dispatchEvent(new Event("cleanup:sendChoices"));
+        document.querySelectorAll("[data-change]").forEach(
+          (button) =>
+            (button.onclick = () => {
+              const b = batches.find((b) => b.items.some((r) => r.id === button.dataset.change));
+              batchId = b.id;
+              index = b.items.findIndex((r) => r.id === button.dataset.change);
+              mode = "item";
+              persist();
+              render();
+              window.scrollTo(0, 0);
+            }),
+        );
+      }
+      function exportChoices() {
+        const lines = [
+          "Cleanup review choices",
+          "Review notes only. No deletion has been authorized or performed.",
+          "Entries may overlap; do not sum their sizes.",
+          "",
+        ];
+        for (const [id, value] of Object.entries(choices)) {
+          const r = all.get(id);
+          if (!r || !labels[value]) continue;
+          lines.push(
+            labels[value].toUpperCase() +
+              " | " +
+              r.title +
+              " | " +
+              fmt(value === "dependenciesOnly" ? r.dependencies.bytes : r.bytes),
+            "Check: " +
+              (value === "dependenciesOnly"
+                ? "Keep source and Git history. Confirm dependencies can be reinstalled and contain no manual edits."
+                : r.check),
+            ...(value === "dependenciesOnly" ? r.dependencies.paths : r.paths).map((p) => "  " + p),
+            "",
+          );
+        }
+        const url = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/plain" }));
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "cleanup-review-decisions.txt";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+      $("saved").onclick = () => {
+        mode = "summary";
+        render();
+        window.scrollTo(0, 0);
+      };
+      $("area-buttons").innerHTML = batches
+        .map((b) => '<button data-batch="' + b.id + '">' + escape(b.name) + "</button>")
+        .join("");
+      document.querySelectorAll("[data-batch]").forEach(
+        (button) =>
+          (button.onclick = () => {
+            batchId = button.dataset.batch;
+            const first = currentBatch().items.findIndex((r) => !choices[r.id]);
+            index = first < 0 ? currentBatch().items.length : first;
+            mode = "item";
+            $("areas").open = false;
+            persist();
+            render();
+            window.scrollTo(0, 0);
+          }),
+      );
+      render();
+      window.CleanupReview = {
+        choose,
+        batch: () => ({
+          id: batchId,
+          name: currentBatch().label,
+          items: currentBatch().items,
+        }),
+        completed,
+        current: () => (mode === "item" ? currentBatch().items[index] || null : null),
+        choices: () => ({ ...choices }),
+        items: all,
+        applyChoices(incoming) {
+          let changed = false;
+          for (const [id, value] of Object.entries(incoming)) {
+            if (all.has(id) && (labels[value] || value === "") && choices[id] !== value) {
+              if (value) choices[id] = value;
+              else delete choices[id];
+              changed = true;
+            }
+          }
+          if (changed) {
+            try {
+              localStorage.setItem(KEY, JSON.stringify(choices));
+            } catch {}
+            render();
+          }
+        },
+      };
+    </script>
+    <script src="swipe.js"></script>
+    <script src="approval-client.js"></script>
+    <script src="bridge-connection.js"></script>
+    <script src="bridge-client.js"></script>
+  </body>
+</html>

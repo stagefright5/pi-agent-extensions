@@ -1,0 +1,4 @@
+interface:
+  display_name: "Cleanup Review"
+  short_description: "Review local cleanup and move approved files to Trash"
+  default_prompt: "Use $cleanup-review to inventory local cleanup candidates and review them before moving approved paths to Trash."
