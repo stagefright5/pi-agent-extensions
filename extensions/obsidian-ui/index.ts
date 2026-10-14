@@ -5,9 +5,8 @@ import {
 	createReadToolDefinition,
 	createWriteToolDefinition,
 	type ExtensionAPI,
-	type ToolRenderers,
 } from "@earendil-works/pi-coding-agent";
-import { resolveRenderers } from "./tool-renderers.ts";
+import { resolveRenderers, type NativeRendererIdentity } from "./tool-renderers.ts";
 
 export default function obsidianUi(pi: ExtensionAPI): void {
 	if (typeof pi.registerToolRenderer !== "function") {
@@ -21,7 +20,7 @@ export default function obsidianUi(pi: ExtensionAPI): void {
 		return;
 	}
 	// Factories only obtain native renderer identities; no tools are registered or executed.
-	const natives = new Map<string, ToolRenderers>(
+	const natives = new Map<string, NativeRendererIdentity>(
 		[
 			createReadToolDefinition(process.cwd()),
 			createWriteToolDefinition(process.cwd()),

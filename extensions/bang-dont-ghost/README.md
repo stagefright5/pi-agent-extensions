@@ -8,7 +8,7 @@ Automatically starts an agent follow-up after a user-entered single-`!` shell co
 
 ## Runtime requirement
 
-Bang Don't Ghost requires Pi to emit a post-execution `user_bash_result` extension event after recording the matching `bashExecution` message. Stock Pi does not currently provide this event in its published extension API. The local patcher supports only the installed Pi 0.87.0 bundled runtime and fails closed for every other version or layout.
+Bang Don't Ghost requires Pi to emit a post-execution `user_bash_result` extension event after recording the matching `bashExecution` message. Stock Pi does not currently provide this event in its published extension API. The local patcher supports only the installed Pi 1.2.0 bundled runtime and fails closed for every other version or layout.
 
 The expected runtime payload is:
 
@@ -41,7 +41,7 @@ pi-patch-user-bash-result
 
 The command:
 
-- requires Pi 0.87.0 and its bundled `dist/bundle/cli.js` layout
+- requires Pi 1.2.0 and its bundled `dist/bundle/cli.js` layout
 - resolves the active `pi` executable from `PATH`, including the current pnpm command shim
 - locates the single bundled runtime chunk containing `AgentSession`
 - accepts the exact current patch without rewriting the file
@@ -49,9 +49,18 @@ The command:
 - writes through a same-directory temporary file and runs `node --check` before an atomic rename
 - leaves Pi unchanged, prints diagnostics, shows a macOS notification, and exits nonzero when the version, layout, or exact anchors differ
 
-Run this command manually. Pi startup does not run it. Rerun it after reinstalling Pi 0.87.0. A newer Pi release requires a patcher update, and the patcher will not apply an older patch. The patcher and command shim are development tools and are not included in the published npm package.
+Run this command manually. Pi startup does not run it. Rerun it after reinstalling Pi 1.2.0. A newer Pi release requires a patcher update, and the patcher will not apply an older patch. The patcher and command shim are development tools and are not included in the published npm package.
 
-For an explicit Pi 0.87.0 bundled runtime test target, the repository script also accepts `--target <runtime.js>`.
+Restart pi after applying the runtime patch. `/reload` reloads extension code, not the already-loaded bundled runtime.
+
+Verify or roll back without guessing at runtime contents:
+
+```bash
+pi-patch-user-bash-result --check    # read-only; nonzero if missing or incompatible
+pi-patch-user-bash-result --restore  # restore the saved, exact original runtime
+```
+
+The patcher keeps `<runtime.js>.bang-dont-ghost.original`. Restoration refuses to overwrite a runtime changed by another patch or update. For an explicit Pi 1.2.0 bundled test target, the script also accepts `--target <runtime.js>`. Tests validate direct/deferred event ordering against the installed 1.2.0 bundle, not just a synthetic fixture.
 
 ## Usage
 
@@ -112,4 +121,4 @@ empty hidden message, deliverAs: followUp, triggerTurn: true
 next agent turn
 ```
 
-The local event type and one isolated `pi.on` cast can be removed when Pi publishes `user_bash_result` in its TypeScript declarations.
+The extension declares a typed module augmentation for the event added by this patch; it does not cast `pi.on` or claim the event exists in stock pi. Remove that augmentation when pi publishes an equivalent completion event.

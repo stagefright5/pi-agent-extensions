@@ -7,6 +7,7 @@
     "planning"
   ],
   "scripts": {
+    "test": "node --experimental-transform-types --test *.test.ts",
     "prepack": "node ../../scripts/package-tools.mjs stage-package"
   },
   "peerDependencies": {

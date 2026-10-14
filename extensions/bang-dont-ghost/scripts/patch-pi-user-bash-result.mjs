@@ -16,10 +16,9 @@ import { delimiter, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-export const SUPPORTED_PI_VERSION = "0.87.0";
+export const SUPPORTED_PI_VERSION = "1.2.0";
 
 const EVENT_MARKER = /type\s*:\s*["']user_bash_result["']/;
-const METHOD_MARKER = "_emitUserBashResult(bashMessage)";
 const BUNDLED_SESSION_MARKER = "recordBashResult(command,result,options){let bashMessage=";
 
 const DIRECT_RECORD_ANCHOR =
@@ -47,10 +46,15 @@ function countOccurrences(source, search) {
 
 export function patchSource(source) {
   if (EVENT_MARKER.test(source)) {
-    if (countOccurrences(source, METHOD_MARKER) === 3) {
+    if (
+      countOccurrences(source, DIRECT_RECORD_REPLACEMENT) === 1 &&
+      countOccurrences(source, DEFERRED_FLUSH_REPLACEMENT) === 1 &&
+      !source.includes(DIRECT_RECORD_ANCHOR) &&
+      !source.includes(DEFERRED_FLUSH_ANCHOR)
+    ) {
       return { state: "already-applied", source };
     }
-    throw new Error("Pi runtime already mentions user_bash_result, but not in the expected Pi 0.87.0 patch shape");
+    throw new Error("Pi runtime already mentions user_bash_result, but not in the expected Pi 1.2.0 patch shape");
   }
 
   const directCount = countOccurrences(source, DIRECT_RECORD_ANCHOR);
@@ -177,10 +181,11 @@ function syntaxCheck(path) {
   }
 }
 
-export function patchFile(targetPath) {
+export function patchFile(targetPath, { check = false } = {}) {
   const original = readFileSync(targetPath, "utf8");
   const patch = patchSource(original);
   if (patch.state === "already-applied") return patch.state;
+  if (check) return "not-applied";
 
   const mode = statSync(targetPath).mode;
   const temporaryPath = join(dirname(targetPath), `.pi-bang-dont-ghost.${process.pid}.js`);
@@ -189,6 +194,13 @@ export function patchFile(targetPath) {
   try {
     writeFileSync(temporaryPath, patch.source, { encoding: "utf8", mode });
     syntaxCheck(temporaryPath);
+    if (readFileSync(targetPath, "utf8") !== original) throw new Error("Pi runtime changed during patching");
+    const backupPath = `${targetPath}.bang-dont-ghost.original`;
+    if (existsSync(backupPath)) {
+      if (readFileSync(backupPath, "utf8") !== original) throw new Error(`Unexpected backup at ${backupPath}`);
+    } else {
+      writeFileSync(backupPath, original, { encoding: "utf8", mode, flag: "wx" });
+    }
     renameSync(temporaryPath, targetPath);
     replaced = true;
 
@@ -216,6 +228,26 @@ export function patchFile(targetPath) {
   return patch.state;
 }
 
+export function restoreFile(targetPath) {
+  const backupPath = `${targetPath}.bang-dont-ghost.original`;
+  const original = readFileSync(backupPath, "utf8");
+  const current = readFileSync(targetPath, "utf8");
+  if (current === original) return "already-restored";
+  if (patchSource(original).source !== current) {
+    throw new Error("Pi runtime changed since patching; refusing to overwrite it");
+  }
+  const temporaryPath = `${targetPath}.restore.${process.pid}.js`;
+  try {
+    writeFileSync(temporaryPath, original, { encoding: "utf8", mode: statSync(targetPath).mode });
+    syntaxCheck(temporaryPath);
+    if (readFileSync(targetPath, "utf8") !== current) throw new Error("Pi runtime changed during restoration");
+    renameSync(temporaryPath, targetPath);
+  } finally {
+    rmSync(temporaryPath, { force: true });
+  }
+  return "restored";
+}
+
 function notifyFailure(message) {
   if (process.platform !== "darwin") return;
   const script = ["on run argv", 'display notification (item 1 of argv) with title "Pi patch failed"', "end run"];
@@ -225,9 +257,15 @@ function notifyFailure(message) {
 }
 
 function parseArguments(args) {
-  if (args.length === 0) return {};
-  if (args.length === 2 && args[0] === "--target") return { targetPath: resolve(args[1]) };
-  throw new Error("Usage: pi-patch-user-bash-result [--target <runtime.js>]");
+  const options = {};
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--target" && args[i + 1] && !options.targetPath) options.targetPath = resolve(args[++i]);
+    else if (args[i] === "--check" && !options.check) options.check = true;
+    else if (args[i] === "--restore" && !options.restore) options.restore = true;
+    else throw new Error("Usage: pi-patch-user-bash-result [--target <runtime.js>] [--check | --restore]");
+  }
+  if (options.check && options.restore) throw new Error("--check and --restore are mutually exclusive");
+  return options;
 }
 
 export function run(args = process.argv.slice(2)) {
@@ -236,12 +274,13 @@ export function run(args = process.argv.slice(2)) {
     const discovered = options.targetPath
       ? { executable: undefined, version: `${SUPPORTED_PI_VERSION} explicit target`, targetPath: options.targetPath }
       : discoverInstalledPi();
-    const state = patchFile(discovered.targetPath);
-    const action = state === "applied" ? "Applied" : "Already applied";
-    console.log(`${action}: user_bash_result patch`);
+    const state = options.restore
+      ? restoreFile(discovered.targetPath)
+      : patchFile(discovered.targetPath, { check: options.check });
+    console.log(`${state}: user_bash_result patch`);
     console.log(`Pi version: ${discovered.version}`);
     console.log(`Target: ${discovered.targetPath}`);
-    return 0;
+    return state === "not-applied" ? 1 : 0;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`pi-patch-user-bash-result: ${message}`);

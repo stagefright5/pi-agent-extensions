@@ -22,6 +22,8 @@ function fixture(fast?: string) {
 		getContextUsage: () => ({ percent: 71.5, contextWindow: 272000 }),
 		sessionManager: {
 			getCwd: () => "/project",
+			getSessionId: () => "test",
+			getLeafId: () => "leaf",
 			getEntries: () => [{ type: "message", message: { role: "assistant", usage: { cost: { total: 16.991 } } } }],
 		},
 		ui: {

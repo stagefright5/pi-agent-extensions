@@ -30,7 +30,7 @@ Restoring a prompt does not submit it or switch to its source session.
 
 The index contains text from user prompts sent in the last 30 days. The extension adds new prompts as you send them. It skips slash-style inputs so it does not index extension commands or built-in commands as prompts.
 
-The first time you press `Alt+R`, the extension reads the last 30 days of prompts from local pi session JSONL files and saves the index, unless it has already done so. Later searches load the saved index instead of scanning all sessions.
+The first time you press `Alt+R`, the extension reads the last 30 days of prompts from local pi session JSONL files and saves the index, unless it has already done so. Later searches load the saved index and refresh the current session directory, rather than scanning every project again. This also discovers sessions under a custom `--session-dir` after the initial backfill.
 
 The extension skips image-only prompts and empty text. Search results appear best-match-first, with newer prompts first when matches rank equally. An empty query shows the newest prompts first. Results show:
 
@@ -49,9 +49,11 @@ The index is stored locally at:
 ~/.pi/agent/prompt-history-search/index.json
 ```
 
+This default path is resolved with pi's `getAgentDir()`. Setting `PI_CODING_AGENT_DIR` isolates the index and normal session discovery to that profile; it does not read the default profile. The active session manager supplies custom session-directory paths.
+
 The extension removes entries older than 30 days whenever it loads or updates the index.
 
-After the initial scan, `Alt+R` reads only the saved JSON index. The scanner limits how many local session files it reads at once. It caches parsed sessions in memory by path and modification time for the current pi process.
+After the initial scan, `Alt+R` reads the saved JSON index and checks the current session directory through pi's discovery API. The scanner limits how many local session files it reads at once. It caches parsed sessions in memory by path and modification time for the current pi process.
 
 The scanner skips unreadable files. If a JSONL file is partially malformed, it keeps the entries pi can parse and shows a warning in the picker instead of aborting the search.
 

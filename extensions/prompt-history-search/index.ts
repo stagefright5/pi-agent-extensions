@@ -1,8 +1,10 @@
-import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import {
+	getAgentDir,
 	parseSessionEntries,
+	SessionManager,
 	type ExtensionAPI,
 	type ExtensionContext,
 	type FileEntry,
@@ -66,8 +68,9 @@ const MAX_VISIBLE = 8;
 const SESSION_SCAN_CONCURRENCY = 8;
 const INDEX_VERSION = 1;
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
-const INDEX_PATH = join(homedir(), ".pi", "agent", "prompt-history-search", "index.json");
-const SESSIONS_ROOT = join(homedir(), ".pi", "agent", "sessions");
+export function historyIndexPath(): string {
+	return join(getAgentDir(), "prompt-history-search", "index.json");
+}
 
 const sessionCache = new Map<string, CachedSession>();
 let indexWriteQueue: Promise<void> = Promise.resolve();
@@ -190,7 +193,7 @@ function promptRecordFromUnknown(value: unknown): PromptRecord | null {
 async function readPersistedIndex(): Promise<LoadedPersistedIndex> {
 	let raw: string;
 	try {
-		raw = await readFile(INDEX_PATH, "utf8");
+		raw = await readFile(historyIndexPath(), "utf8");
 	} catch (error) {
 		if (error && typeof error === "object" && (error as { code?: unknown }).code === "ENOENT") {
 			return { existed: false, prompts: [], warnings: 0, pruned: false };
@@ -228,10 +231,11 @@ async function writePersistedIndex(prompts: PromptRecord[], bootstrappedAt?: num
 		bootstrappedAt,
 		prompts: pruned,
 	};
-	const tempPath = `${INDEX_PATH}.${process.pid}.tmp`;
-	await mkdir(dirname(INDEX_PATH), { recursive: true });
+	const indexPath = historyIndexPath();
+	const tempPath = `${indexPath}.${process.pid}.tmp`;
+	await mkdir(dirname(indexPath), { recursive: true });
 	await writeFile(tempPath, `${JSON.stringify(payload)}\n`, "utf8");
-	await rename(tempPath, INDEX_PATH);
+	await rename(tempPath, indexPath);
 }
 
 async function updatePersistedIndex(
@@ -271,28 +275,15 @@ async function loadSessionPrompts(path: string, modifiedMs: number): Promise<Cac
 	};
 }
 
-async function discoverSessionFiles(): Promise<string[]> {
-	const entries = await readdir(SESSIONS_ROOT, { withFileTypes: true });
-	const dirs = entries
-		.filter((entry) => entry.isDirectory() || entry.isSymbolicLink())
-		.map((entry) => join(SESSIONS_ROOT, entry.name));
-
-	const perDir = await Promise.all(
-		dirs.map(async (dir): Promise<string[]> => {
-			try {
-				const files = await readdir(dir);
-				return files.filter((file) => file.endsWith(".jsonl")).map((file) => join(dir, file));
-			} catch {
-				return [];
-			}
-		}),
-	);
-
-	return perDir.flat();
+export async function discoverSessionFiles(sessionDir?: string): Promise<string[]> {
+	// Let pi resolve profile paths and validate session headers. An explicit directory
+	// covers --session-dir and SDK-created sessions outside the normal profile tree.
+	const sessions = sessionDir ? await SessionManager.listAll(sessionDir) : await SessionManager.listAll();
+	return sessions.map((session) => session.path);
 }
 
 async function mapWithConcurrency<T, R>(items: T[], limit: number, mapper: (item: T) => Promise<R>): Promise<R[]> {
-	const results = new Array<R>(items.length);
+	const results: R[] = [];
 	let nextIndex = 0;
 
 	async function worker(): Promise<void> {
@@ -307,10 +298,10 @@ async function mapWithConcurrency<T, R>(items: T[], limit: number, mapper: (item
 	return results;
 }
 
-async function buildPromptIndexFromSessions(): Promise<PromptIndex> {
+async function buildPromptIndexFromSessions(sessionDir?: string): Promise<PromptIndex> {
 	let files: string[];
 	try {
-		files = await discoverSessionFiles();
+		files = await discoverSessionFiles(sessionDir);
 	} catch {
 		return { prompts: [], warnings: 1 };
 	}
@@ -353,34 +344,34 @@ async function buildPromptIndexFromSessions(): Promise<PromptIndex> {
 	};
 }
 
-async function loadPromptIndexForSearch(onBackfillStart?: () => void): Promise<PromptIndex> {
+export async function loadPromptIndexForSearch(sessionDir: string, onBackfillStart?: () => void): Promise<PromptIndex> {
 	await indexWriteQueue.catch(() => undefined);
 	const loaded = await readPersistedIndex();
 	let warnings = loaded.warnings;
 
 	if (loaded.bootstrappedAt === undefined) {
 		onBackfillStart?.();
-		const built = await buildPromptIndexFromSessions();
-		warnings += built.warnings;
+		const [built, currentDirectory] = await Promise.all([
+			buildPromptIndexFromSessions(),
+			buildPromptIndexFromSessions(sessionDir),
+		]);
+		warnings += built.warnings + currentDirectory.warnings;
 		const bootstrappedAt = Date.now();
 		const prompts = await updatePersistedIndex((current) => ({
-			prompts: [...current.prompts, ...built.prompts],
+			prompts: [...current.prompts, ...built.prompts, ...currentDirectory.prompts],
 			bootstrappedAt,
 		}));
 		return { prompts, warnings };
 	}
 
-	if (loaded.pruned) {
-		await updatePersistedIndex((current) => ({
-			prompts: current.prompts,
-			bootstrappedAt: current.bootstrappedAt,
-		}));
-	}
-
-	return {
-		prompts: loaded.prompts,
-		warnings,
-	};
+	// A session replacement may point at a custom directory that was not part of
+	// the initial profile-wide backfill. Refresh that directory on every search.
+	const currentDirectory = await buildPromptIndexFromSessions(sessionDir);
+	const prompts = await updatePersistedIndex((current) => ({
+		prompts: [...current.prompts, ...currentDirectory.prompts],
+		bootstrappedAt: current.bootstrappedAt,
+	}));
+	return { prompts, warnings: warnings + currentDirectory.warnings };
 }
 
 function normalizeSingleLine(text: string): string {
@@ -430,10 +421,6 @@ function promptMatchScore(prompt: PromptRecord, query: string): number | null {
 	}
 
 	return score;
-}
-
-function promptMatches(prompt: PromptRecord, query: string): boolean {
-	return promptMatchScore(prompt, query) !== null;
 }
 
 type MatchRange = {
@@ -800,7 +787,7 @@ async function openPromptHistory(ctx: ExtensionContext, initialQuery?: string): 
 	let index: PromptIndex;
 	ctx.ui.setStatus("prompt-history-search", "Loading prompt history index…");
 	try {
-		index = await loadPromptIndexForSearch(() => {
+		index = await loadPromptIndexForSearch(ctx.sessionManager.getSessionDir(), () => {
 			ctx.ui.setStatus("prompt-history-search", "Building initial 30-day prompt history index…");
 		});
 	} catch (error) {

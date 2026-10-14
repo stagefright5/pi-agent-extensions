@@ -2,7 +2,7 @@
 
 Independently publishable packages for [pi](https://github.com/earendil-works/pi-mono/tree/main/packages/coding-agent), maintained at [`stagefright5/pi-agent-extensions`](https://github.com/stagefright5/pi-agent-extensions). The workspace uses Vite+ for development commands and pnpm for package management.
 
-The Obsidian UI, Prompt Truly Mine, Compact Status Bar, and Tool Output Browser packages are tested against pi 1.2.0; other packages retain their existing version targets. Packages use pi's TypeScript extension format without a compilation step. Local development loads source directly; packing and publishing generate distribution metadata and assets.
+The workspace develops and typechecks against pi 1.2.0. Bang Don't Ghost additionally requires the version-locked 1.2.0 runtime patch described in its README. Packages use pi's TypeScript extension format without a compilation step. Local development loads source directly; packing and publishing generate distribution metadata and assets.
 
 > [!WARNING]
 > Pi extensions execute with your user account's full system permissions. Review the source before installing or updating any extension or skill.
@@ -92,11 +92,13 @@ If the same package is already loaded through the global symlink or npm, disable
 
 ## Tests and package validation
 
-Check generated indexes, test the packaging tooling, and run every package's Node test script through the Vite+ task runner:
+Strictly typecheck production extension sources against the public SDK, check generated indexes, test the packaging tooling, and run every package's Node test script through the Vite+ task runner:
 
 ```bash
 vp run test
 ```
+
+Run only the SDK typecheck with `pnpm typecheck`. Development SDK/TUI dependencies use the 1.2.0 baseline; host-provided packages remain peers in published packages.
 
 Run one package's tests:
 
@@ -171,6 +173,6 @@ The packages run locally or connect to services you configure. Some read or writ
 - Jenkins CLI Operations connects to the configured Jenkins controller and stores non-secret connection metadata under the platform configuration directory. Credentials remain in the selected auth provider.
 - Plan Mode stores plans and revision history under `~/.pi/plans/`; its optional summaries use the active model provider.
 - Prompt History Search reads saved Pi sessions across projects into an in-memory index and local persisted index.
-- Provider URL Logger appends endpoint metadata to `~/.pi/agent/provider-urls.log` without rotation.
+- Provider URL Logger appends endpoint metadata to `<agent-dir>/provider-urls.log` without rotation. History and logging respect `PI_CODING_AGENT_DIR`.
 
 No package intentionally uploads its own index or log. Normal agent requests and Plan Mode's generated change summaries still use the configured model provider.

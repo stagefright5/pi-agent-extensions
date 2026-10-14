@@ -17,7 +17,6 @@ import {
 	CustomEditor,
 	parseFrontmatter,
 	stripFrontmatter,
-	type EditorFactory,
 	type ExtensionAPI,
 	type ExtensionContext,
 	type KeybindingsManager,
@@ -48,6 +47,8 @@ import {
 } from "./inline-context.ts";
 
 import { composerBorder, readableScrollBorder } from "./editor-chrome.ts";
+
+type EditorFactory = NonNullable<ReturnType<ExtensionContext["ui"]["getEditorComponent"]>>;
 
 type Snapshot = {
 	text: string;
@@ -467,13 +468,16 @@ export default function promptTrulyMineExtension(pi: ExtensionAPI): void {
 		const promotedExtension =
 			event.source === "extension" ? null : promoteInlineExtensionCommand(event.text, getInlineCommands(pi));
 		if (promotedExtension) {
+			const content = event.images?.length
+				? [{ type: "text" as const, text: promotedExtension.text }, ...event.images]
+				: promotedExtension.text;
 			if (event.streamingBehavior) {
-				pi.sendUserMessage(promotedExtension.text, {
+				pi.sendUserMessage(content, {
 					deliverAs: event.streamingBehavior,
 					expandPromptTemplates: true,
 				});
 			} else {
-				pi.sendUserMessage(promotedExtension.text, { expandPromptTemplates: true });
+				pi.sendUserMessage(content, { expandPromptTemplates: true });
 			}
 			return { action: "handled" as const };
 		}

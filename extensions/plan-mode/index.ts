@@ -1,308 +1,168 @@
-/**
- * Plan Mode Extension
- *
- * Interactive planning mode that activates with Alt+P or /plan.
- * Guides the agent to resolve material ambiguity before creating plans.
- * Plans are rendered in markdown, tracked in a per-plan git repo,
- * and tool availability is preserved while the agent prepares a plan.
- *
- * Shortcuts (in plan review UI):
- *   a        — approve plan
- *   r        — revise (opens editor for feedback)
- *   c        — copy the full markdown plan
- *   drag     — select and copy rendered plan text within the dialog
- *   d        — show diff between current and previous iteration
- *   s        — generate LLM summary of changes (prev → current)
- *   S        — generate LLM summary of ALL changes across iterations
- *   q        — show Q&A history
- *   ↑↓/j/k   — scroll plan
- *   PgUp/PgDn — page scroll
- *   esc       — close review (continue conversation)
- *
- * Global shortcuts (while in plan mode, outside review UI):
- *   alt+p       — toggle plan mode
- *   ctrl+alt+d  — show diff
- *   ctrl+alt+s  — show change summary
- *   ctrl+alt+a  — show all-changes summary
- *   ctrl+alt+q  — show Q&A history
- *   ctrl+alt+o  — reopen the latest plan review
- */
-
+/** Evidence-guided planning with session-scoped, cancellable review UI. */
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { BorderedLoader, copyToClipboard, DynamicBorder, getMarkdownTheme } from "@earendil-works/pi-coding-agent";
-import {
-	Container,
-	Key,
-	Markdown,
-	matchesKey,
-	sliceByColumn,
-	Spacer,
-	Text,
-	truncateToWidth,
-	type TUI,
-	visibleWidth,
-	wrapTextWithAnsi,
-} from "@earendil-works/pi-tui";
+import { Key, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
-import { mkdir, writeFile } from "node:fs/promises";
+import { Check } from "typebox/value";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { stripVTControlCharacters } from "node:util";
-import { generateSlug } from "./utils.ts";
+import { PlanRepository, SerialTaskQueue } from "./plan-store.ts";
+import {
+	createPlanMessageComponent,
+	requestRevision,
+	showDocument,
+	withLoader,
+	type DocumentAction,
+} from "./plan-ui.ts";
+import {
+	assistantTextLooksLikePlan,
+	buildPlanModeSystemPrompt,
+	getMessageText,
+	isPlanRevisionIntent,
+} from "./planning.ts";
 
-// ─── Constants ──────────────────────────────────────────────
-
-const PLAN_MODE_SYSTEM_PROMPT_HEADER = `[PLAN MODE ACTIVE — Guided planning workflow]`;
+const STATE_TYPE = "plan-mode-interactive";
 const PLAN_RENDER_MESSAGE_TYPE = "plan-mode-rendered-plan";
-const SYMBOL = {
-	plan: "▣",
-	approved: "√",
-	revision: "↻",
-	closed: "□",
-	diff: "∆",
-	summary: "≡",
-	qa: "§",
-	warning: "△",
-};
-
-function isTui(ctx: ExtensionContext): boolean {
-	return ctx.mode === "tui";
-}
-
-function notifyRequiresTui(ctx: ExtensionContext, feature: string): void {
-	ctx.ui.notify(`${feature} requires TUI interactive mode.`, "error");
-}
-
-function getTerminalRows(): number {
-	return process.stdout.rows || 24;
-}
-
-type PlanModePromptState = {
-	planPresented: boolean;
-	iterationCount: number;
-	planTitle: string | null;
-	revisionPending: boolean;
-};
-
-type PersistedPlanModeState = {
-	active?: boolean;
-	planDir?: string | null;
-	iterations?: string[];
-	planTitle?: string | null;
-	qaMessages?: Array<{ role: "user" | "assistant"; content: string }>;
-	revisionPending?: boolean;
-};
-
-function formatPlanModeState(state: PlanModePromptState | undefined): string {
-	if (!state?.planPresented) {
-		return "- No plan has been presented yet in this plan-mode session.";
-	}
-
-	const lines = [
-		`- A plan has already been presented (${state.iterationCount} iteration${state.iterationCount === 1 ? "" : "s"}).`,
-	];
-	if (state.planTitle) lines.push(`- Current plan title: ${state.planTitle}`);
-	if (state.revisionPending) {
-		lines.push(
-			"- A plan revision is pending. Revision is a discussion phase, not a requirement to call plan_output immediately. You may respond in normal assistant text, investigate, use tools, and ask concise clarifying questions. If the feedback leaves a material choice unclear, ask the user before revising. Call plan_output only when the complete revised plan is ready; do not put that plan in assistant text.",
-		);
-	} else {
-		lines.push(
-			"- The user may ask normal follow-up questions about the plan; answer those in regular assistant text.",
-		);
-	}
-	return lines.join("\n");
-}
-
-function isPlanRevisionIntent(text: string): boolean {
-	const normalized = text.toLowerCase().replace(/\s+/g, " ").trim();
-	if (!normalized) return false;
-
-	const explicitRevision =
-		/\b(revise|revision|update|change|modify|edit|adjust|rework|rewrite|regenerate|redo|replan|amend)\b/.test(
-			normalized,
-		) ||
-		/\b(add|include|incorporate|remove|exclude|drop|expand|shorten|tighten|simplify)\b/.test(normalized) ||
-		/\b(plan should|new plan|another plan|updated plan|revised plan)\b/.test(normalized);
-
-	if (!explicitRevision) return false;
-
-	const clarificationOnly =
-		/\b(why|what|how|explain|clarify|question|rationale|tell me|help me understand)\b/.test(normalized) &&
-		!/\b(to the plan|in the plan|the plan|plan should|updated plan|revised plan)\b/.test(normalized);
-
-	return !clarificationOnly;
-}
-
-type MessageContentPart = { type?: string; text?: string; name?: string };
-
-function getMessageContentParts(content: unknown): MessageContentPart[] {
-	return Array.isArray(content)
-		? (content.filter((part) => part && typeof part === "object") as MessageContentPart[])
-		: [];
-}
-
-function getMessageText(content: unknown): string {
-	if (typeof content === "string") return content;
-	return getMessageContentParts(content)
-		.filter((part) => part.type === "text")
-		.map((part) => part.text ?? "")
-		.join("\n");
-}
-
-function assistantTextLooksLikePlan(text: string): boolean {
-	const trimmed = text.trim();
-	if (trimmed.length < 500) return false;
-
-	const normalized = trimmed.toLowerCase();
-	if (/\b(here(?:'s| is) (?:the )?(?:(?:revised|updated)\s+)?(?:implementation\s+)?plan)\b/.test(normalized))
-		return true;
-	if (/\b(?:revised|updated) (?:implementation )?plan\b/.test(normalized) && /\n\s*#{1,3}\s+/.test(trimmed))
-		return true;
-
-	const sectionHeadings = [
-		/^\s*#{1,3}\s+goal\b/im,
-		/^\s*#{1,3}\s+(findings|context|current-state findings)\b/im,
-		/^\s*#{1,3}\s+impact analysis\b/im,
-		/^\s*#{1,3}\s+(proposed approach|approach)\b/im,
-		/^\s*#{1,3}\s+(implementation|phases|ordered implementation phases)\b/im,
-		/^\s*#{1,3}\s+validation\b/im,
-		/^\s*#{1,3}\s+(risks|unknowns|risks\/unknowns)\b/im,
-		/^\s*#{1,3}\s+(rollout|backout|rollout\/backout)\b/im,
-	];
-	const matchingSections = sectionHeadings.filter((pattern) => pattern.test(trimmed)).length;
-	return matchingSections >= 3;
-}
-
-function createPlanMessageComponent(
-	plan: string,
-	title: string | null,
-	iteration: number,
-	planPath: string | null,
-	theme: ExtensionContext["ui"]["theme"],
-) {
-	const md = new Markdown(plan, 1, 0, getMarkdownTheme());
-	let cachedLines: string[] | null = null;
-	let cachedWidth: number | null = null;
-
-	return {
-		render(width: number): string[] {
-			const frameWidth = Math.max(20, width);
-			const innerWidth = Math.max(10, frameWidth - 4);
-			if (!cachedLines || cachedWidth !== frameWidth) {
-				cachedLines = md.render(innerWidth);
-				cachedWidth = frameWidth;
-			}
-
-			const framedLine = (content: string): string => {
-				const truncated = truncateToWidth(content, innerWidth);
-				return (
-					theme.fg("accent", "│ ") +
-					truncated +
-					" ".repeat(Math.max(0, innerWidth - visibleWidth(truncated))) +
-					theme.fg("accent", " │")
-				);
-			};
-
-			const header =
-				theme.fg("accent", theme.bold("Plan")) +
-				theme.fg("muted", `  Iteration ${iteration}`) +
-				(title ? theme.fg("dim", `  ${title}`) : "");
-			const lines = [
-				theme.fg("accent", `╭${"─".repeat(Math.max(0, frameWidth - 2))}╮`),
-				framedLine(header),
-				...(planPath ? [framedLine(theme.fg("dim", planPath))] : []),
-				theme.fg("accent", `├${"─".repeat(Math.max(0, frameWidth - 2))}┤`),
-			];
-
-			for (const line of cachedLines) {
-				lines.push(framedLine(line));
-			}
-			lines.push(theme.fg("accent", `╰${"─".repeat(Math.max(0, frameWidth - 2))}╯`));
-			return lines;
-		},
-		invalidate() {
-			cachedLines = null;
-			cachedWidth = null;
-			md.invalidate();
-		},
-	};
-}
-
-function buildPlanModeSystemPrompt(state?: PlanModePromptState): string {
-	return `
-${PLAN_MODE_SYSTEM_PROMPT_HEADER}
-
-Destination:
-Produce a reviewable, execution-ready plan that defines the intended outcome, scope, affected surfaces, material risks, and validation. Describe the destination, constraints, and meaningful sequencing rather than prescribing every low-level edit or command.
-
-Current plan state:
-${formatPlanModeState(state)}
-
-Decision rules:
-- Investigate the repository, relevant documentation, or external sources when the evidence could materially change the plan's correctness, scope, impact, or assumptions. Avoid unrelated exploration.
-- You may autonomously perform read-only research and run low-risk validation that tests planning assumptions. Prefer the least invasive method and do not intentionally modify source files or tracked project state.
-- Ask a targeted question when a material ambiguity cannot be resolved from available evidence and the answer would change the destination, scope, compatibility, risk, or validation. Otherwise proceed and state the assumption.
-- Distinguish verified findings from assumptions and unresolved unknowns. Continue until another engineer could implement confidently; exhaustive certainty is not required.
-
-Autonomy and approval boundary:
-- Before approval, do not implement the plan, edit project files, or perform destructive, irreversible, production, or external mutations.
-- Approval of the reviewed plan authorizes its implementation, subject to normal safety and permission constraints.
-- When the plan is ready, present it with plan_output and stop for user review.
-
-Post-plan routing:
-- Answer follow-up questions and discuss rationale or trade-offs in normal assistant text without replacing the saved plan.
-- Use plan_output again only for an explicit plan revision or replacement, including revision feedback from the review UI.
-- If revision intent is ambiguous, clarify whether the user wants the saved plan changed.
-- Revision feedback starts a revision discussion; it does not require an immediate plan_output call. Respond in normal assistant text when useful, and ask for clarification before revising if a material choice remains unclear.
-- While a revision is pending, call plan_output only after the complete revised plan is ready; present that plan through plan_output rather than assistant text.
-
-Plan content:
-Use an organization suited to the task. Cover the desired outcome and success criteria, evidence about the current state, impact and preserved behavior, assumptions or open questions, implementation phases, validation, and material risks. Include compatibility, migration, rollout, or backout considerations when relevant. Name concrete affected files and interfaces when known, and omit sections that do not apply.
-`.trim();
-}
-
-type ReviewAction = "approve" | "revise" | "cancel" | "diff" | "summary" | "allSummary" | "qa";
-
-// ─── Extension ──────────────────────────────────────────────
+const REMINDER_TYPE = "plan-mode-revision-reminder";
+const stateSchema = Type.Object({
+	active: Type.Optional(Type.Boolean()),
+	planDir: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+	iterations: Type.Optional(Type.Array(Type.String())),
+	planTitle: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+	qaMessages: Type.Optional(
+		Type.Array(
+			Type.Object({
+				role: Type.Union([Type.Literal("user"), Type.Literal("assistant")]),
+				content: Type.String(),
+			}),
+		),
+	),
+	revisionPending: Type.Optional(Type.Boolean()),
+});
+const renderDetailsSchema = Type.Object({
+	plan: Type.Optional(Type.String()),
+	title: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+	iteration: Type.Optional(Type.Number()),
+	planPath: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+});
+const outputDetailsSchema = Type.Object({
+	presented: Type.Literal(true),
+	iteration: Type.Number(),
+	planDir: Type.String(),
+});
 
 export default function planModeExtension(pi: ExtensionAPI): void {
-	// ─── State ──────────────────────────────────────────────
-
 	let active = false;
 	let planDir: string | null = null;
-	let iterations: string[] = []; // full markdown text per iteration
+	let iterations: string[] = [];
 	let planTitle: string | null = null;
 	let qaMessages: Array<{ role: "user" | "assistant"; content: string }> = [];
 	let isAgentWorking = false;
 	let lastUserInputText = "";
 	let lastUserInputPlanIteration = -1;
-	let allowNextPlanOutputFromReviewRevision = false;
 	let revisionPending = false;
-	let revisionResubmitPromptQueued = false;
-	let isPlanReviewOpen = false;
-	let latestPlanReviewQueued = false;
+	let revisionReminder: string | undefined;
+	let reminderRequested = false;
+	let pendingReview = false;
+	let reviewToken: symbol | undefined;
+	let scope = new AbortController();
+	const saves = new SerialTaskQueue();
+	const repository = new PlanRepository((...args) => pi.exec(...args), join(homedir(), ".pi", "plans"));
 
-	const PLANS_BASE = join(homedir(), ".pi", "plans");
+	function requireTui(ctx: ExtensionContext): boolean {
+		if (ctx.mode === "tui") return true;
+		if (ctx.hasUI) ctx.ui.notify("Plan review requires TUI interactive mode.", "warning");
+		return false;
+	}
 
-	function getPlanFileDisplayPath(): string | null {
+	function resetInteractions(): void {
+		scope.abort();
+		scope = new AbortController();
+		reviewToken = undefined;
+		pendingReview = false;
+		isAgentWorking = false;
+		lastUserInputText = "";
+		lastUserInputPlanIteration = -1;
+		revisionReminder = undefined;
+		reminderRequested = false;
+	}
+
+	function persistState(): void {
+		// appendEntry retains its data object: snapshots must not share mutable arrays.
+		pi.appendEntry(STATE_TYPE, {
+			active,
+			planDir,
+			iterations: [...iterations],
+			planTitle,
+			qaMessages: qaMessages.map((message) => ({ ...message })),
+			revisionPending,
+		});
+	}
+
+	function restoreState(ctx: ExtensionContext): void {
+		resetInteractions();
+		const entry = ctx.sessionManager
+			.getBranch()
+			.findLast((item) => item.type === "custom" && item.customType === STATE_TYPE);
+		const data = entry?.type === "custom" && Check(stateSchema, entry.data) ? entry.data : undefined;
+		active = ctx.mode === "tui" && (data?.active ?? false);
+		planDir = data?.planDir ?? null;
+		iterations = [...(data?.iterations ?? [])];
+		planTitle = data?.planTitle ?? null;
+		qaMessages = (data?.qaMessages ?? []).map((message) => ({ ...message }));
+		revisionPending = data?.revisionPending ?? false;
+	}
+
+	function updateUI(ctx: ExtensionContext): void {
+		if (ctx.mode !== "tui") return;
+		const theme = ctx.ui.theme;
+		ctx.ui.setWorkingVisible(!active);
+		ctx.ui.setStatus(
+			"plan-mode",
+			active
+				? theme.fg("warning", "▣ Planning") +
+						(planTitle ? theme.fg("muted", ` ${planTitle.replace(/[\r\n\t]/g, " ")}`) : "") +
+						theme.fg(
+							"dim",
+							` · ${iterations.length} iteration${iterations.length === 1 ? "" : "s"}${isAgentWorking ? " · working" : ""}`,
+						)
+				: undefined,
+		);
+	}
+
+	function enterPlanMode(ctx: ExtensionContext): void {
+		if (!requireTui(ctx)) return;
+		resetInteractions();
+		active = true;
+		planDir = null;
+		iterations = [];
+		planTitle = null;
+		qaMessages = [];
+		revisionPending = false;
+		persistState();
+		updateUI(ctx);
+		ctx.ui.notify("▣ Plan mode activated. Gather material evidence before presenting a plan.", "info");
+	}
+
+	function exitPlanMode(ctx: ExtensionContext, approved = false): void {
+		resetInteractions();
+		active = false;
+		revisionPending = false;
+		persistState();
+		updateUI(ctx);
+		ctx.ui.notify(approved ? "✓ Plan approved. Plan mode deactivated." : "Plan mode deactivated.", "info");
+	}
+
+	function planPath(): string | null {
 		if (!planDir) return null;
-		const absolutePath = join(planDir, "plan.md");
+		const absolute = join(planDir, "plan.md");
 		const home = homedir();
-		return absolutePath === home
-			? "~"
-			: absolutePath.startsWith(`${home}/`)
-				? `~/${absolutePath.slice(home.length + 1)}`
-				: absolutePath;
+		return absolute.startsWith(`${home}/`) ? `~/${absolute.slice(home.length + 1)}` : absolute;
 	}
 
 	pi.registerMessageRenderer(PLAN_RENDER_MESSAGE_TYPE, (message, _options, theme) => {
-		const details = message.details as
-			| { plan?: string; title?: string | null; iteration?: number; planPath?: string | null }
-			| undefined;
-		const plan = details?.plan ?? String(message.content ?? "");
+		const details = Check(renderDetailsSchema, message.details) ? message.details : undefined;
 		return createPlanMessageComponent(
-			plan,
+			details?.plan ?? getMessageText(message.content),
 			details?.title ?? null,
 			details?.iteration ?? 0,
 			details?.planPath ?? null,
@@ -310,1144 +170,209 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		);
 	});
 
-	function renderPlanInMainBuffer(ctx: ExtensionContext, plan: string, iteration: number): void {
-		try {
-			pi.sendMessage({
-				customType: PLAN_RENDER_MESSAGE_TYPE,
-				content: `Plan iteration ${iteration} rendered in chat for review.`,
-				display: true,
-				details: { plan, title: planTitle, iteration, planPath: getPlanFileDisplayPath() },
-			});
-		} catch (err) {
-			ctx.ui.notify(`Unable to render plan in chat: ${err}`, "error");
-		}
-	}
-
-	// ─── Git Helpers ────────────────────────────────────────
-
-	async function gitExec(
-		dir: string,
-		args: string[],
-		options: { allowFailure?: boolean } = {},
-	): Promise<{ stdout: string; stderr: string; code: number }> {
-		const result = await pi.exec("git", ["-C", dir, ...args], { timeout: 10_000 });
-		if (result.code !== 0 && !options.allowFailure) {
-			const details = [result.stderr.trim(), result.stdout.trim()].filter(Boolean).join("\n");
-			throw new Error(details || `git ${args.join(" ")} failed with exit code ${result.code}`);
-		}
-		return result;
-	}
-
-	async function initPlanRepo(dir: string): Promise<void> {
-		await mkdir(dir, { recursive: true });
-		await gitExec(dir, ["init"]);
-		await gitExec(dir, ["config", "user.name", "pi plan mode"]);
-		await gitExec(dir, ["config", "user.email", "plan-mode@pi.local"]);
-		// Seed with an empty commit so HEAD~1 works after the first plan commit
-		await writeFile(join(dir, ".gitkeep"), "", "utf-8");
-		await gitExec(dir, ["add", "."]);
-		await gitExec(dir, ["commit", "-m", "init plan repo"]);
-	}
-
-	async function savePlanAndCommit(dir: string, content: string, iteration: number): Promise<void> {
-		await writeFile(join(dir, "plan.md"), content, "utf-8");
-		await gitExec(dir, ["add", "plan.md"]);
-		const stagedDiff = await gitExec(dir, ["diff", "--cached", "--quiet", "--", "plan.md"], {
-			allowFailure: true,
-		});
-		if (stagedDiff.code === 0) return;
-		if (stagedDiff.code !== 1) {
-			const details = [stagedDiff.stderr.trim(), stagedDiff.stdout.trim()].filter(Boolean).join("\n");
-			throw new Error(details || "Unable to determine whether the staged plan changed");
-		}
-		await gitExec(dir, ["commit", "-m", `Plan iteration ${iteration}`]);
-	}
-
-	async function getLastDiff(dir: string): Promise<string> {
-		const result = await gitExec(dir, ["diff", "HEAD~1", "HEAD", "--", "plan.md"], { allowFailure: true });
-		return result.code === 0 ? result.stdout : "";
-	}
-
-	async function getFullDiff(dir: string): Promise<string> {
-		// diff from the very first commit (the seed) to HEAD
-		const revList = await gitExec(dir, ["rev-list", "--max-parents=0", "HEAD"], { allowFailure: true });
-		if (revList.code !== 0) return "";
-		const first = revList.stdout.trim().split("\n")[0];
-		if (!first) return "";
-		const diff = await gitExec(dir, ["diff", first, "HEAD", "--", "plan.md"], { allowFailure: true });
-		return diff.code === 0 ? diff.stdout : "";
-	}
-
-	// ─── UI Helpers ─────────────────────────────────────────
-
-	function updateUI(ctx: ExtensionContext): void {
-		const t = ctx.ui.theme;
-		ctx.ui.setWidget("plan-mode", undefined);
-
-		if (active) {
-			let status = t.fg("warning", `${SYMBOL.plan} Planning`);
-			if (planTitle) status += t.fg("muted", ` ${planTitle}`);
-			if (iterations.length > 0) {
-				status += t.fg("dim", ` (${iterations.length} iteration${iterations.length !== 1 ? "s" : ""})`);
-			}
-
-			if (iterations.length > 0 || isAgentWorking) {
-				const hints: string[] = [];
-				if (iterations.length > 1) {
-					hints.push("ctrl+alt+d diff", "ctrl+alt+s summary", "ctrl+alt+a all changes");
-				}
-				hints.push("ctrl+alt+q Q&A");
-				status += t.fg("dim", ` ${hints.join(" │ ")}`);
-			}
-
-			ctx.ui.setStatus("plan-mode", status);
-		} else {
-			ctx.ui.setStatus("plan-mode", undefined);
-		}
-	}
-
-	type SgrMouseEvent = {
-		code: number;
-		x: number;
-		y: number;
-		released: boolean;
-	};
-
-	function enableMouseWheel(tui: TUI): () => void {
-		// Button-event tracking keeps wheel scrolling and reports left-button drag
-		// events so the plan review can provide selection clipped to its content.
-		tui.terminal.write("\x1b[?1002h\x1b[?1006h");
-
-		let cleanedUp = false;
-		return () => {
-			if (cleanedUp) return;
-			cleanedUp = true;
-			tui.terminal.write("\x1b[?1002l\x1b[?1006l");
-		};
-	}
-
-	function parseSgrMouseEvent(data: string): SgrMouseEvent | null {
-		const match = data.match(/^\x1b\[<(\d+);(\d+);(\d+)([mM])$/);
-		if (!match) return null;
-
-		const code = Number.parseInt(match[1] ?? "", 10);
-		const x = Number.parseInt(match[2] ?? "", 10) - 1;
-		const y = Number.parseInt(match[3] ?? "", 10) - 1;
-		if ([code, x, y].some(Number.isNaN)) return null;
-		return { code, x, y, released: match[4] === "m" };
-	}
-
-	function getMouseWheelDelta(data: string): -1 | 1 | null {
-		const event = parseSgrMouseEvent(data);
-		if (!event || (event.code & 64) === 0) return null;
-		return (event.code & 1) === 0 ? -1 : 1;
-	}
-
-	// ─── Enter / Exit ───────────────────────────────────────
-
-	function enterPlanMode(ctx: ExtensionContext): void {
-		active = true;
-		planDir = null;
-		iterations = [];
-		planTitle = null;
-		qaMessages = [];
-		isAgentWorking = false;
-		lastUserInputText = "";
-		lastUserInputPlanIteration = -1;
-		allowNextPlanOutputFromReviewRevision = false;
-		revisionPending = false;
-		revisionResubmitPromptQueued = false;
-		isPlanReviewOpen = false;
-		latestPlanReviewQueued = false;
-
-		ctx.ui.setWorkingVisible(false);
-		ctx.ui.notify(
-			`${SYMBOL.plan} Plan mode activated. The agent will gather material evidence before presenting a plan.`,
-			"info",
-		);
-		updateUI(ctx);
-		persistState();
-	}
-
-	function exitPlanMode(ctx: ExtensionContext, approved = false): void {
-		active = false;
-		isAgentWorking = false;
-		lastUserInputText = "";
-		lastUserInputPlanIteration = -1;
-		allowNextPlanOutputFromReviewRevision = false;
-		revisionPending = false;
-		revisionResubmitPromptQueued = false;
-		ctx.ui.setWorkingVisible(true);
-		ctx.ui.notify(
-			approved
-				? `${SYMBOL.approved} Plan approved. Plan mode deactivated.`
-				: `${SYMBOL.plan} Plan mode deactivated.`,
-			"info",
-		);
-		updateUI(ctx);
-		persistState();
-	}
-
-	// ─── State Persistence ──────────────────────────────────
-
-	function persistState(): void {
-		pi.appendEntry("plan-mode-interactive", {
-			active,
-			planDir,
-			iterations,
-			planTitle,
-			qaMessages,
-			revisionPending,
+	function renderPlanInChat(plan: string, iteration: number): void {
+		pi.sendMessage({
+			customType: PLAN_RENDER_MESSAGE_TYPE,
+			content: `Plan iteration ${iteration} rendered in chat for review.`,
+			display: true,
+			details: { plan, title: planTitle, iteration, planPath: planPath() },
 		});
 	}
 
-	function sendFollowUpOrImmediate(ctx: ExtensionContext, content: string, errorLabel: string): void {
-		try {
-			if (ctx.isIdle()) {
-				pi.sendUserMessage(content);
-			} else {
-				pi.sendUserMessage(content, { deliverAs: "followUp" });
-			}
-		} catch (err) {
-			ctx.ui.notify(`${errorLabel}: ${err}`, "error");
-		}
+	function sendFollowUp(ctx: ExtensionContext, content: string): void {
+		pi.sendUserMessage(content, ctx.isIdle() ? undefined : { deliverAs: "followUp" });
 	}
 
-	function resetTransientState(): void {
-		isAgentWorking = false;
-		lastUserInputText = "";
-		lastUserInputPlanIteration = -1;
-		allowNextPlanOutputFromReviewRevision = false;
-		revisionResubmitPromptQueued = false;
-		isPlanReviewOpen = false;
-		latestPlanReviewQueued = false;
-	}
-
-	function restoreStateFromSession(ctx: ExtensionContext): void {
-		const stateEntry = ctx.sessionManager
-			.getBranch()
-			.filter(
-				(e: { type: string; customType?: string }) =>
-					e.type === "custom" && e.customType === "plan-mode-interactive",
-			)
-			.pop() as { data?: PersistedPlanModeState } | undefined;
-
-		if (stateEntry?.data) {
-			active = stateEntry.data.active ?? false;
-			planDir = stateEntry.data.planDir ?? null;
-			iterations = stateEntry.data.iterations ?? [];
-			planTitle = stateEntry.data.planTitle ?? null;
-			qaMessages = stateEntry.data.qaMessages ?? [];
-			revisionPending = stateEntry.data.revisionPending ?? false;
-		} else {
-			active = false;
-			planDir = null;
-			iterations = [];
-			planTitle = null;
-			qaMessages = [];
-			revisionPending = false;
-		}
-
-		resetTransientState();
-	}
-
-	// ─── Diff UI ────────────────────────────────────────────
-
-	async function showDiffUI(ctx: ExtensionContext): Promise<void> {
-		if (!isTui(ctx)) {
-			notifyRequiresTui(ctx, "Plan diff");
-			return;
-		}
+	async function showDiff(ctx: ExtensionContext, signal = scope.signal): Promise<void> {
+		if (!requireTui(ctx) || signal.aborted) return;
 		if (!planDir || iterations.length < 2) {
 			ctx.ui.notify("Need at least 2 iterations to show a diff.", "warning");
 			return;
 		}
-		const diff = await getLastDiff(planDir);
+		const iteration = iterations.length;
+		const diff = await repository.diff(iterations[iteration - 2], iterations[iteration - 1], signal);
+		if (signal.aborted) return;
 		if (!diff.trim()) {
 			ctx.ui.notify("No changes between the last two iterations.", "info");
 			return;
 		}
-
-		await ctx.ui.custom(
-			(tui, theme, _kb, done) => {
-				const cleanupMouse = enableMouseWheel(tui);
-				const finish = () => {
-					cleanupMouse();
-					done(undefined);
-				};
-				let scrollOffset = 0;
-				let cachedDiffLines: string[] | null = null;
-				let cachedWidth: number | null = null;
-
-				return {
-					render(width: number): string[] {
-						const innerWidth = Math.max(20, width - 4);
-						if (!cachedDiffLines || cachedWidth !== width) {
-							cachedDiffLines = diff.split("\n").flatMap((line) => {
-								const styled = (() => {
-									if (line.startsWith("+++") || line.startsWith("---"))
-										return theme.fg("muted", line);
-									if (line.startsWith("+")) return theme.fg("toolDiffAdded", line);
-									if (line.startsWith("-")) return theme.fg("toolDiffRemoved", line);
-									if (line.startsWith("@@")) return theme.fg("accent", line);
-									return theme.fg("dim", line);
-								})();
-								const wrapped = wrapTextWithAnsi(styled, innerWidth);
-								return wrapped.length > 0 ? wrapped : [""];
-							});
-							cachedWidth = width;
-						}
-
-						const modalHeight = Math.max(10, Math.floor(getTerminalRows() * 0.85));
-						const headerFooterLines = 7;
-						const viewportHeight = Math.max(5, modalHeight - headerFooterLines);
-						const maxScroll = Math.max(0, cachedDiffLines.length - viewportHeight);
-						if (scrollOffset > maxScroll) scrollOffset = maxScroll;
-
-						const lines: string[] = [];
-						lines.push(theme.fg("accent", `╭${"─".repeat(Math.max(0, width - 2))}╮`));
-						lines.push(
-							truncateToWidth(
-								theme.fg("accent", "│ ") +
-									theme.fg(
-										"accent",
-										theme.bold(
-											`${SYMBOL.diff} Diff: Iteration ${iterations.length - 1} → ${iterations.length}`,
-										),
-									) +
-									(planTitle ? `  ${theme.fg("dim", planTitle)}` : "") +
-									theme.fg("accent", " │"),
-								width,
-							),
-						);
-						lines.push(theme.fg("accent", `├${"─".repeat(Math.max(0, width - 2))}┤`));
-
-						const visible = cachedDiffLines.slice(scrollOffset, scrollOffset + viewportHeight);
-						for (const line of visible) {
-							lines.push(
-								theme.fg("accent", "│ ") + truncateToWidth(line, innerWidth) + theme.fg("accent", " │"),
-							);
-						}
-						for (let i = visible.length; i < viewportHeight; i++) {
-							lines.push(
-								theme.fg("accent", "│") + " ".repeat(Math.max(0, width - 2)) + theme.fg("accent", "│"),
-							);
-						}
-
-						if (cachedDiffLines.length > viewportHeight) {
-							const pct = maxScroll > 0 ? Math.round((scrollOffset / maxScroll) * 100) : 100;
-							const info = truncateToWidth(
-								theme.fg("dim", ` ${pct}% (${cachedDiffLines.length} lines) `),
-								innerWidth,
-							);
-							lines.push(
-								theme.fg("accent", "│ ") +
-									info +
-									" ".repeat(Math.max(0, innerWidth - visibleWidth(info))) +
-									theme.fg("accent", " │"),
-							);
-						} else {
-							lines.push(
-								theme.fg("accent", "│") + " ".repeat(Math.max(0, width - 2)) + theme.fg("accent", "│"),
-							);
-						}
-
-						const help = truncateToWidth(
-							theme.fg("dim", " ↑↓/j/k scroll  PgUp/PgDn page  mouse wheel scroll  Enter/Esc close "),
-							innerWidth,
-						);
-						lines.push(
-							theme.fg("accent", "│ ") +
-								help +
-								" ".repeat(Math.max(0, innerWidth - visibleWidth(help))) +
-								theme.fg("accent", " │"),
-						);
-						lines.push(theme.fg("accent", `╰${"─".repeat(Math.max(0, width - 2))}╯`));
-						return lines;
-					},
-					invalidate() {
-						cachedDiffLines = null;
-						cachedWidth = null;
-					},
-					handleInput(data: string) {
-						const modalHeight = Math.max(10, Math.floor(getTerminalRows() * 0.85));
-						const viewportHeight = Math.max(5, modalHeight - 7);
-						const maxScroll = cachedDiffLines ? Math.max(0, cachedDiffLines.length - viewportHeight) : 0;
-						const wheelDelta = getMouseWheelDelta(data);
-
-						if (wheelDelta !== null) {
-							scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset + wheelDelta * 3));
-							tui.requestRender();
-							return;
-						}
-						if (matchesKey(data, Key.up) || data === "k") {
-							scrollOffset = Math.max(0, scrollOffset - 1);
-							tui.requestRender();
-							return;
-						}
-						if (matchesKey(data, Key.down) || data === "j") {
-							scrollOffset = Math.min(maxScroll, scrollOffset + 1);
-							tui.requestRender();
-							return;
-						}
-						if (matchesKey(data, Key.pageUp)) {
-							scrollOffset = Math.max(0, scrollOffset - viewportHeight);
-							tui.requestRender();
-							return;
-						}
-						if (matchesKey(data, Key.pageDown)) {
-							scrollOffset = Math.min(maxScroll, scrollOffset + viewportHeight);
-							tui.requestRender();
-							return;
-						}
-						if (matchesKey(data, Key.enter) || matchesKey(data, Key.escape)) {
-							finish();
-						}
-					},
-				};
-			},
+		await showDocument(
+			ctx,
 			{
-				overlay: true,
-				overlayOptions: {
-					anchor: "center",
-					width: "85%",
-					minWidth: 60,
-					maxHeight: "85%",
-					margin: 1,
-				},
+				title: `∆ Plan diff · ${iteration - 1} → ${iteration}`,
+				subtitle: planTitle ?? "",
+				content: diff,
+				format: "diff",
 			},
+			signal,
 		);
 	}
 
-	// ─── Summary UI ─────────────────────────────────────────
-
-	async function showSummaryUI(ctx: ExtensionContext, allChanges: boolean): Promise<void> {
-		if (!isTui(ctx)) {
-			notifyRequiresTui(ctx, allChanges ? "All-changes summary" : "Plan change summary");
-			return;
-		}
+	async function showSummary(ctx: ExtensionContext, allChanges: boolean, signal = scope.signal): Promise<void> {
+		if (!requireTui(ctx) || signal.aborted) return;
 		if (iterations.length < 2) {
 			ctx.ui.notify("Need at least 2 iterations to generate a summary.", "warning");
 			return;
 		}
-
 		const model = ctx.model;
 		if (!model) {
 			ctx.ui.notify("No model available for summary generation.", "error");
 			return;
 		}
-		// Generate with a loading spinner
-		const summary = await ctx.ui.custom<string | null>((tui, theme, _kb, done) => {
-			const loader = new BorderedLoader(
-				tui,
-				theme,
-				allChanges ? "Generating summary of all changes…" : "Generating change summary…",
-			);
-			loader.onAbort = () => done(null);
-
-			(async () => {
-				try {
-					let prompt: string;
-					if (allChanges) {
-						const versions = iterations.map((p, i) => `### Version ${i + 1}\n${p}`).join("\n\n---\n\n");
-						prompt =
-							`Summarize ALL the changes across these ${iterations.length} plan iterations. ` +
-							`What evolved, what was added, removed, or restructured? Be concise and use markdown.\n\n${versions}`;
-					} else {
-						const prev = iterations[iterations.length - 2];
-						const curr = iterations[iterations.length - 1];
-						prompt =
-							"Summarize the changes between these two plan versions. " +
-							"What was added, removed, or modified? Be concise and use markdown.\n\n" +
-							`### Previous Version\n${prev}\n\n### Current Version\n${curr}`;
-					}
-
-					const response = await ctx.modelRegistry.complete(
-						model,
-						{
-							messages: [
-								{
-									role: "user" as const,
-									content: [{ type: "text" as const, text: prompt }],
-									timestamp: Date.now(),
-								},
-							],
-						},
-						{ signal: loader.signal },
-					);
-
-					const text = response.content
-						.filter((c): c is { type: "text"; text: string } => c.type === "text")
-						.map((c) => c.text)
-						.join("\n");
-
-					done(text || "(empty summary)");
-				} catch {
-					done(null);
-				}
-			})();
-
-			return loader;
-		});
-
-		if (!summary) return;
-
-		// Display the summary in a markdown viewer
-		await ctx.ui.custom((_tui, theme, _kb, done) => {
-			const container = new Container();
-			const mdTheme = getMarkdownTheme();
-
-			container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));
-			container.addChild(
-				new Text(
-					theme.fg(
-						"accent",
-						theme.bold(
-							allChanges
-								? `  ${SYMBOL.summary} Summary of All Plan Changes (${iterations.length} iterations)`
-								: `  ${SYMBOL.summary} Changes: v${iterations.length - 1} → v${iterations.length}`,
-						),
-					),
-					0,
-					0,
-				),
-			);
-			container.addChild(new Markdown(summary, 1, 1, mdTheme));
-			container.addChild(new Text(theme.fg("dim", "  Press Enter or Esc to close"), 0, 0));
-			container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));
-
-			return {
-				render: (w: number) => container.render(w),
-				invalidate: () => container.invalidate(),
-				handleInput: (data: string) => {
-					if (matchesKey(data, "enter") || matchesKey(data, "escape")) done(undefined);
+		const versions = [...iterations];
+		const title = allChanges
+			? "Summary of all plan changes"
+			: `Changes · v${versions.length - 1} → v${versions.length}`;
+		const prompt = allChanges
+			? `Summarize ALL changes across these ${versions.length} plan iterations. What evolved, was added, removed, or restructured? Be concise and use markdown.\n\n${versions.map((plan, i) => `### Version ${i + 1}\n${plan}`).join("\n\n---\n\n")}`
+			: `Summarize the changes between these two plan versions. What was added, removed, or modified? Be concise and use markdown.\n\n### Previous Version\n${versions.at(-2)}\n\n### Current Version\n${versions.at(-1)}`;
+		const summary = await withLoader(ctx, `Generating ${title.toLowerCase()}…`, signal, async (requestSignal) => {
+			const response = await ctx.modelRegistry.complete(
+				model,
+				{
+					messages: [{ role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() }],
 				},
-			};
+				{ signal: requestSignal },
+			);
+			requestSignal.throwIfAborted();
+			if (response.stopReason === "error" || response.stopReason === "aborted")
+				throw new Error(response.errorMessage || response.stopReason);
+			return getMessageText(response.content) || "(empty summary)";
 		});
+		if (summary !== undefined && !signal.aborted) await showDocument(ctx, { title, content: summary }, signal);
 	}
 
-	// ─── Q&A History UI ─────────────────────────────────────
-
-	async function showQAUI(ctx: ExtensionContext): Promise<void> {
-		if (!isTui(ctx)) {
-			notifyRequiresTui(ctx, "Q&A history");
-			return;
-		}
-		if (qaMessages.length === 0) {
+	async function showQA(ctx: ExtensionContext, signal = scope.signal): Promise<void> {
+		if (!requireTui(ctx) || signal.aborted) return;
+		if (!qaMessages.length) {
 			ctx.ui.notify("No Q&A history available.", "info");
 			return;
 		}
-
-		// Build markdown from Q&A messages
-		const mdContent = qaMessages
-			.map((msg) => {
-				const header = msg.role === "assistant" ? "### Agent" : "### You";
-				return `${header}\n\n${msg.content}`;
-			})
-			.join("\n\n---\n\n");
-
-		await ctx.ui.custom((tui, theme, _kb, done) => {
-			const cleanupMouse = enableMouseWheel(tui);
-			const finish = () => {
-				cleanupMouse();
-				done(undefined);
-			};
-			const mdTheme = getMarkdownTheme();
-			const md = new Markdown(mdContent, 1, 0, mdTheme);
-			let scrollOffset = 0;
-			let cachedMdLines: string[] | null = null;
-			let cachedWidth: number | null = null;
-
-			return {
-				render(width: number): string[] {
-					if (!cachedMdLines || cachedWidth !== width) {
-						cachedMdLines = md.render(width);
-						cachedWidth = width;
-					}
-
-					const termHeight = getTerminalRows();
-					const headerFooterLines = 7;
-					const viewportHeight = Math.max(5, termHeight - headerFooterLines);
-					const maxScroll = Math.max(0, cachedMdLines.length - viewportHeight);
-					if (scrollOffset > maxScroll) scrollOffset = maxScroll;
-
-					const lines: string[] = [];
-
-					// ── Header ──
-					lines.push(theme.fg("accent", "─".repeat(width)));
-					lines.push(
-						truncateToWidth(
-							`  ${theme.fg("accent", theme.bold(`${SYMBOL.qa} Q&A History`))}` +
-								`  ${theme.fg("muted", `${qaMessages.length} message${qaMessages.length !== 1 ? "s" : ""}`)}` +
-								(planTitle ? `  ${theme.fg("dim", planTitle)}` : ""),
-							width,
-						),
-					);
-					lines.push(theme.fg("accent", "─".repeat(width)));
-
-					// ── Scrollable content ──
-					const visible = cachedMdLines.slice(scrollOffset, scrollOffset + viewportHeight);
-					lines.push(...visible);
-
-					for (let i = visible.length; i < viewportHeight; i++) {
-						lines.push("");
-					}
-
-					// ── Scroll indicator ──
-					if (cachedMdLines.length > viewportHeight) {
-						const pct = maxScroll > 0 ? Math.round((scrollOffset / maxScroll) * 100) : 100;
-						lines.push(theme.fg("dim", `  ─── ${pct}% (${cachedMdLines.length} lines) ───`));
-					}
-
-					// ── Footer ──
-					lines.push(
-						truncateToWidth(
-							`  ${theme.fg("dim", "↑↓/j/k scroll  PgUp/PgDn page  mouse wheel scroll  Enter/Esc close")}`,
-							width,
-						),
-					);
-					lines.push(theme.fg("accent", "─".repeat(width)));
-
-					return lines;
-				},
-
-				invalidate() {
-					cachedMdLines = null;
-					cachedWidth = null;
-				},
-
-				handleInput(data: string) {
-					const termHeight = getTerminalRows();
-					const viewportHeight = Math.max(5, termHeight - 7);
-					const maxScroll = cachedMdLines ? Math.max(0, cachedMdLines.length - viewportHeight) : 0;
-					const wheelDelta = getMouseWheelDelta(data);
-
-					if (wheelDelta !== null) {
-						scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset + wheelDelta * 3));
-						tui.requestRender();
-						return;
-					}
-
-					if (matchesKey(data, Key.up) || data === "k") {
-						scrollOffset = Math.max(0, scrollOffset - 1);
-						tui.requestRender();
-						return;
-					}
-					if (matchesKey(data, Key.down) || data === "j") {
-						scrollOffset = Math.min(maxScroll, scrollOffset + 1);
-						tui.requestRender();
-						return;
-					}
-					if (matchesKey(data, Key.pageUp)) {
-						scrollOffset = Math.max(0, scrollOffset - viewportHeight);
-						tui.requestRender();
-						return;
-					}
-					if (matchesKey(data, Key.pageDown)) {
-						scrollOffset = Math.min(maxScroll, scrollOffset + viewportHeight);
-						tui.requestRender();
-						return;
-					}
-					if (matchesKey(data, "enter") || matchesKey(data, "escape")) {
-						finish();
-						return;
-					}
-				},
-			};
-		});
-	}
-
-	// ─── Plan Review UI (scrollable markdown) ───────────────
-
-	async function showPlanReview(ctx: ExtensionContext, plan: string, iteration: number): Promise<ReviewAction> {
-		if (!isTui(ctx)) {
-			notifyRequiresTui(ctx, "Plan review");
-			return "cancel";
-		}
-		const planFilePath = getPlanFileDisplayPath();
-		return ctx.ui.custom<ReviewAction>(
-			(tui, theme, _kb, done) => {
-				type SelectionPoint = { line: number; col: number };
-
-				const cleanupMouse = enableMouseWheel(tui);
-				let copyStatusTimer: ReturnType<typeof setTimeout> | null = null;
-				let closed = false;
-				const finish = (action: ReviewAction) => {
-					closed = true;
-					if (copyStatusTimer) clearTimeout(copyStatusTimer);
-					cleanupMouse();
-					done(action);
-				};
-				const mdTheme = getMarkdownTheme();
-				const md = new Markdown(plan, 1, 0, mdTheme);
-				let scrollOffset = 0;
-				let cachedMdLines: string[] | null = null;
-				let cachedWidth: number | null = null;
-				let lastFrameWidth = 0;
-				let selectionAnchor: SelectionPoint | null = null;
-				let selectionFocus: SelectionPoint | null = null;
-				let isSelecting = false;
-				let copyStatus: string | null = null;
-
-				const comparePoints = (a: SelectionPoint, b: SelectionPoint): number =>
-					a.line === b.line ? a.col - b.col : a.line - b.line;
-
-				const getNormalizedSelection = (): { start: SelectionPoint; end: SelectionPoint } | null => {
-					if (!selectionAnchor || !selectionFocus || comparePoints(selectionAnchor, selectionFocus) === 0)
-						return null;
-					return comparePoints(selectionAnchor, selectionFocus) < 0
-						? { start: selectionAnchor, end: selectionFocus }
-						: { start: selectionFocus, end: selectionAnchor };
-				};
-
-				const showCopyStatus = (status: string): void => {
-					if (closed) return;
-					copyStatus = status;
-					if (copyStatusTimer) clearTimeout(copyStatusTimer);
-					copyStatusTimer = setTimeout(() => {
-						copyStatus = null;
-						copyStatusTimer = null;
-						tui.requestRender();
-					}, 1800);
-					tui.requestRender();
-				};
-
-				const copyText = (text: string, successMessage: string): void => {
-					void copyToClipboard(text)
-						.then(() => showCopyStatus(successMessage))
-						.catch((err) =>
-							showCopyStatus(`Copy failed: ${err instanceof Error ? err.message : String(err)}`),
-						);
-				};
-
-				const copySelection = (): void => {
-					const selection = getNormalizedSelection();
-					if (!selection || !cachedMdLines) return;
-
-					const selectedLines: string[] = [];
-					for (let lineIndex = selection.start.line; lineIndex <= selection.end.line; lineIndex++) {
-						const line = cachedMdLines[lineIndex] ?? "";
-						const from = lineIndex === selection.start.line ? selection.start.col : 0;
-						const to = lineIndex === selection.end.line ? selection.end.col : visibleWidth(line);
-						selectedLines.push(
-							stripVTControlCharacters(sliceByColumn(line, from, Math.max(0, to - from))).trimEnd(),
-						);
-					}
-
-					const selectedText = selectedLines.join("\n");
-					if (selectedText) copyText(selectedText, "Copied selection");
-				};
-
-				const highlightSelection = (line: string, lineIndex: number): string => {
-					const selection = getNormalizedSelection();
-					if (!selection || lineIndex < selection.start.line || lineIndex > selection.end.line) return line;
-
-					const lineWidth = visibleWidth(line);
-					const from = lineIndex === selection.start.line ? selection.start.col : 0;
-					const to = lineIndex === selection.end.line ? selection.end.col : lineWidth;
-					if (to <= from) return line;
-
-					const before = sliceByColumn(line, 0, from);
-					const selected = sliceByColumn(line, from, to - from).replace(/\x1b\[0m/g, "$&\x1b[7m");
-					const after = sliceByColumn(line, to, Math.max(0, lineWidth - to));
-					return `${before}\x1b[7m${selected}\x1b[27m${after}`;
-				};
-
-				const getSelectionPoint = (mouse: SgrMouseEvent, clampToContent: boolean): SelectionPoint | null => {
-					if (!lastFrameWidth || !cachedMdLines) return null;
-
-					const termWidth = tui.terminal.columns;
-					const termHeight = tui.terminal.rows;
-					const modalHeight = Math.max(10, Math.floor(termHeight * 0.85));
-					const viewportHeight = Math.max(5, modalHeight - 9);
-					const overlayHeight = viewportHeight + 9;
-					const overlayLeft = 1 + Math.floor((Math.max(1, termWidth - 2) - lastFrameWidth) / 2);
-					const overlayTop = 1 + Math.floor((Math.max(1, termHeight - 2) - overlayHeight) / 2);
-					const contentLeft = overlayLeft + 2;
-					const contentTop = overlayTop + 4;
-					const contentRight = contentLeft + Math.max(0, lastFrameWidth - 4);
-					const contentBottom = contentTop + viewportHeight - 1;
-
-					if (
-						!clampToContent &&
-						(mouse.x < contentLeft ||
-							mouse.x > contentRight ||
-							mouse.y < contentTop ||
-							mouse.y > contentBottom)
-					) {
-						return null;
-					}
-
-					const x = Math.max(contentLeft, Math.min(contentRight, mouse.x));
-					const y = Math.max(contentTop, Math.min(contentBottom, mouse.y));
-					return {
-						line: Math.min(cachedMdLines.length - 1, scrollOffset + y - contentTop),
-						col: Math.max(0, Math.min(lastFrameWidth - 4, x - contentLeft)),
-					};
-				};
-
-				return {
-					render(width: number): string[] {
-						const frameWidth = Math.max(20, width);
-						lastFrameWidth = frameWidth;
-						const innerWidth = Math.max(10, frameWidth - 4);
-
-						// Render full markdown inside the border (cached until inner width changes)
-						if (!cachedMdLines || cachedWidth !== innerWidth) {
-							cachedMdLines = md.render(innerWidth);
-							cachedWidth = innerWidth;
-						}
-						const mdLines = cachedMdLines ?? [];
-
-						const modalHeight = Math.max(10, Math.floor(getTerminalRows() * 0.85));
-						const headerFooterLines = 9;
-						const viewportHeight = Math.max(5, modalHeight - headerFooterLines);
-						const maxScroll = Math.max(0, mdLines.length - viewportHeight);
-						if (scrollOffset > maxScroll) scrollOffset = maxScroll;
-
-						const framedLine = (content = ""): string => {
-							const truncated = truncateToWidth(content, innerWidth, "");
-							return (
-								theme.fg("accent", "│ ") +
-								truncated +
-								" ".repeat(Math.max(0, innerWidth - visibleWidth(truncated))) +
-								theme.fg("accent", " │")
-							);
-						};
-						const divider = (left: string, right: string): string =>
-							theme.fg("accent", `${left}${"─".repeat(Math.max(0, frameWidth - 2))}${right}`);
-
-						const lines: string[] = [];
-
-						// ── Header ──
-						lines.push(divider("╭", "╮"));
-						lines.push(
-							framedLine(
-								theme.fg("accent", theme.bold(`${SYMBOL.plan} Plan Review`)) +
-									`  ${theme.fg("muted", `Iteration ${iteration}`)}` +
-									(planTitle ? `  ${theme.fg("dim", planTitle)}` : ""),
-							),
-						);
-						lines.push(framedLine(theme.fg("dim", planFilePath ?? "Plan file unavailable")));
-						lines.push(divider("├", "┤"));
-
-						// ── Scrollable plan content ──
-						const visible = mdLines.slice(scrollOffset, scrollOffset + viewportHeight);
-						for (let visibleIndex = 0; visibleIndex < visible.length; visibleIndex++) {
-							const line = visible[visibleIndex] ?? "";
-							lines.push(framedLine(highlightSelection(line, scrollOffset + visibleIndex)));
-						}
-
-						// pad if content is shorter than viewport
-						for (let i = visible.length; i < viewportHeight; i++) {
-							lines.push(framedLine());
-						}
-
-						// ── Scroll indicator ──
-						if (mdLines.length > viewportHeight) {
-							const pct = maxScroll > 0 ? Math.round((scrollOffset / maxScroll) * 100) : 100;
-							lines.push(framedLine(theme.fg("dim", `─── ${pct}% (${mdLines.length} lines) ───`)));
-						} else {
-							lines.push(framedLine());
-						}
-
-						// ── Footer actions ──
-						lines.push(divider("├", "┤"));
-						const actions: string[] = [
-							`${theme.fg("success", "a")} approve`,
-							`${theme.fg("warning", "r")} revise`,
-							`${theme.fg("accent", "c")} copy plan`,
-						];
-						if (iteration > 1) {
-							actions.push(
-								`${theme.fg("accent", "d")} diff`,
-								`${theme.fg("accent", "s")} summary`,
-								`${theme.fg("accent", "S")} all changes`,
-							);
-						}
-						actions.push(`${theme.fg("accent", "q")} Q&A`);
-						actions.push(`${theme.fg("dim", "esc")} back`);
-						lines.push(framedLine(actions.join("  │  ")));
-						const interactionHint = copyStatus
-							? theme.fg(copyStatus.startsWith("Copy failed") ? "error" : "success", copyStatus)
-							: theme.fg("dim", "↑↓/j/k scroll  PgUp/PgDn page  wheel scroll  drag select + copy");
-						lines.push(framedLine(interactionHint));
-						lines.push(divider("╰", "╯"));
-
-						return lines;
-					},
-
-					invalidate() {
-						cachedMdLines = null;
-						cachedWidth = null;
-					},
-
-					handleInput(data: string) {
-						const modalHeight = Math.max(10, Math.floor(getTerminalRows() * 0.85));
-						const viewportHeight = Math.max(5, modalHeight - 9);
-						const maxScroll = cachedMdLines ? Math.max(0, cachedMdLines.length - viewportHeight) : 0;
-						const mouseEvent = parseSgrMouseEvent(data);
-						const wheelDelta = getMouseWheelDelta(data);
-
-						// ── Mouse selection, clipped to the plan content ──
-						if (mouseEvent && wheelDelta === null) {
-							const isLeftButton = (mouseEvent.code & 3) === 0;
-							const isMotion = (mouseEvent.code & 32) !== 0;
-
-							if (mouseEvent.released && isSelecting) {
-								selectionFocus = getSelectionPoint(mouseEvent, true) ?? selectionFocus;
-								isSelecting = false;
-								tui.requestRender();
-								copySelection();
-								return;
-							}
-
-							if (!mouseEvent.released && isLeftButton && !isMotion) {
-								const point = getSelectionPoint(mouseEvent, false);
-								if (point) {
-									selectionAnchor = point;
-									selectionFocus = point;
-									isSelecting = true;
-									tui.requestRender();
-								}
-								return;
-							}
-
-							if (!mouseEvent.released && isLeftButton && isMotion && isSelecting) {
-								selectionFocus = getSelectionPoint(mouseEvent, true) ?? selectionFocus;
-								tui.requestRender();
-								return;
-							}
-
-							return;
-						}
-
-						// ── Scrolling ──
-						if (wheelDelta !== null) {
-							scrollOffset = Math.max(0, Math.min(maxScroll, scrollOffset + wheelDelta * 3));
-							tui.requestRender();
-							return;
-						}
-						if (matchesKey(data, Key.up) || data === "k") {
-							scrollOffset = Math.max(0, scrollOffset - 1);
-							tui.requestRender();
-							return;
-						}
-						if (matchesKey(data, Key.down) || data === "j") {
-							scrollOffset = Math.min(maxScroll, scrollOffset + 1);
-							tui.requestRender();
-							return;
-						}
-						if (matchesKey(data, Key.pageUp)) {
-							scrollOffset = Math.max(0, scrollOffset - viewportHeight);
-							tui.requestRender();
-							return;
-						}
-						if (matchesKey(data, Key.pageDown)) {
-							scrollOffset = Math.min(maxScroll, scrollOffset + viewportHeight);
-							tui.requestRender();
-							return;
-						}
-
-						// ── Actions ──
-						if (data === "c") {
-							copyText(plan, "Copied full plan");
-							return;
-						}
-						if (data === "a") {
-							finish("approve");
-							return;
-						}
-						if (data === "r") {
-							finish("revise");
-							return;
-						}
-						if (matchesKey(data, Key.escape)) {
-							finish("cancel");
-							return;
-						}
-						if (data === "d" && iteration > 1) {
-							finish("diff");
-							return;
-						}
-						if (data === "s" && iteration > 1) {
-							finish("summary");
-							return;
-						}
-						if (data === "S" && iteration > 1) {
-							finish("allSummary");
-							return;
-						}
-						if (data === "q") {
-							finish("qa");
-							return;
-						}
-					},
-				};
-			},
+		await showDocument(
+			ctx,
 			{
-				overlay: true,
-				overlayOptions: {
-					anchor: "center",
-					width: "90%",
-					minWidth: 60,
-					maxHeight: "90%",
-					margin: 1,
-				},
+				title: `§ Q&A history · ${qaMessages.length} messages`,
+				subtitle: planTitle ?? "",
+				content: qaMessages
+					.map((message) => `### ${message.role === "assistant" ? "Agent" : "You"}\n\n${message.content}`)
+					.join("\n\n---\n\n"),
 			},
+			signal,
 		);
 	}
 
-	// ─── Plan Review Loop ───────────────────────────────────
-
-	async function planReviewLoop(
-		ctx: ExtensionContext,
-		plan: string,
-		iteration: number,
-	): Promise<{ action: "approve" } | { action: "revise"; feedback: string } | { action: "cancel" }> {
-		while (true) {
-			const action = await showPlanReview(ctx, plan, iteration);
-
-			switch (action) {
-				case "approve":
-					return { action: "approve" };
-
-				case "cancel":
-					return { action: "cancel" };
-
-				case "revise": {
-					const feedback = await ctx.ui.editor("What changes would you like to the plan?", "");
-					if (feedback?.trim()) {
-						return { action: "revise", feedback: feedback.trim() };
-					}
-					// empty / cancelled → back to review
+	async function openPlanReview(ctx: ExtensionContext): Promise<void> {
+		if (!requireTui(ctx) || !iterations.length || scope.signal.aborted) return;
+		if (reviewToken) {
+			pendingReview = true;
+			return;
+		}
+		const token = Symbol("review");
+		reviewToken = token;
+		pendingReview = false;
+		const signal = scope.signal;
+		const iteration = iterations.length;
+		const plan = iterations[iteration - 1];
+		const title = planTitle;
+		try {
+			while (!signal.aborted) {
+				const actions: DocumentAction[] = [
+					{ key: "a", label: "approve", value: "approve" },
+					{ key: "r", label: "revise", value: "revise" },
+					...(iteration > 1
+						? ([
+								{ key: "d", label: "diff", value: "diff" },
+								{ key: "s", label: "summary", value: "summary" },
+								{ key: "shift+s", label: "all changes", value: "allSummary" },
+							] satisfies DocumentAction[])
+						: []),
+					{ key: "q", label: "Q&A", value: "qa" },
+				];
+				const action = await showDocument(
+					ctx,
+					{
+						title: `▣ Plan review · iteration ${iteration}${title ? ` · ${title}` : ""}`,
+						subtitle: planPath() ?? "",
+						content: plan,
+						actions,
+					},
+					signal,
+				);
+				if (signal.aborted) return;
+				if (saves.pending && (action === "approve" || action === "revise")) {
+					ctx.ui.notify("A plan update is being saved. Review it after the save completes.", "warning");
 					continue;
 				}
-
-				case "diff":
-					await showDiffUI(ctx);
-					continue;
-
-				case "summary":
-					await showSummaryUI(ctx, false);
-					continue;
-
-				case "allSummary":
-					await showSummaryUI(ctx, true);
-					continue;
-
-				case "qa":
-					await showQAUI(ctx);
-					continue;
-			}
-		}
-	}
-
-	async function openPlanReview(
-		ctx: ExtensionContext,
-		plan: string,
-		iteration: number,
-		options: { queueIfOpen?: boolean } = {},
-	): Promise<void> {
-		if (!isTui(ctx)) {
-			notifyRequiresTui(ctx, "Plan review");
-			return;
-		}
-		if (isPlanReviewOpen) {
-			if (options.queueIfOpen) {
-				latestPlanReviewQueued = true;
-			} else {
-				ctx.ui.notify("The plan review is already open.", "info");
-			}
-			return;
-		}
-
-		isPlanReviewOpen = true;
-		try {
-			const result = await planReviewLoop(ctx, plan, iteration);
-
-			// A revision can finish in the background while an older iteration is
-			// reopened. Never approve or revise a stale plan accidentally.
-			if (iteration !== iterations.length && result.action !== "cancel") {
-				ctx.ui.notify(
-					"A newer plan iteration is available. Reopen the review to act on the latest plan.",
-					"warning",
-				);
-				return;
-			}
-
-			switch (result.action) {
-				case "approve":
-					allowNextPlanOutputFromReviewRevision = false;
-					revisionPending = false;
+				if (iteration !== iterations.length && action !== "cancel") {
+					pendingReview = true;
+					ctx.ui.notify(
+						"A newer plan is available. Opening the latest iteration before taking action.",
+						"warning",
+					);
+					return;
+				}
+				if (action === "approve") {
 					exitPlanMode(ctx, true);
-					sendFollowUpOrImmediate(
+					sendFollowUp(
 						ctx,
 						"I approve this plan. Execute the approved plan step by step. Here is the plan:\n\n" + plan,
-						"Unable to send plan approval follow-up",
 					);
-					break;
-
-				case "revise":
-					allowNextPlanOutputFromReviewRevision = true;
+					return;
+				}
+				if (action === "revise") {
+					const feedback = await requestRevision(ctx, signal);
+					if (signal.aborted) return;
+					if (iteration !== iterations.length || saves.pending) {
+						pendingReview = true;
+						ctx.ui.notify(
+							"The plan changed while feedback was open. Review the latest iteration before revising.",
+							"warning",
+						);
+						return;
+					}
+					if (!feedback?.trim()) continue;
 					revisionPending = true;
+					reminderRequested = false;
 					persistState();
-					sendFollowUpOrImmediate(
+					sendFollowUp(
 						ctx,
-						`This feedback starts a plan revision discussion; do not call plan_output immediately unless the complete revision is already clear. You may respond in normal assistant text, ask me clarifying questions, or investigate further. If any material choice is unclear, ask before revising. Once the complete revised plan is ready, present it by calling plan_output.\n\nFeedback:\n${result.feedback}`,
-						"Unable to send plan revision follow-up",
+						"This feedback starts a plan revision discussion; do not call plan_output immediately unless the complete revision is already clear. You may respond in normal assistant text, ask me clarifying questions, or investigate further. If any material choice is unclear, ask before revising. Once the complete revised plan is ready, present it by calling plan_output.\n\nFeedback:\n" +
+							feedback.trim(),
 					);
-					break;
-
-				case "cancel":
-					allowNextPlanOutputFromReviewRevision = false;
-					renderPlanInMainBuffer(ctx, plan, iteration);
+					return;
+				}
+				if (action === "cancel") {
+					renderPlanInChat(plan, iteration);
 					ctx.ui.notify(
-						"Plan review closed. Use /plan-review or Ctrl+Alt+O to reopen it, ask a follow-up question normally, or explicitly request a revision.",
+						"Review closed. Use /plan-review or Ctrl+Alt+O to reopen it, ask a question, or request a revision.",
 						"info",
 					);
-					updateUI(ctx);
-					break;
-			}
-		} catch (err) {
-			ctx.ui.notify(`Plan review failed: ${err}`, "error");
-		} finally {
-			isPlanReviewOpen = false;
-			if (latestPlanReviewQueued) {
-				latestPlanReviewQueued = false;
-				if (active && iterations.length > 0) {
-					const latestIteration = iterations.length;
-					const latestPlan = iterations[latestIteration - 1] ?? "";
-					setTimeout(() => {
-						void openPlanReview(ctx, latestPlan, latestIteration);
-					}, 0);
+					return;
 				}
+				if (action === "diff") await showDiff(ctx, signal);
+				else if (action === "summary" || action === "allSummary")
+					await showSummary(ctx, action === "allSummary", signal);
+				else if (action === "qa") await showQA(ctx, signal);
+			}
+		} catch (error) {
+			if (!signal.aborted) ctx.ui.notify(`Plan review failed: ${String(error)}`, "error");
+		} finally {
+			if (reviewToken === token) {
+				reviewToken = undefined;
+				if (pendingReview && !signal.aborted) void openPlanReview(ctx);
 			}
 		}
 	}
-
-	async function reopenLatestPlanReview(ctx: ExtensionContext): Promise<void> {
-		if (!active) {
-			ctx.ui.notify("Plan mode is not active, so there is no active plan review to reopen.", "warning");
-			return;
-		}
-		if (iterations.length === 0) {
-			ctx.ui.notify("No plan has been presented yet.", "warning");
-			return;
-		}
-
-		await openPlanReview(ctx, iterations[iterations.length - 1] ?? "", iterations.length);
-	}
-
-	// ─── plan_output Tool ───────────────────────────────────
 
 	pi.registerTool({
 		name: "plan_output",
 		label: "Plan Output",
 		description:
-			"Present a complete implementation plan for interactive review when planning evidence is sufficient. " +
-			"Use again only when the user requests a revision or replacement.",
+			"Present a complete implementation plan for interactive review when planning evidence is sufficient. Use again only when the user requests a revision or replacement.",
 		promptSnippet: "Present the completed implementation plan for interactive review",
+		exposure: "model-only",
+		executionMode: "sequential",
+		annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
 		parameters: Type.Object({
 			title: Type.String({ description: "Short descriptive title for the plan" }),
 			plan: Type.String({
@@ -1455,351 +380,208 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 					"Full markdown plan covering outcome, evidence, impact, assumptions, implementation phases, validation, and material risks; include compatibility and rollout/backout when relevant.",
 			}),
 		}),
-
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
-			if (ctx.mode !== "tui") {
+			if (ctx.mode !== "tui") throw new Error("Plan review requires TUI interactive mode.");
+			const operationSignal = AbortSignal.any([scope.signal, ...(signal ? [signal] : [])]);
+			return saves.run(async () => {
+				operationSignal.throwIfAborted();
+				const iteration = iterations.length + 1;
+				const savedDir = await repository.save(planDir, params.title, params.plan, iteration, operationSignal);
+				operationSignal.throwIfAborted();
+				// Commit succeeded; only now publish the new in-memory/session state.
+				planDir = savedDir;
+				planTitle = params.title;
+				iterations = [...iterations, params.plan];
+				revisionPending = false;
+				revisionReminder = undefined;
+				reminderRequested = false;
+				persistState();
+				updateUI(ctx);
+				pendingReview = true;
 				return {
-					content: [{ type: "text", text: "Error: plan review requires TUI interactive mode." }],
-					details: { mode: ctx.mode },
+					content: [
+						{
+							type: "text",
+							text: "Plan saved for interactive review. Do not continue until the user approves, requests revisions, or asks a follow-up question.",
+						},
+					],
+					details: { presented: true, iteration, planDir: savedDir },
+					terminate: true,
 				};
-			}
-			if (signal?.aborted) {
-				return {
-					content: [{ type: "text", text: "Plan review cancelled." }],
-					details: {},
-				};
-			}
-
-			// Keep the latest title visible across revisions
-			planTitle = params.title;
-
-			// First iteration → create the plan git repo
-			if (!planDir) {
-				const ts = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-				const slug = generateSlug(params.title);
-				planDir = join(PLANS_BASE, `${ts}_${slug}`);
-
-				try {
-					await initPlanRepo(planDir);
-				} catch (err) {
-					return {
-						content: [{ type: "text", text: `Error creating plan repo: ${err}` }],
-						details: {},
-					};
-				}
-			}
-
-			// Save this iteration
-			const iteration = iterations.length + 1;
-			iterations.push(params.plan);
-
-			try {
-				await savePlanAndCommit(planDir, params.plan, iteration);
-			} catch (err) {
-				return {
-					content: [{ type: "text", text: `Error committing plan: ${err}` }],
-					details: {},
-				};
-			}
-
-			revisionPending = false;
-			revisionResubmitPromptQueued = false;
-			persistState();
-			updateUI(ctx);
-
-			const presentedPlan = params.plan;
-			const presentedPlanDir = planDir;
-
-			setTimeout(() => {
-				void openPlanReview(ctx, presentedPlan, iteration, { queueIfOpen: true });
-			}, 0);
-
-			return {
-				content: [
-					{
-						type: "text",
-						text:
-							"Plan presented to the user for asynchronous review. " +
-							"Do not continue until the user approves, requests revisions, or asks a follow-up question.",
-					},
-				],
-				details: { presented: true, iteration, planDir: presentedPlanDir },
-				terminate: true,
-			};
+			});
 		},
-
-		// ── Custom rendering in the message stream ──
-
-		renderCall(args, theme, _context) {
-			const title = (args as { title?: string }).title || "Untitled";
-			let text = theme.fg("toolTitle", theme.bold("plan_output "));
-			text += theme.fg("muted", truncateToWidth(title, 60));
-			return new Text(text, 0, 0);
+		renderCall(args, theme) {
+			return new Text(
+				theme.fg("toolTitle", theme.bold("plan_output ")) +
+					theme.fg("muted", truncateToWidth(args.title || "Untitled", 60)),
+				0,
+				0,
+			);
 		},
-
-		renderResult(result, _options, theme, _context) {
-			const details = result.details as
-				| { presented?: boolean; iteration?: number; planDir?: string | null }
-				| undefined;
-			if (!details) {
-				const first = result.content[0];
-				return new Text(first?.type === "text" ? truncateToWidth(first.text, 80) : "", 0, 0);
-			}
-			if (details.presented) {
-				const iterationText = details.iteration ? ` (iteration ${details.iteration})` : "";
-				return new Text(theme.fg("muted", `${SYMBOL.plan} Plan presented for review${iterationText}`), 0, 0);
-			}
-			return new Text(theme.fg("muted", "Plan presented"), 0, 0);
+		renderResult(result, options, theme, context) {
+			const text = getMessageText(result.content);
+			if (context.isError) return new Text(theme.fg("error", text || "Plan presentation failed."), 0, 0);
+			if (options.isPartial) return new Text(theme.fg("muted", "Saving plan…"), 0, 0);
+			if (Check(outputDetailsSchema, result.details))
+				return new Text(
+					theme.fg("muted", `▣ Plan ready for review (iteration ${result.details.iteration})`),
+					0,
+					0,
+				);
+			return new Text(text || "No plan presentation result available.", 0, 0);
 		},
 	});
 
-	// ─── Commands ───────────────────────────────────────────
-
-	pi.registerFlag("plan", {
-		description: "Start in plan mode",
-		type: "boolean",
-		default: false,
-	});
-
+	pi.registerFlag("plan", { description: "Start in plan mode", type: "boolean", default: false });
+	const toggle = (ctx: ExtensionContext) => {
+		if (active) exitPlanMode(ctx);
+		else enterPlanMode(ctx);
+	};
+	const reopen = async (ctx: ExtensionContext) => {
+		if (!requireTui(ctx)) return;
+		if (!iterations.length) {
+			ctx.ui.notify("No plan has been presented yet.", "warning");
+			return;
+		}
+		if (reviewToken) {
+			ctx.ui.notify("The plan review is already open.", "info");
+			return;
+		}
+		await openPlanReview(ctx);
+	};
 	pi.registerCommand("plan", {
 		description: "Toggle plan mode (evidence-guided planning and review)",
-		handler: async (_args, ctx) => {
-			if (active) {
-				exitPlanMode(ctx);
-			} else {
-				enterPlanMode(ctx);
-			}
-		},
+		handler: async (_args, ctx) => toggle(ctx),
 	});
-
 	pi.registerCommand("plan-review", {
 		description: "Reopen the latest plan review",
-		handler: async (_args, ctx) => {
-			await reopenLatestPlanReview(ctx);
-		},
+		handler: async (_args, ctx) => reopen(ctx),
 	});
-
-	// ─── Keyboard Shortcuts ─────────────────────────────────
-
-	pi.registerShortcut(Key.alt("p"), {
-		description: "Toggle plan mode",
-		handler: async (ctx) => {
-			if (active) {
-				exitPlanMode(ctx);
-			} else {
-				enterPlanMode(ctx);
-			}
-		},
-	});
-
-	pi.registerShortcut(Key.ctrlAlt("o"), {
-		description: "Reopen the latest plan review",
-		handler: async (ctx) => {
-			await reopenLatestPlanReview(ctx);
-		},
-	});
-
+	pi.registerShortcut(Key.alt("p"), { description: "Toggle plan mode", handler: async (ctx) => toggle(ctx) });
+	pi.registerShortcut(Key.ctrlAlt("o"), { description: "Reopen the latest plan review", handler: reopen });
 	pi.registerShortcut(Key.ctrlAlt("d"), {
-		description: "Show plan diff (plan mode only)",
+		description: "Show plan diff",
 		handler: async (ctx) => {
-			if (!active) return;
-			await showDiffUI(ctx);
+			if (active) await showDiff(ctx);
 		},
 	});
-
 	pi.registerShortcut(Key.ctrlAlt("s"), {
-		description: "Show plan change summary (plan mode only)",
+		description: "Show plan change summary",
 		handler: async (ctx) => {
-			if (!active) return;
-			await showSummaryUI(ctx, false);
+			if (active) await showSummary(ctx, false);
 		},
 	});
-
 	pi.registerShortcut(Key.ctrlAlt("a"), {
-		description: "Show summary of all plan changes (plan mode only)",
+		description: "Show summary of all plan changes",
 		handler: async (ctx) => {
-			if (!active) return;
-			await showSummaryUI(ctx, true);
+			if (active) await showSummary(ctx, true);
 		},
 	});
+	pi.registerShortcut(Key.ctrlAlt("q"), { description: "Show plan Q&A history", handler: showQA });
 
-	pi.registerShortcut(Key.ctrlAlt("q"), {
-		description: "Show plan Q&A history",
-		handler: async (ctx) => {
-			if (qaMessages.length === 0) {
-				ctx.ui.notify("No Q&A history available.", "info");
-				return;
-			}
-			await showQAUI(ctx);
-		},
-	});
-
-	// ─── Events: Post-plan routing guard ─────────────────────
-
-	pi.on("input", async (event) => {
-		if (!active || event.source === "extension") return;
-
-		// Mid-stream steering is part of the current agent turn, not a new
-		// post-plan routing signal. Do not let it overwrite the input used by
-		// the plan_output guard to decide whether a later plan replacement is
-		// an explicit user-requested revision.
-		if (event.streamingBehavior === "steer") return;
-
+	pi.on("input", (event) => {
+		if (!active || event.source === "extension" || event.streamingBehavior === "steer") return;
 		lastUserInputText = event.text;
 		lastUserInputPlanIteration = iterations.length;
-
-		if (iterations.length > 0 && isPlanRevisionIntent(event.text)) {
+		reminderRequested = false;
+		if (iterations.length && isPlanRevisionIntent(event.text)) {
 			revisionPending = true;
 			persistState();
 		}
 	});
-
-	pi.on("tool_call", async (event) => {
-		if (!active || event.toolName !== "plan_output" || iterations.length === 0) return;
-
-		if (allowNextPlanOutputFromReviewRevision || revisionPending) {
-			allowNextPlanOutputFromReviewRevision = false;
-			return;
-		}
-
-		const latestUserInputIsAfterCurrentPlan = lastUserInputPlanIteration === iterations.length;
-		if (latestUserInputIsAfterCurrentPlan && isPlanRevisionIntent(lastUserInputText)) return;
-
+	pi.on("tool_call", (event) => {
+		if (!active || event.toolName !== "plan_output" || !iterations.length || revisionPending) return;
+		if (lastUserInputPlanIteration === iterations.length && isPlanRevisionIntent(lastUserInputText)) return;
 		return {
 			block: true,
-			reason:
-				"Plan mode: plan_output is only for presenting a new or revised complete plan. " +
-				"The latest user message appears to be a clarification or follow-up question, so answer it normally in assistant text without changing the saved plan. " +
-				"If the user explicitly wants a revised plan, ask them to request a revision/update.",
+			terminate: true,
+			reason: "Plan mode: plan_output is only for a new or explicitly requested revised plan. Answer clarification and follow-up questions normally without changing the saved plan. Ask if revision intent is unclear.",
 		};
 	});
-
-	// ─── Events: Working Row Visibility ─────────────────────
-
-	pi.on("agent_start", async (_event, ctx) => {
-		if (!active) return;
-		isAgentWorking = true;
-		ctx.ui.setWorkingVisible(false);
-		updateUI(ctx);
+	pi.on("agent_start", (_event, ctx) => {
+		if (active) {
+			isAgentWorking = true;
+			updateUI(ctx);
+		}
 	});
-
-	pi.on("agent_end", async (_event, ctx) => {
-		if (!active && !isAgentWorking) return;
+	pi.on("agent_settled", (event, ctx) => {
 		isAgentWorking = false;
 		updateUI(ctx);
+		// Open only after the tool result and all automatic work have settled.
+		// Do not await user input inside an agent lifecycle dispatch.
+		if (event.aborted) pendingReview = false;
+		else if (pendingReview) void openPlanReview(ctx);
 	});
-
-	pi.on("session_shutdown", async (_event, ctx) => {
-		isAgentWorking = false;
-		ctx.ui.setWorkingVisible(true);
-	});
-
-	// ─── Event: Capture Q&A messages ────────────────────────
-
-	pi.on("message_end", async (event, ctx) => {
+	pi.on("message_end", (event) => {
 		if (!active) return;
-		const msg = event.message as {
-			role?: string;
-			content?: unknown;
-		};
-		const contentParts = getMessageContentParts(msg.content);
-
-		const hasPlanOutputToolCall =
-			msg.role === "assistant" &&
-			contentParts.some((c) => (c.type === "toolCall" || c.type === "tool_use") && c.name === "plan_output");
-
-		// Skip assistant messages that contain a plan_output tool call.
-		if (hasPlanOutputToolCall) return;
-
-		const text = getMessageText(msg.content);
-
-		if (revisionPending && msg.role === "assistant" && text.trim() && assistantTextLooksLikePlan(text)) {
-			const reminder =
-				"Plan mode revision is still pending. Present the revised complete plan now by calling plan_output. " +
-				"Do not put the revised plan in normal assistant text. If more information is needed, ask a concise clarification question instead.";
-
-			if (!revisionResubmitPromptQueued) {
-				revisionResubmitPromptQueued = true;
-				setTimeout(() => {
-					try {
-						sendFollowUpOrImmediate(ctx, reminder, "Unable to request plan_output resubmission");
-					} finally {
-						revisionResubmitPromptQueued = false;
-					}
-				}, 0);
+		const message = event.message;
+		if (
+			message.role === "assistant" &&
+			message.content.some((part) => part.type === "toolCall" && part.name === "plan_output")
+		)
+			return;
+		if (message.role !== "assistant" && message.role !== "user") return;
+		const text = getMessageText(message.content);
+		if (!text.trim()) return;
+		if (revisionPending && message.role === "assistant" && assistantTextLooksLikePlan(text)) {
+			if (!reminderRequested) {
+				reminderRequested = true;
+				revisionReminder =
+					"Plan mode revision is pending. Present the complete revised plan with plan_output, not in normal assistant text. If more information is needed, ask a concise clarification question instead.";
 			}
-
-			const replacementText = `${SYMBOL.warning} Plan mode revision is pending. The revised plan must be presented through the plan review UI with plan_output, not as normal chat. Requesting resubmission now…`;
-			qaMessages.push({ role: "assistant", content: replacementText });
+			const replacement =
+				"△ Plan revision is pending. The complete revised plan must be presented through plan_output for review.";
+			qaMessages.push({ role: "assistant", content: replacement });
 			persistState();
-			return {
-				message: {
-					...event.message,
-					content: [{ type: "text", text: replacementText }],
-				},
-			};
+			return { message: { ...message, content: [{ type: "text", text: replacement }] } };
 		}
-
-		if ((msg.role === "user" || msg.role === "assistant") && text.trim()) {
-			qaMessages.push({ role: msg.role as "user" | "assistant", content: text });
-			persistState();
-		}
+		qaMessages.push({ role: message.role, content: text });
+		persistState();
 	});
-
-	// ─── Event: Inject plan-mode system prompt ──────────────
-
-	pi.on("before_agent_start", async (event) => {
+	pi.on("agent_before_settle", (event) => {
+		if (!revisionReminder || event.outcome !== "completed" || !event.context.canContinue) return;
+		const reminder = revisionReminder;
+		revisionReminder = undefined;
+		return {
+			entries: [{ type: "custom_message", customType: REMINDER_TYPE, content: reminder, display: false }],
+			continue: true,
+		};
+	});
+	pi.on("before_agent_start", (event) => {
 		if (!active) return;
-
-		const promptState: PlanModePromptState = {
+		event.systemPromptOptions.sections.plan_mode = buildPlanModeSystemPrompt({
 			planPresented: iterations.length > 0,
 			iterationCount: iterations.length,
 			planTitle,
 			revisionPending,
-		};
-
-		return {
-			systemPrompt: event.systemPrompt + "\n\n" + buildPlanModeSystemPrompt(promptState),
-		};
-	});
-
-	// ─── Event: Filter stale plan-mode context ──────────────
-
-	pi.on("context", async (event) => {
-		const withoutUiOnlyPlanMessages = event.messages.filter((m) => {
-			const msg = m as { customType?: string; role?: string; content?: unknown };
-			return msg.customType !== PLAN_RENDER_MESSAGE_TYPE;
 		});
-
-		if (active) return { messages: withoutUiOnlyPlanMessages }; // keep plan-mode context while planning
-
-		return {
-			messages: withoutUiOnlyPlanMessages.filter((m) => {
-				const msg = m as { customType?: string; role?: string; content?: unknown };
-				// Drop injected plan-mode context messages
-				if (msg.customType === "plan-mode-context") return false;
-				return true;
-			}),
-		};
 	});
-
-	// ─── Event: Restore state on session start/resume/tree navigation ───────
-
-	pi.on("session_start", async (_event, ctx) => {
-		// Check --plan flag
-		if (pi.getFlag("plan") === true) {
-			enterPlanMode(ctx);
-			return;
+	pi.on("context", (event) => ({
+		messages: event.messages.filter((message) => {
+			if (message.role !== "custom") return true;
+			return (
+				message.customType !== PLAN_RENDER_MESSAGE_TYPE &&
+				(active || (message.customType !== "plan-mode-context" && message.customType !== REMINDER_TYPE))
+			);
+		}),
+	}));
+	pi.on("session_start", (_event, ctx) => {
+		restoreState(ctx);
+		if (pi.getFlag("plan") === true && ctx.mode === "tui") enterPlanMode(ctx);
+		else updateUI(ctx);
+	});
+	pi.on("session_tree", (_event, ctx) => {
+		restoreState(ctx);
+		updateUI(ctx);
+	});
+	pi.on("session_shutdown", async (_event, ctx) => {
+		scope.abort();
+		pendingReview = false;
+		reviewToken = undefined;
+		await saves.idle();
+		if (ctx.mode === "tui") {
+			ctx.ui.setWorkingVisible(true);
+			ctx.ui.setStatus("plan-mode", undefined);
 		}
-
-		restoreStateFromSession(ctx);
-		ctx.ui.setWorkingVisible(!active);
-		updateUI(ctx);
-	});
-
-	pi.on("session_tree", async (_event, ctx) => {
-		restoreStateFromSession(ctx);
-		ctx.ui.setWorkingVisible(!active);
-		updateUI(ctx);
 	});
 }

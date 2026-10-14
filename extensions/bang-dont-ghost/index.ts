@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 export const BANG_DONT_GHOST_MESSAGE_TYPE = "bang-dont-ghost";
 
@@ -15,8 +15,16 @@ export interface UserBashResultEvent {
 	};
 }
 
-type UserBashResultHandler = (event: UserBashResultEvent) => void;
-type RegisterUserBashResult = (event: "user_bash_result", handler: UserBashResultHandler) => void;
+// This is the explicit contract added by our version-locked 1.2.0 runtime patch,
+// not an assertion that stock pi emits this event. Keep it typed without casting pi.on.
+declare module "@earendil-works/pi-coding-agent" {
+	interface ExtensionAPI {
+		on(
+			event: "user_bash_result",
+			handler: (event: UserBashResultEvent, ctx: ExtensionContext) => void | Promise<void>,
+		): () => void;
+	}
+}
 
 export function createEmptyFollowUpRequest() {
 	return {
@@ -32,13 +40,8 @@ export function createEmptyFollowUpRequest() {
 	};
 }
 
-function onUserBashResult(pi: ExtensionAPI, handler: UserBashResultHandler): void {
-	const register = pi.on as unknown as RegisterUserBashResult;
-	register("user_bash_result", handler);
-}
-
 export default function bangDontGhostExtension(pi: ExtensionAPI): void {
-	onUserBashResult(pi, (event) => {
+	pi.on("user_bash_result", (event) => {
 		if (event.excludeFromContext || event.result.cancelled) return;
 
 		const { message, options } = createEmptyFollowUpRequest();

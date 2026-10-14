@@ -1,16 +1,15 @@
-import { appendFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { appendFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-
-const logFile = join(homedir(), ".pi", "agent", "provider-urls.log");
+import { getAgentDir, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 export default function (pi: ExtensionAPI) {
-	pi.on("before_provider_request", (_event, ctx) => {
+	pi.on("before_provider_request", async (_event, ctx) => {
 		if (!ctx.model) return;
 
-		appendFileSync(
-			logFile,
+		const agentDir = getAgentDir();
+		await mkdir(agentDir, { recursive: true });
+		await appendFile(
+			join(agentDir, "provider-urls.log"),
 			`${new Date().toISOString()} ${ctx.model.provider}/${ctx.model.id} ${ctx.model.baseUrl}\n`,
 		);
 	});

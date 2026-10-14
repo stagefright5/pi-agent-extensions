@@ -10,7 +10,8 @@
   },
   "type": "module",
   "scripts": {
-    "test": "node scripts/package-tools.mjs check && node --test scripts/*.test.mjs && vp run --filter './extensions/*' test",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc --noEmit && node scripts/package-tools.mjs check && node --test scripts/*.test.mjs && vp run --filter './extensions/*' test",
     "packages:sync": "node scripts/package-tools.mjs sync",
     "packages:check": "node scripts/package-tools.mjs check",
     "packages:stage": "node scripts/package-tools.mjs stage",
@@ -27,6 +28,8 @@
   },
   "devDependencies": {
     "@changesets/cli": "^3.0.1",
+    "@types/node": "26.2.0",
+    "typescript": "7.0.2",
     "vite": "catalog:",
     "vite-plus": "catalog:"
   },

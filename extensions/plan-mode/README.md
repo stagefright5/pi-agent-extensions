@@ -2,7 +2,7 @@
 
 Most of this extension was written with the pi agent CLI.
 
-Plan Mode adds interactive planning to pi 0.84.2 and the 0.84.x API line. It supports review, approval, revision history, diffs, summaries, and Q&A.
+Plan Mode adds interactive planning using pi 1.2.0's public extension and TUI APIs. It supports review, approval, revision history, diffs, summaries, and Q&A.
 
 [Back to the extension workspace](../../README.md)
 
@@ -13,8 +13,8 @@ Plan Mode guides the agent to inspect relevant evidence and resolve ambiguity th
 - `/plan` toggles Plan Mode.
 - `Alt+P` toggles Plan Mode.
 - `pi --plan` starts a session with Plan Mode enabled.
-- `/plan-review` reopens the latest presented plan while Plan Mode is active.
-- `Ctrl+Alt+O` reopens the latest presented plan while Plan Mode is active.
+- `/plan-review` reopens the latest saved plan.
+- `Ctrl+Alt+O` reopens the latest saved plan.
 
 Activating Plan Mode starts a fresh planning state in the current session. Deactivating it clears the active workflow but does not delete saved plan files.
 
@@ -23,7 +23,7 @@ Activating Plan Mode starts a fresh planning state in the current session. Deact
 1. Enable Plan Mode and describe the task.
 2. The agent inspects relevant repository context or external documentation. It asks only questions whose answers could change the plan in a meaningful way.
 3. The agent presents the complete plan through the `plan_output` tool.
-4. Plan Mode saves `plan.md`, commits the iteration to a dedicated local Git repository, and opens an asynchronous TUI review overlay.
+4. Plan Mode saves `plan.md` and commits the iteration to a dedicated local Git repository. The review overlay opens after the agent settles, never from inside tool execution.
 5. Approve the plan, request a revision, inspect its history, or close the overlay to continue discussing it.
 6. Approval exits Plan Mode and queues a user message instructing the agent to execute the approved plan.
 7. Revision feedback starts a discussion phase. The agent may answer normally, investigate, or ask clarifying questions. When the replacement plan is ready, the agent presents it in full by calling `plan_output` again.
@@ -53,17 +53,19 @@ Inside the plan review overlay:
 - Press `a` to approve the plan.
 - Press `r` to open an editor for revision feedback.
 - Press `c` to copy the complete raw Markdown plan.
-- Drag the mouse to select rendered plan text. Selection stays within the plan area and copies on release.
+- In fullscreen mode, drag to select rendered plan text. Selection stays within the plan area and copies on release.
 - Press `d` to show the diff from the previous iteration.
 - Press `s` to generate a model summary of changes from the previous iteration.
 - Press `S` to generate a model summary of all changes across iterations.
 - Press `q` to show Q&A history.
 - Use `Up` / `Down` / `j` / `k` to scroll.
 - Use `Page Up` / `Page Down` to scroll by page.
-- Use the mouse wheel to scroll.
+- In fullscreen mode, use the mouse wheel to scroll. Regular mode leaves mouse reporting to the terminal; all actions remain available by keyboard.
 - Press `Escape` to close review and continue the conversation.
 
-Diff and summary actions become available after at least two iterations.
+Diff and summary actions become available after at least two iterations. Review, diff, summary, and Q&A share one resizable, scrollable viewer. Selection and confirmation keys respect pi's keybindings. `Home`/`g` and `End`/`G` jump to the start and end. Tiny viewports use a compact layout rather than overflowing.
+
+Cancelling a summary aborts its model request. Session shutdown, reload, tree navigation, and toggling the workflow cancel its interactions and pending saves. A review cannot approve an outdated iteration or a plan that is still being saved.
 
 ## Global shortcuts
 
@@ -80,10 +82,12 @@ Use these shortcuts while Plan Mode is active outside the review overlay:
 Each plan is stored under:
 
 ```text
-~/.pi/plans/<timestamp>_<title-slug>/plan.md
+~/.pi/plans/<timestamp>_<title-slug>_<unique-suffix>/plan.md
 ```
 
-The containing directory is a dedicated Git repository. Plan Mode creates a seed commit, then commits each changed plan iteration so it can show revision diffs. It does not commit identical plan content again.
+The containing directory is a dedicated Git repository. Plan Mode creates a seed commit, then commits changed plan content. Unique directories prevent same-second title collisions. Diffs compare the active branch's saved iteration text, including identical iterations, rather than assuming Git HEAD matches the active session branch.
+
+`plan_output` is model-only and sequential. A session-local queue and the SDK file-mutation queue serialize saves. State advances only after storage succeeds; failed saves are real tool errors, not successful “plan presented” results. New-repository failures are cleaned up, and failed edits restore the previous file. Cancelled tool batches do not automatically open a review; `/plan-review` can reopen any successfully saved plan.
 
 Plan Mode also saves the following state for each session branch through `pi.appendEntry()`:
 
@@ -114,7 +118,10 @@ Plan Mode excludes the display-only plan message created after closing review fr
 
 ## Files
 
-- [`index.ts`](./index.ts) contains the extension entry point, planning prompt, tool and event registration, persistence, and TUI screens.
+- [`index.ts`](./index.ts) owns tool/event registration, branch state, and workflow lifecycle.
+- [`planning.ts`](./planning.ts) contains the planning prompt and routing helpers.
+- [`plan-ui.ts`](./plan-ui.ts) provides native Markdown/editor/loader components, bounded ScrollView-based viewing, and normalized mouse handling.
+- [`plan-store.ts`](./plan-store.ts) serializes saves, commits plans, and generates diffs.
 - [`utils.ts`](./utils.ts) generates plan-title slugs.
 
 <!-- package-tools:install:start -->

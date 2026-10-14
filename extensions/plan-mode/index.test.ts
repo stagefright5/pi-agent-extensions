@@ -1,0 +1,463 @@
+import assert from "node:assert/strict";
+import { mkdtemp, readFile, rm, readdir, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import test from "node:test";
+import {
+	discoverAndLoadExtensions,
+	ExtensionRunner,
+	initTheme,
+	ModelRegistry,
+	ModelRuntime,
+	SessionManager,
+	type ExtensionUIContext,
+} from "@earendil-works/pi-coding-agent";
+import { stripTerminalSequences, TuiMainScreen, type Component, type Terminal } from "@earendil-works/pi-tui";
+import { SerialTaskQueue, PlanRepository } from "./plan-store.ts";
+import { withLoader, requestRevision } from "./plan-ui.ts";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+
+const host = new URL(".", import.meta.resolve("@earendil-works/pi-coding-agent"));
+const { KeybindingsManager } = await import(new URL("core/keybindings.js", host).href);
+initTheme("dark", false);
+const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
+
+async function fixture() {
+	const root = await mkdtemp(join(tmpdir(), "pi-plan-contract-"));
+	const previousHome = process.env.HOME;
+	const previousGit = process.env.GIT_CONFIG_GLOBAL;
+	process.env.HOME = root;
+	process.env.GIT_CONFIG_GLOBAL = "/dev/null";
+	const loaded = await discoverAndLoadExtensions(
+		[fileURLToPath(new URL("./index.ts", import.meta.url))],
+		root,
+		join(root, "agent"),
+	);
+	assert.deepEqual(loaded.errors, []);
+	const manager = SessionManager.inMemory(root);
+	const models = await ModelRuntime.create({
+		authPath: join(root, "auth.json"),
+		modelsPath: null,
+		modelsStorePath: join(root, "models-cache"),
+		allowModelNetwork: false,
+		refreshOnCreate: false,
+	});
+	const runner = new ExtensionRunner(loaded.extensions, loaded.runtime, root, manager, new ModelRegistry(models));
+	const notifications: string[] = [];
+	const userMessages: unknown[] = [];
+	const customMessages: unknown[] = [];
+	const errors: unknown[] = [];
+	const working: boolean[] = [];
+	runner.onError((error) => errors.push(error));
+	loaded.runtime.getThinkingLevel = () => "off";
+	loaded.runtime.appendEntry = (type, data) => {
+		manager.appendCustomEntry(type, data);
+	};
+	loaded.runtime.sendUserMessage = (content) => {
+		userMessages.push(content);
+	};
+	loaded.runtime.sendMessage = (message) => {
+		customMessages.push(message);
+	};
+	let current: (Component & { dispose?(): void }) | undefined;
+	let opens = 0;
+	const terminal: Terminal = {
+		rows: 30,
+		columns: 100,
+		kittyProtocolActive: false,
+		start() {},
+		stop() {},
+		async drainInput() {},
+		write() {},
+		moveBy() {},
+		hideCursor() {},
+		showCursor() {},
+		clearLine() {},
+		clearFromCursor() {},
+		clearScreen() {},
+		setTitle() {},
+		setProgress() {},
+		setProgramStatus() {},
+	};
+	const tui = new TuiMainScreen(terminal);
+	const baseUI = runner.getUIContext();
+	const custom: ExtensionUIContext["custom"] = (factory) =>
+		new Promise((resolve, reject) => {
+			opens++;
+			let component: (Component & { dispose?(): void }) | undefined;
+			let completed = false;
+			const done = (value) => {
+				if (completed) return;
+				completed = true;
+				component?.dispose?.();
+				if (current === component) current = undefined;
+				resolve(value);
+			};
+			Promise.resolve(factory(tui, baseUI.theme, new KeybindingsManager(), done)).then((value) => {
+				component = value;
+				if (completed) value.dispose?.();
+				else {
+					current = value;
+					value.render(90);
+				}
+			}, reject);
+		});
+	runner.setUIContext(
+		{
+			...baseUI,
+			custom,
+			notify: (text) => notifications.push(text),
+			setStatus() {},
+			setWorkingVisible: (value) => working.push(value),
+		},
+		"tui",
+	);
+	await runner.emit({ type: "session_start", reason: "startup" });
+	const tool = runner.getToolDefinition("plan_output");
+	assert.ok(tool);
+	const state = () =>
+		manager.getBranch().findLast((entry) => entry.type === "custom" && entry.customType === "plan-mode-interactive")
+			?.data;
+	const execute = (plan = "# Plan\n\nDo the work", signal?: AbortSignal) =>
+		tool.execute("test", { title: "Test plan", plan }, signal, undefined, runner.createToolContext("test", signal));
+	return {
+		root,
+		runner,
+		manager,
+		tool,
+		state,
+		execute,
+		notifications,
+		userMessages,
+		customMessages,
+		errors,
+		working,
+		get current() {
+			return current;
+		},
+		get opens() {
+			return opens;
+		},
+		async start() {
+			await runner.getCommand("plan").handler("", runner.createCommandContext());
+		},
+		async settle() {
+			await runner.emit({ type: "agent_settled", aborted: false });
+			await tick();
+		},
+		async close() {
+			await runner.emit({ type: "session_shutdown", reason: "quit" });
+			loaded.runtime.invalidate();
+			if (previousHome === undefined) delete process.env.HOME;
+			else process.env.HOME = previousHome;
+			if (previousGit === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+			else process.env.GIT_CONFIG_GLOBAL = previousGit;
+			await rm(root, { recursive: true, force: true });
+		},
+	};
+}
+
+test("plan_output is sequential/model-only; simultaneous calls commit ordered complete iterations", async () => {
+	const f = await fixture();
+	try {
+		await f.start();
+		assert.equal(f.tool.executionMode, "sequential");
+		assert.equal(f.tool.exposure, "model-only");
+		const [first, second] = await Promise.all([f.execute("plan A"), f.execute("plan B")]);
+		assert.equal(first.details.iteration, 1);
+		assert.equal(second.details.iteration, 2);
+		assert.equal(first.terminate, true);
+		assert.equal(second.terminate, true);
+		assert.deepEqual(f.state().iterations, ["plan A", "plan B"]);
+		assert.equal(await readFile(join(second.details.planDir, "plan.md"), "utf8"), "plan B");
+		assert.equal(f.opens, 0, "do not open UI from inside tool execution");
+		await f.settle();
+		assert.equal(f.opens, 1);
+		assert.ok(f.current);
+		assert.deepEqual(f.errors, []);
+	} finally {
+		await f.close();
+	}
+});
+
+test("non-TUI, cancellation, and storage errors reject without advancing plan state", async () => {
+	const f = await fixture();
+	try {
+		const ctx = f.runner.createToolContext("test", undefined);
+		await assert.rejects(
+			f.tool.execute("test", { title: "test", plan: "plan" }, undefined, undefined, { ...ctx, mode: "rpc" }),
+			/requires TUI/,
+		);
+		await f.start();
+		const before = structuredClone(f.state());
+		await assert.rejects(f.execute("cancelled", AbortSignal.abort()), /abort/i);
+		assert.deepEqual(f.state(), before);
+		f.manager.appendCustomEntry("plan-mode-interactive", {
+			...before,
+			planDir: join(f.root, "missing"),
+			iterations: ["saved"],
+		});
+		await f.runner.emit({ type: "session_start", reason: "reload" });
+		await assert.rejects(f.execute("never saved"), /ENOENT/);
+		assert.deepEqual(f.state().iterations, ["saved"]);
+		assert.equal(f.opens, 0);
+		assert.deepEqual(f.errors, []);
+	} finally {
+		await f.close();
+	}
+});
+
+test("error rendering never announces a presentation; narrow result rendering fits", async () => {
+	const f = await fixture();
+	try {
+		const context = {
+			args: {},
+			state: {},
+			cwd: f.root,
+			toolCallId: "test",
+			invalidate() {},
+			executionStarted: true,
+			argsComplete: true,
+			isPartial: false,
+			expanded: false,
+			showImages: false,
+			isError: true,
+			outputPad: 0,
+		};
+		const component = f.tool.renderResult(
+			{ content: [{ type: "text", text: "Could not save plan" }], details: {} },
+			{ expanded: false, isPartial: false },
+			f.runner.getUIContext().theme,
+			context,
+		);
+		assert.match(component.render(80).map(stripTerminalSequences).join("\n"), /Could not save plan/);
+		assert.doesNotMatch(
+			component.render(80).map(stripTerminalSequences).join("\n"),
+			/Plan presented|ready for review/,
+		);
+	} finally {
+		await f.close();
+	}
+});
+
+test("review approval sends the approved plan once; closing only displays it", async () => {
+	const f = await fixture();
+	try {
+		await f.start();
+		await f.execute("approved text");
+		await f.settle();
+		f.current.handleInput("\x1b");
+		await tick();
+		assert.equal(f.userMessages.length, 0);
+		assert.equal(f.customMessages.length, 1);
+		const reopened = f.runner.getCommand("plan-review").handler("", f.runner.createCommandContext());
+		await tick();
+		f.current.handleInput("a");
+		await reopened;
+		assert.equal(f.state().active, false);
+		assert.equal(f.userMessages.length, 1);
+		assert.match(String(f.userMessages[0]), /I approve this plan[\s\S]*approved text/);
+		assert.deepEqual(f.errors, []);
+	} finally {
+		await f.close();
+	}
+});
+
+test("shutdown closes UI and prevents deferred review or approval from stale contexts", async () => {
+	const f = await fixture();
+	try {
+		await f.start();
+		await f.execute();
+		await f.settle();
+		const oldView = f.current;
+		await f.runner.emit({ type: "session_shutdown", reason: "reload" });
+		oldView.handleInput("a");
+		await tick();
+		assert.equal(f.current, undefined);
+		assert.equal(f.userMessages.length, 0);
+		assert.equal(f.customMessages.length, 0);
+		assert.equal(f.working.at(-1), true);
+		assert.deepEqual(f.errors, []);
+	} finally {
+		await f.close();
+	}
+});
+
+test("plan guidance uses structured sections and persisted branch state is immutable", async () => {
+	const f = await fixture();
+	try {
+		await f.start();
+		const initial = f.state();
+		const firstLeaf = f.manager.getLeafId();
+		await f.execute("first iteration");
+		const firstState = f.state();
+		await f.execute("second iteration");
+		assert.deepEqual(initial.iterations, []);
+		assert.deepEqual(firstState.iterations, ["first iteration"]);
+		const event = await f.runner.emitBeforeAgentStart(
+			{ messageType: "user", prompt: "test" },
+			{ cwd: f.root, sections: { unrelated: "keep me" } },
+		);
+		assert.equal(event.systemPromptOptions.sections.unrelated, "keep me");
+		assert.match(event.systemPromptOptions.sections.plan_mode, /2 iterations/);
+		assert.equal(event.systemPromptOptions.forceSystemPrompt, undefined);
+		f.manager.branch(firstLeaf);
+		await f.runner.emit({ type: "session_start", reason: "reload" });
+		assert.deepEqual(f.state().iterations, []);
+		await f.settle();
+		assert.equal(f.opens, 0);
+	} finally {
+		await f.close();
+	}
+});
+
+test("save queue recovers after failure and exposes pending work", async () => {
+	const queue = new SerialTaskQueue();
+	const values: number[] = [];
+	const a = queue.run(async () => {
+		values.push(1);
+		throw new Error("expected");
+	});
+	const b = queue.run(async () => {
+		values.push(2);
+		return "ok";
+	});
+	assert.equal(queue.pending, 2);
+	await assert.rejects(a, /expected/);
+	assert.equal(await b, "ok");
+	await queue.idle();
+	assert.equal(queue.pending, 0);
+	assert.deepEqual(values, [1, 2]);
+});
+
+test("repository cleans failed initialization, restores failed edits, and diffs actual iteration text", async () => {
+	const root = await mkdtemp(join(tmpdir(), "pi-plan-repo-"));
+	const run = promisify(execFile);
+	let failCommit = false;
+	const repository = new PlanRepository(async (command, args, options) => {
+		if (failCommit && args.includes("commit"))
+			return { stdout: "", stderr: "simulated commit failure", code: 1, killed: false };
+		try {
+			const result = await run(command, args, {
+				signal: options?.signal,
+				env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1" },
+			});
+			return { ...result, code: 0, killed: false };
+		} catch (error) {
+			if (typeof error.code !== "number") throw error;
+			return { stdout: error.stdout, stderr: error.stderr, code: error.code, killed: false };
+		}
+	}, root);
+	try {
+		failCommit = true;
+		await assert.rejects(repository.save(null, "test", "bad", 1, new AbortController().signal), /simulated/);
+		assert.deepEqual(await readdir(root), []);
+		failCommit = false;
+		const dir = await repository.save(null, "test", "old", 1, new AbortController().signal);
+		failCommit = true;
+		await assert.rejects(repository.save(dir, "test", "bad", 2, new AbortController().signal), /simulated/);
+		assert.equal(await readFile(join(dir, "plan.md"), "utf8"), "old");
+		await writeFile(join(dir, "notes.txt"), "unrelated user work");
+		await run("git", ["-C", dir, "add", "--", "notes.txt"]);
+		failCommit = false;
+		await repository.save(dir, "test", "new", 2, new AbortController().signal);
+		assert.equal((await run("git", ["-C", dir, "diff", "--cached", "--name-only"])).stdout.trim(), "notes.txt");
+		assert.equal(
+			(await run("git", ["-C", dir, "show", "--format=", "--name-only", "HEAD"])).stdout.trim(),
+			"plan.md",
+		);
+		assert.equal(await repository.diff("same", "same", new AbortController().signal), "");
+		const diff = await repository.diff("left\n", "right\n", new AbortController().signal);
+		assert.match(diff, /-left/);
+		assert.match(diff, /\+right/);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test("a stale review cannot approve a newer iteration without displaying it", async () => {
+	const f = await fixture();
+	try {
+		await f.start();
+		await f.execute("old plan");
+		await f.settle();
+		const old = f.current;
+		await f.execute("new plan");
+		await f.settle();
+		old.handleInput("a");
+		await tick();
+		assert.equal(f.userMessages.length, 0);
+		assert.equal(f.opens, 2);
+		assert.match(f.current.render(90).map(stripTerminalSequences).join("\n"), /new plan/);
+		f.current.handleInput("a");
+		await tick();
+		assert.equal(f.userMessages.length, 1);
+		assert.match(String(f.userMessages[0]), /new plan/);
+	} finally {
+		await f.close();
+	}
+});
+
+test("revision feedback preserves review state and authorizes exactly a requested revision", async () => {
+	const f = await fixture();
+	try {
+		await f.start();
+		await f.execute("first plan");
+		await f.settle();
+		f.current.handleInput("r");
+		await tick();
+		for (const character of "add tests") f.current.handleInput(character);
+		f.current.handleInput("\r");
+		await tick();
+		assert.equal(f.state().revisionPending, true);
+		assert.match(String(f.userMessages[0]), /Feedback:\nadd tests/);
+		await f.execute("revised plan");
+		assert.equal(f.state().revisionPending, false);
+		const blocked = await f.runner.emitToolCall({
+			type: "tool_call",
+			toolCallId: "unrequested",
+			toolName: "plan_output",
+			input: { title: "test", plan: "unrequested replacement" },
+		});
+		assert.equal(blocked?.block, true);
+		assert.equal(blocked?.terminate, true);
+	} finally {
+		await f.close();
+	}
+});
+
+test("summary and feedback cancellation dispose promptly and ignore late completions", async () => {
+	const f = await fixture();
+	try {
+		const lifetime = new AbortController();
+		let requestSignal: AbortSignal | undefined;
+		let release: (text: string) => void = () => {};
+		const promise = withLoader(f.runner.createContext(), "Loading…", lifetime.signal, async (signal) => {
+			requestSignal = signal;
+			return new Promise<string>((resolve) => {
+				release = resolve;
+			});
+		});
+		await tick();
+		assert.ok(f.current);
+		lifetime.abort();
+		assert.equal(await promise, undefined);
+		assert.equal(requestSignal?.aborted, true);
+		release("late result");
+		await tick();
+		assert.equal(f.current, undefined);
+		const feedbackLifetime = new AbortController();
+		const feedback = requestRevision(f.runner.createContext(), feedbackLifetime.signal);
+		await tick();
+		const oldEditor = f.current;
+		feedbackLifetime.abort();
+		assert.equal(await feedback, undefined);
+		oldEditor.handleInput("\r");
+		assert.equal(f.current, undefined);
+		assert.deepEqual(f.errors, []);
+	} finally {
+		await f.close();
+	}
+});

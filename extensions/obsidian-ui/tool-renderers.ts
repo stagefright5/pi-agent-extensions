@@ -216,11 +216,17 @@ export function compactRenderers(name: string, native?: ToolRenderers): ToolRend
 	};
 }
 
+/** Opaque identities only: these callbacks are compared, never invoked from this map. */
+export interface NativeRendererIdentity {
+	readonly renderCall?: unknown;
+	readonly renderResult?: unknown;
+}
+
 /** Only replace proven native renderers. Custom, self-shell, edit and shell renderers keep their behavior. */
 export function resolveRenderers(
 	name: string,
 	next: ToolRenderers | undefined,
-	natives: ReadonlyMap<string, ToolRenderers>,
+	natives: ReadonlyMap<string, NativeRendererIdentity>,
 ): ToolRenderers | undefined {
 	const original = natives.get(name);
 	if (next?.renderShell === "self") return next;

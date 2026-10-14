@@ -30,6 +30,8 @@ The extension appends entries to:
 ~/.pi/agent/provider-urls.log
 ```
 
+This is the default path. The extension uses `getAgentDir()` and respects `PI_CODING_AGENT_DIR`, creating the configured directory if necessary.
+
 The file is never truncated or rotated automatically. Remove or rotate it yourself if it grows too large. A base URL may still reveal private infrastructure or query parameters, so treat the log as potentially sensitive.
 
 <!-- package-tools:install:start -->
@@ -48,6 +50,6 @@ For source development, load this directory with `pi -e ./extensions/provider-ur
 
 ## Limitations
 
-- Logging is synchronous and occurs immediately before provider request handling.
+- File I/O is asynchronous and awaited immediately before provider request handling.
 - If the log cannot be opened or written, pi reports the extension hook error and continues according to pi's extension error handling.
 - There is no command, filter, retention policy, or automatic redaction of the configured base URL.

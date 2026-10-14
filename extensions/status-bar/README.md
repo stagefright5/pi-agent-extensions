@@ -17,7 +17,7 @@ The footer includes:
 - the current working directory, shortened to `~` when it is inside the home directory
 - the current Git branch, when available
 - estimated context usage and total model context window
-- cumulative assistant-message cost for the session
+- cumulative session cost, including assistant messages, tool/nested-call usage, compaction, branch summaries, and standalone usage entries such as cache warming
 - the active provider, model display name, and thinking level, such as `anthropic/Claude Sonnet 4.6 (high)`; non-reasoning models show `(off)`
 - `⚡︎` immediately after the thinking/effort level when OpenAI Fast mode is active; omitted when off
 - other active statuses published by extensions through `ctx.ui.setStatus()`
@@ -42,7 +42,9 @@ The `fast` status is consumed by this indicator rather than duplicated beside th
 - At narrow widths, context (including warning/error color) and extension statuses take priority over model, cost, and location. Overlong status text is ellipsized, never allowed to overflow the terminal.
 - Tested against pi 1.2.0 at tiny widths and 40/80/120/160 columns, including ANSI and wide Unicode text.
 
-Plan Mode uses the extension-status area to show its active state, plan title, iteration count, and relevant shortcuts.
+Cost follows pi's cumulative accounting across all session branches, not just current context. It is cached between session-entry changes rather than rescanning history on every frame.
+
+Plan Mode uses the extension-status area to show its active state, plan title, iteration count, and work status.
 
 ## Scope and lifecycle
 

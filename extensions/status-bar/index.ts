@@ -5,10 +5,11 @@
  *   cwd · branch · extension statuses       model · thinking · context · cost
  */
 
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { homedir } from "node:os";
 import { basename, isAbsolute, relative, resolve, sep } from "node:path";
 import { layoutStatusBar } from "./status-bar-format.ts";
+import { createSessionCostReader } from "./session-cost.ts";
 
 function formatCwd(cwd: string): string {
 	const home = homedir();
@@ -27,16 +28,6 @@ function formatContextWindow(tokens: number): string {
 	return tokens >= 1000 ? `${Math.round(tokens / 1000)}k` : `${tokens}`;
 }
 
-function getTotalCost(ctx: ExtensionContext): number {
-	let total = 0;
-	for (const entry of ctx.sessionManager.getEntries()) {
-		if (entry.type === "message" && entry.message.role === "assistant") {
-			total += entry.message.usage.cost.total;
-		}
-	}
-	return total;
-}
-
 function sanitizeStatusText(text: string): string {
 	return text
 		.replace(/[\r\n\t]/g, " ")
@@ -49,6 +40,7 @@ export default function statusBarExtension(pi: ExtensionAPI): void {
 		if (ctx.mode !== "tui") return;
 
 		ctx.ui.setFooter((tui, _theme, footerData) => {
+			const getCost = createSessionCostReader();
 			const unsubscribeFromBranchChanges = footerData.onBranchChange(() => tui.requestRender());
 
 			return {
@@ -95,7 +87,7 @@ export default function statusBarExtension(pi: ExtensionAPI): void {
 								model,
 								shortModel: modelName ? theme.fg("muted", modelName) + separator + effort : "",
 								context: styledContext,
-								cost: theme.fg("dim", `$${getTotalCost(ctx).toFixed(3)}`),
+								cost: theme.fg("dim", `$${getCost(ctx.sessionManager).toFixed(3)}`),
 								statuses,
 								separator,
 							},
