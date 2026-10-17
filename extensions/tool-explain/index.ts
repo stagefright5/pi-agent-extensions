@@ -46,9 +46,11 @@ export default function toolExplain(pi: ExtensionAPI): void {
 		// Keys depend on the tool and arguments, so summaries can be reused across branches.
 		for (const entry of ctx.sessionManager.getEntries()) {
 			if (entry.type !== "custom" || entry.customType !== ENTRY_TYPE) continue;
-			const data = entry.data as { key?: unknown; summary?: unknown } | undefined;
-			if (typeof data?.key === "string" && typeof data.summary === "string")
-				store.set(data.key, { status: "done", text: data.summary });
+			const data = entry.data as { key?: unknown; summary?: unknown; callIds?: unknown } | undefined;
+			if (typeof data?.key !== "string" || typeof data.summary !== "string") continue;
+			store.set(data.key, { status: "done", text: data.summary });
+			if (Array.isArray(data.callIds))
+				for (const id of data.callIds) if (typeof id === "string") store.bindCall(id, data.key);
 		}
 	});
 
@@ -64,7 +66,13 @@ export default function toolExplain(pi: ExtensionAPI): void {
 		const code = (event.input as { code?: unknown }).code;
 		if (isCode && (typeof code !== "string" || !code.trim())) return;
 		const key = toolKey(event.toolName, event.input);
-		if (store.get(key)) return;
+		const bound = store.bindCall(event.toolCallId, key);
+		const cached = store.get(key);
+		if (cached) {
+			if (bound && cached.status === "done")
+				pi.appendEntry(ENTRY_TYPE, { key, summary: cached.text, callIds: [event.toolCallId] });
+			return;
+		}
 		const configured = settings.model;
 		if (session.signal.aborted || (!configured && !ctx.model)) return;
 		// Arguments come before the description, so clipping a long input drops description text first.
@@ -107,7 +115,13 @@ export default function toolExplain(pi: ExtensionAPI): void {
 					return;
 				}
 				store.set(key, { status: "done", text: summary });
-				pi.appendEntry(ENTRY_TYPE, { key, summary, model: modelName });
+				const callIds = store.callIds(key);
+				pi.appendEntry(ENTRY_TYPE, {
+					key,
+					summary,
+					model: modelName,
+					...(callIds.length ? { callIds } : {}),
+				});
 			})
 			.catch((error: unknown) => {
 				if (signal.aborted) return;

@@ -53,6 +53,7 @@ test("model references and summaries are normalized", () => {
 	);
 	assert.notEqual(toolKey("read", { path: "a" }), toolKey("write", { path: "a" }));
 	assert.notEqual(toolKey("read", { path: "a" }), toolKey("read", { path: "b" }));
+	assert.notEqual(toolKey("custom", { value: null }), toolKey("custom", {}));
 	assert.notEqual(toolKey("x", [1, 2]), toolKey("x", [2, 1]));
 });
 
@@ -90,6 +91,23 @@ test("summarize requests a structured label with minimal reasoning and no token 
 	await assert.rejects(summarize(textOnly as never, model("a", "b", 0, 0), CODE, signal), /no label/);
 	for (const bad of [" ", 3, undefined])
 		await assert.rejects(summarize(labelled(bad) as never, model("a", "b", 0, 0), CODE, signal), /no label/);
+});
+
+test("call bindings are idempotent, follow execution keys, and are session-scoped", () => {
+	const store = new SummaryStore();
+	assert.equal(store.bindCall(undefined, "key"), false);
+	assert.equal(store.bindCall("call-a", "key"), true);
+	assert.equal(store.bindCall("call-a", "key"), false);
+	store.bindCall("call-b", "key");
+	assert.deepEqual(store.callIds("key"), ["call-a", "call-b"]);
+	assert.equal(store.keyForCall("call-a"), "key");
+	assert.equal(store.keyForCall("unrelated"), undefined);
+	store.bindCall("call-a", "new-key");
+	assert.deepEqual(store.callIds("key"), ["call-b"]);
+	assert.equal(store.keyForCall("call-a"), "new-key");
+	store.clear();
+	assert.equal(store.keyForCall("call-a"), undefined);
+	assert.deepEqual(store.callIds("key"), []);
 });
 
 test("the store redraws waiting rows only once and forgets them on clear", () => {

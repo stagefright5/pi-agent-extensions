@@ -111,6 +111,20 @@ export async function summarize(
 export class SummaryStore {
 	private readonly summaries = new Map<string, Summary>();
 	private readonly waiting = new Map<string, Set<() => void>>();
+	private readonly calls = new Map<string, string>();
+
+	// Renderers see transcript arguments; tool_call can see prepared or mutated arguments.
+	bindCall(id: string | undefined, key: string): boolean {
+		if (!id || this.calls.get(id) === key) return false;
+		this.calls.set(id, key);
+		return true;
+	}
+	keyForCall(id: string): string | undefined {
+		return this.calls.get(id);
+	}
+	callIds(key: string): string[] {
+		return [...this.calls].filter(([, value]) => value === key).map(([id]) => id);
+	}
 
 	get(key: string): Summary | undefined {
 		return this.summaries.get(key);
@@ -134,5 +148,6 @@ export class SummaryStore {
 	clear(): void {
 		this.summaries.clear();
 		this.waiting.clear();
+		this.calls.clear();
 	}
 }

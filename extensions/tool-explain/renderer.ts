@@ -277,7 +277,9 @@ export function explainRenderers(native: ToolRenderers, store: SummaryStore, nam
 				state.nativeStarted = true;
 			}
 			if (!context.isPartial) state.endedAt ??= Date.now();
-			const key = context.argsComplete ? toolKey(name, args) : undefined;
+			const key = context.argsComplete
+				? (store.keyForCall(context.toolCallId) ?? toolKey(name, args))
+				: undefined;
 			const summary = key ? store.get(key) : undefined;
 			if (key && summary?.status === "pending") store.wait(key, context.invalidate);
 			const phase = phaseOf(context, summary);

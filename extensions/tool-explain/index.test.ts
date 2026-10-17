@@ -3,7 +3,11 @@ import test from "node:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createEditToolDefinition } from "@earendil-works/pi-coding-agent";
+import { createEditToolDefinition, type ToolRenderers } from "@earendil-works/pi-coding-agent";
+import { stripVTControlCharacters } from "node:util";
+import { createBashTool } from "../bg-bash/tools.ts";
+import { JobManager } from "../bg-bash/jobs.ts";
+import { stopAnimations } from "./renderer.ts";
 import extension from "./index.ts";
 import { codeKey, ENTRY_TYPE, toolKey } from "./explain.ts";
 
@@ -133,6 +137,7 @@ test("summarizes each new script once with a cheap model and stores the result",
 				key: codeKey("await tools.read({path:'a'})"),
 				summary: "Read a file",
 				model: "anthropic/claude-haiku",
+				callIds: ["1"],
 			},
 		},
 	]);
@@ -294,6 +299,71 @@ test("generic calls use tool identity, descriptions and arguments; reuse persist
 	for (const mode of ["print", "json", "rpc"])
 		handlers.get("tool_call")!({ toolName: "read", input: {} }, { ...restored, mode });
 	assert.equal(restored.requests.length, 0);
+});
+
+test("normalized bash arguments keep labels across concurrent calls, cache hits, and session restore", async (t) => {
+	t.after(stopAnimations);
+	const host = new URL(".", import.meta.resolve("@earendil-works/pi-coding-agent"));
+	const { initTheme, theme } = await import(new URL("modes/interactive/theme/theme.js", host).href);
+	initTheme("dark");
+	const native = createBashTool({
+		manager: new JobManager(join(agentDir, "jobs")),
+		session: () => "test",
+		shell: () => ({}),
+	});
+	const raw = { command: "echo ready", timeout: null };
+	const input = native.prepareArguments!(raw);
+	assert.deepEqual(input, { command: "echo ready" });
+	const { handlers, entries, resolver } = harness();
+	let finish!: (value: object) => void;
+	const c = ctx(() => new Promise((resolve) => (finish = resolve)));
+	handlers.get("session_start")!({}, c);
+	const invoke = (toolCallId: string) => handlers.get("tool_call")!({ toolName: "bash", toolCallId, input }, c);
+	invoke("bash-a");
+	invoke("bash-b");
+	await settle();
+	let redraws = 0;
+	const render = (resolve: typeof resolver, toolCallId: string) => {
+		const wrapped = resolve("bash", () => native) as ToolRenderers;
+		const context = {
+			toolCallId,
+			args: raw,
+			state: {},
+			cwd: agentDir,
+			invalidate: () => redraws++,
+			executionStarted: true,
+			argsComplete: true,
+			isPartial: false,
+			expanded: false,
+			showImages: false,
+			isError: false,
+			outputPad: 1,
+		};
+		return wrapped.renderCall!(raw, theme, context).render(100).map(stripVTControlCharacters).join("\n");
+	};
+	render(resolver, "bash-a");
+	render(resolver, "bash-b");
+	finish({ stopReason: "toolUse", content: label("Print the readiness marker") });
+	await settle();
+	for (const id of ["bash-a", "bash-b"])
+		assert.match(render(resolver, id), /bash tool completed: Print the readiness marker/);
+	assert.equal(redraws, 2);
+	invoke("bash-c");
+	invoke("bash-c");
+	assert.match(render(resolver, "bash-c"), /Print the readiness marker/);
+	assert.equal(c.requests.length, 1);
+	assert.equal(entries.length, 2);
+	const restored = harness();
+	restored.handlers.get("session_start")!(
+		{},
+		ctx(
+			async () => ({}),
+			entries.map((entry) => ({ type: "custom", ...entry })),
+		),
+	);
+	for (const id of ["bash-a", "bash-b", "bash-c"])
+		assert.match(render(restored.resolver, id), /Print the readiness marker/);
+	assert.doesNotMatch(render(restored.resolver, "unrelated"), /Print the readiness marker/);
 });
 
 test("unselected tools keep their renderers and never request summaries", () => {
