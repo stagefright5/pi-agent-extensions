@@ -63,7 +63,6 @@ import { SearchIndex, Searcher } from "@stagefright5/pi-picker";
 import {
 	composerPalette,
 	FOOTER_TEXT_SOFTENING,
-	halfRow,
 	softenForeground,
 	paintRow,
 	INPUT_HINTS,
@@ -540,13 +539,12 @@ export class UndoRedoEditor extends CustomEditor implements StatusLineHost {
 		// A thin rail in the left inset of the draft rows carries the mode by color; the text never moves.
 		const rail = padding > 0 ? palette.fg(text.startsWith("!") ? "bashMode" : "accent", "\u258e") : undefined;
 		const railed = (line: string) => (rail ? withRail(line, rail) : line);
-		// Half-row padding keeps the draft and the footer labels vertically centred in their bars.
-		// Rows carrying native text (scroll or working indicators) stay full rows so they remain readable.
+		// Full padding rows above and below keep the draft centred in its bar, which sits directly on
+		// the one-row footer. Native top-row text (scroll or working indicators) stays readable.
 		const painted = [
-			stripTerminalSequences(top).trim() ? surface(top) : halfRow(width, "\u2584", palette.surface),
+			surface(top),
 			...content.map((line) => surface(railed(line))),
-			// The draft bar closes on the terminal background, so the footer below is exactly one row.
-			halfRow(width, "\u2580", palette.surface),
+			surface(" ".repeat(width)),
 			// Footer text sits closer to its bar than draft text does to the surface.
 			softenForeground(
 				paintRow(bottom, width, palette.text, palette.footer),

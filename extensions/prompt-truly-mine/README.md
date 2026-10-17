@@ -76,14 +76,14 @@ Regular (non-fullscreen) mode leaves selection to the terminal emulator, which c
 The composer chrome, aligned to the draft inset:
 
 ```text
-▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄   half-row padding
+                                                                    padding row (draft colour)
 ▎!ls                                                                draft bar
-▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀   half-row padding
- ~/Work/alpha · main  shell  ⌃Z undo  ⌃Y redo     Claude Opus 5.5 · $4.2   footer bar (one row)
+                                                                    padding row (draft colour)
+ ~/Work/alpha · main  shell  ⌃Z undo  ⌃Y redo     Claude Opus 5.5 · $4.2   footer bar (one row, darker)
 ```
 
-- **Half-row padding:** `▄`/`▀` half-block rows give the draft half a row of padding above and below, so it sits vertically centred. The draft bar's lower half-row shows the terminal background, leaving a thin gap above the footer, which is exactly one row and the last row on screen. Rows that carry native text (scroll or working indicators) stay full rows. In regular (non-fullscreen) mode, a terminal drag across those rows can copy the block glyphs; fullscreen selection never does.
-- **Mode rail:** the one-cell left inset shows `▎` in the theme's `accent` color, or `bashMode` for `!`/`!!` commands, on each draft row. It stops at the draft so the half-row edge into the footer stays clean (one cell cannot hold the rail and two half colours). It needs `editorPaddingX` ≥ 1 and is never part of the draft.
+- **Padding:** one full row in the draft colour above and below the draft keeps it vertically centred; the bar sits directly on the footer, which is exactly one row and the last row on screen. Native scroll or working indicators replace the top padding row and stay readable.
+- **Mode rail:** the one-cell left inset shows `▎` in the theme's `accent` color, or `bashMode` for `!`/`!!` commands, on each draft row (not the padding rows). It needs `editorPaddingX` ≥ 1 and is never part of the draft.
 - **Input hints:** an empty draft shows `/ commands  $ skills  ! shell  @ files` right-aligned in the draft row (dropped from the end on narrow terminals); they disappear on the first keystroke. There is no placeholder prompt text.
 - **Footer bar:** one darker row reading `<dir> <mode> <hints>`: the directory, then `shell` or `shell · no context` for `!`/`!!` drafts, then `⌃Z undo  ⌃Y redo` right after an undo (until you edit again) or the `↓ N more` overflow indicator. Footer text is drawn closer to the footer colour than draft text is to the draft surface (in truecolor themes; hues are kept, so context warnings stay distinguishable).
 - **Status line:** with [Compact Status Bar](../status-bar/README.md) loaded, its line fills the footer: `<dir · branch>  <mode>  <hints> · <extension statuses> … model · context · cost`, and Pi's separate footer row disappears. When space runs out the hints go first, then fields are shortened; the mode label outlives the directory. While a picker, selector, or overlay has focus, the status bar returns to its own row. The two extensions share only a global key (`Symbol.for("@stagefright5/pi-status-line/v1")`); neither imports the other.

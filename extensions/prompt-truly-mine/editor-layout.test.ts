@@ -193,7 +193,7 @@ test("exiting Pi erases the cursor with the surface color instead of a terminal-
 	assert.equal(Object.hasOwn(new MainScreen(), "beforeTerminalStop"), false);
 });
 
-test("themed composer: half-row padded bar, mode rail, footer strip, hint placeholder, and a display-only legend", async () => {
+test("themed composer: padded draft bar, mode rail, footer strip, hint placeholder, and a display-only legend", async () => {
 	const { getThemeByName } = await import(new URL("modes/interactive/theme/theme.js", host).href);
 	const palette = getThemeByName("dark");
 	const editor = new UndoRedoEditor(
@@ -210,23 +210,19 @@ test("themed composer: half-row padded bar, mode rail, footer strip, hint placeh
 	const [fakeStart = "", fakeEnd = ""] = renderFakeCursor("\u0000").split("\u0000");
 	const text = (row: string) =>
 		plain(row).replaceAll(CURSOR_MARKER, "").replaceAll(fakeStart, "").replaceAll(fakeEnd, "");
-	const surfaceFg = palette.getBgAnsi("userMessageBg").replace("[48;", "[38;");
 	let rows = editor.render(80);
-	// ▄ half pad · draft · ▀ half pad over the terminal · one-row footer (the screen's last row)
-	assert.deepEqual(
-		rows.map((row) => text(row)[1]),
-		["\u2584", " ", "\u2580", " "],
-	);
+	// full pad · draft · full pad · one-row footer (the screen's last row)
 	assert.ok(rows.every((row) => visibleWidth(row) === 80));
-	assert.ok(rows[0]!.startsWith(surfaceFg), "top half pad is drawn in the surface color");
-	assert.ok(!rows[0]!.includes("\x1b[48;"), "its other half is the terminal background");
-	assert.ok(rows[2]!.startsWith(surfaceFg), "bottom half pad is drawn in the surface color");
-	assert.ok(!rows[2]!.includes("\x1b[48;"), "a half-row gap separates the one-row footer");
+	const surfaceBg = palette.getBgAnsi("userMessageBg");
+	for (const index of [0, 1, 2]) assert.ok(rows[index]!.includes(surfaceBg), `row ${index} is on the draft surface`);
+	assert.equal(text(rows[0]!), " ".repeat(80), "full top padding row");
+	assert.equal(text(rows[2]!), " ".repeat(80), "full bottom padding row, directly on the footer");
 	assert.ok(rows[3]!.includes(composerPalette(palette).footer), "the footer is a single darker row");
+	assert.ok(!rows.some((row) => /[\u2580\u2584]/u.test(text(row))), "no half-block glyphs remain");
 	assert.deepEqual(
 		rows.map((row) => text(row)[0]),
-		["\u2584", "\u258e", "\u2580", " "],
-		"the rail marks only the draft rows, so the half-row split stays clean",
+		[" ", "\u258e", " ", " "],
+		"the rail marks only the draft rows",
 	);
 	assert.match(
 		text(rows[1]!),

@@ -61,13 +61,11 @@ function pair(initial = getThemeByName("dark")) {
 					expectedComposer.map((line) => open + line + close),
 				);
 			} else {
-				// [top pad, ...draft, surface→footer, footer] vs native [top, ...draft, bottom].
+				// [top pad, ...draft, bottom pad, footer] vs native [top, ...draft, bottom].
 				assert.equal(composer.length, expectedComposer.length + 1);
 				const [top, ...rest] = composer;
 				const nativeTop = expectedComposer[0]!;
-				if (plain(nativeTop).trim())
-					assert.equal(top, open + nativeTop + close, "indicator rows stay readable");
-				else assert.match(plain(top!), /^\u2584+$/u);
+				assert.equal(top, open + nativeTop + close, "the top padding row is the native top row on the surface");
 				const draft = rest.slice(0, expectedComposer.length - 2);
 				draft.forEach((line, index) => {
 					const native = expectedComposer[index + 1]!;
@@ -78,7 +76,11 @@ function pair(initial = getThemeByName("dark")) {
 					assert.equal(line, open + native + close, `draft row ${index} must stay byte-for-byte native`);
 				});
 				const [joint, strip] = rest.slice(-2);
-				assert.match(plain(joint!), /^\u2580+$/u);
+				assert.equal(
+					joint,
+					open + " ".repeat(width) + close,
+					"a full surface row joins the draft to the footer",
+				);
 				assert.ok(strip!.startsWith(footer) && strip!.endsWith(close), "footer keeps its strip");
 				assert.equal(plain(strip!).trimEnd(), plain(expectedComposer.at(-1)!).trimEnd());
 				for (const line of composer) assert.equal(visibleWidth(line), width);
@@ -161,7 +163,7 @@ test("surface preserves shell hints, paste, undo/redo and overflow across redraw
 		editor.handleInput("\x1a");
 	}
 	const rows = editors.check(80).map(plain);
-	assert.match(rows[0]!, /^\u2584{80}$/u);
+	assert.equal(rows[0]!, " ".repeat(80));
 	assert.match(rows.at(-1)!, /^shell +⌃Z undo {2}⌃Y redo$/u);
 	for (const editor of [editors.reference, editors.surfaced]) editor.handleInput("\x19");
 	editors.check(80);

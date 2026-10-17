@@ -164,18 +164,3 @@ export function renderPlaceholder(
 	const text = shown.length ? styleHints(shown, palette) : "";
 	return lead + cursor + " ".repeat(Math.max(0, room - visibleWidth(plain()))) + text + lead;
 }
-
-/** A background color as the matching foreground color, for half-block glyphs. */
-export function asForeground(bg: string): string {
-	return bg.replace("[48;", "[38;");
-}
-
-/**
- * Half-row padding. `▄` paints the lower half of each cell in `color`, `▀` the upper half; the other
- * half shows `background` (the terminal default when omitted). Bars get half a row of padding above
- * and below, so their text sits exactly centred.
- */
-export function halfRow(width: number, glyph: "\u2584" | "\u2580", color: string, background = ""): string {
-	if (width <= 0) return "";
-	return `${background}${asForeground(color)}${glyph.repeat(width)}\x1b[39m${background ? "\x1b[49m" : ""}`;
-}
