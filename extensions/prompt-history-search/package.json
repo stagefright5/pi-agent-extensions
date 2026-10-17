@@ -16,7 +16,8 @@
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "catalog:",
-    "@earendil-works/pi-tui": "catalog:"
+    "@earendil-works/pi-tui": "catalog:",
+    "@stagefright5/pi-picker": "workspace:*"
   },
   "pi": {
     "extensions": [

@@ -2,27 +2,15 @@ import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import {
+	copyToClipboard,
 	getAgentDir,
 	parseSessionEntries,
 	SessionManager,
 	type ExtensionAPI,
 	type ExtensionContext,
 	type FileEntry,
-	type KeybindingsManager,
-	type Theme,
 } from "@earendil-works/pi-coding-agent";
-import {
-	fuzzyMatch,
-	Input,
-	Key,
-	matchesKey,
-	truncateToWidth,
-	visibleWidth,
-	wrapTextWithAnsi,
-	type Component,
-	type Focusable,
-	type TUI,
-} from "@earendil-works/pi-tui";
+import { createPicker, type FilterGroup, type PickerAction } from "@stagefright5/pi-picker";
 
 type PromptRecord = {
 	text: string;
@@ -49,25 +37,32 @@ type PromptSessionInfo = {
 	cwd: string;
 };
 
+/** A prompt deleted from history; kept until it ages out so session rescans cannot restore it. */
+type Tombstone = { key: string; timestamp: number };
+
 type PersistedPromptIndex = {
 	version: 1;
 	updatedAt: number;
 	bootstrappedAt?: number;
 	prompts: PromptRecord[];
+	/** Optional; older readers ignore it. */
+	deleted?: Tombstone[];
 };
 
 type LoadedPersistedIndex = {
 	existed: boolean;
 	bootstrappedAt?: number;
 	prompts: PromptRecord[];
+	deleted: Tombstone[];
 	warnings: number;
 	pruned: boolean;
 };
 
-const MAX_VISIBLE = 8;
 const SESSION_SCAN_CONCURRENCY = 8;
 const INDEX_VERSION = 1;
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+/** Pi's native editor keeps 100 Up/Down entries. */
+const RECALL_LIMIT = 100;
 export function historyIndexPath(): string {
 	return join(getAgentDir(), "prompt-history-search", "index.json");
 }
@@ -159,14 +154,29 @@ function promptKey(prompt: PromptRecord): string {
 	return [prompt.timestamp, prompt.sessionPath, prompt.cwd, prompt.text].join("\0");
 }
 
-function mergePrompts(...promptLists: PromptRecord[][]): PromptRecord[] {
+function mergePrompts(promptLists: PromptRecord[][], deleted: readonly Tombstone[] = []): PromptRecord[] {
+	const removed = new Set(deleted.map((tombstone) => tombstone.key));
 	const merged = new Map<string, PromptRecord>();
 	for (const prompts of promptLists) {
 		for (const prompt of prompts) {
-			merged.set(promptKey(prompt), prompt);
+			const key = promptKey(prompt);
+			if (!removed.has(key)) merged.set(key, prompt);
 		}
 	}
 	return prunePrompts([...merged.values()]).sort((a, b) => b.timestamp - a.timestamp);
+}
+
+function pruneTombstones(deleted: readonly Tombstone[], now = Date.now()): Tombstone[] {
+	const cutoff = cutoffTimestamp(now);
+	return deleted.filter((tombstone) => tombstone.timestamp >= cutoff);
+}
+
+function tombstoneFromUnknown(value: unknown): Tombstone | null {
+	if (!value || typeof value !== "object") return null;
+	const { key, timestamp } = value as { key?: unknown; timestamp?: unknown };
+	return typeof key === "string" && typeof timestamp === "number" && Number.isFinite(timestamp)
+		? { key, timestamp }
+		: null;
 }
 
 function promptRecordFromUnknown(value: unknown): PromptRecord | null {
@@ -196,16 +206,21 @@ async function readPersistedIndex(): Promise<LoadedPersistedIndex> {
 		raw = await readFile(historyIndexPath(), "utf8");
 	} catch (error) {
 		if (error && typeof error === "object" && (error as { code?: unknown }).code === "ENOENT") {
-			return { existed: false, prompts: [], warnings: 0, pruned: false };
+			return { existed: false, prompts: [], deleted: [], warnings: 0, pruned: false };
 		}
-		return { existed: false, prompts: [], warnings: 1, pruned: false };
+		return { existed: false, prompts: [], deleted: [], warnings: 1, pruned: false };
 	}
 
 	try {
 		const parsed = JSON.parse(raw) as Partial<PersistedPromptIndex>;
 		const originalPrompts = Array.isArray(parsed.prompts) ? parsed.prompts : [];
 		const validPrompts = originalPrompts.map(promptRecordFromUnknown).filter((p): p is PromptRecord => p !== null);
-		const prompts = mergePrompts(validPrompts);
+		const deleted = pruneTombstones(
+			(Array.isArray(parsed.deleted) ? parsed.deleted : [])
+				.map(tombstoneFromUnknown)
+				.filter((t): t is Tombstone => t !== null),
+		);
+		const prompts = mergePrompts([validPrompts], deleted);
 		const bootstrappedAt =
 			typeof parsed.bootstrappedAt === "number" && Number.isFinite(parsed.bootstrappedAt)
 				? parsed.bootstrappedAt
@@ -215,21 +230,27 @@ async function readPersistedIndex(): Promise<LoadedPersistedIndex> {
 			existed: true,
 			bootstrappedAt,
 			prompts,
+			deleted,
 			warnings: parsed.version === INDEX_VERSION ? 0 : 1,
 			pruned: prompts.length !== originalPrompts.length,
 		};
 	} catch {
-		return { existed: true, prompts: [], warnings: 1, pruned: false };
+		return { existed: true, prompts: [], deleted: [], warnings: 1, pruned: false };
 	}
 }
 
-async function writePersistedIndex(prompts: PromptRecord[], bootstrappedAt?: number): Promise<void> {
-	const pruned = mergePrompts(prompts);
+async function writePersistedIndex(
+	prompts: PromptRecord[],
+	bootstrappedAt?: number,
+	deleted: readonly Tombstone[] = [],
+): Promise<void> {
+	const tombstones = pruneTombstones(deleted);
 	const payload: PersistedPromptIndex = {
 		version: INDEX_VERSION,
 		updatedAt: Date.now(),
 		bootstrappedAt,
-		prompts: pruned,
+		prompts: mergePrompts([prompts], tombstones),
+		...(tombstones.length ? { deleted: tombstones } : {}),
 	};
 	const indexPath = historyIndexPath();
 	const tempPath = `${indexPath}.${process.pid}.tmp`;
@@ -239,7 +260,11 @@ async function writePersistedIndex(prompts: PromptRecord[], bootstrappedAt?: num
 }
 
 async function updatePersistedIndex(
-	update: (current: LoadedPersistedIndex) => { prompts: PromptRecord[]; bootstrappedAt?: number },
+	update: (current: LoadedPersistedIndex) => {
+		prompts: PromptRecord[];
+		bootstrappedAt?: number;
+		deleted?: readonly Tombstone[];
+	},
 ): Promise<PromptRecord[]> {
 	let updatedPrompts: PromptRecord[] = [];
 	const run = indexWriteQueue
@@ -247,12 +272,23 @@ async function updatePersistedIndex(
 		.then(async () => {
 			const current = await readPersistedIndex();
 			const next = update(current);
-			updatedPrompts = mergePrompts(next.prompts);
-			await writePersistedIndex(updatedPrompts, next.bootstrappedAt);
+			const deleted = next.deleted ?? current.deleted;
+			updatedPrompts = mergePrompts([next.prompts], deleted);
+			await writePersistedIndex(updatedPrompts, next.bootstrappedAt, deleted);
 		});
 	indexWriteQueue = run;
 	await run;
 	return updatedPrompts;
+}
+
+/** Remove prompts from history and remember them so later session rescans cannot restore them. */
+export async function deletePromptsFromPersistedIndex(prompts: readonly PromptRecord[]): Promise<void> {
+	const deleted = prompts.map((prompt) => ({ key: promptKey(prompt), timestamp: prompt.timestamp }));
+	await updatePersistedIndex((current) => ({
+		prompts: current.prompts,
+		bootstrappedAt: current.bootstrappedAt,
+		deleted: [...current.deleted, ...deleted],
+	}));
 }
 
 async function appendPromptToPersistedIndex(prompt: PromptRecord): Promise<void> {
@@ -339,7 +375,7 @@ async function buildPromptIndexFromSessions(sessionDir?: string): Promise<Prompt
 	);
 
 	return {
-		prompts: mergePrompts(...perSession),
+		prompts: mergePrompts(perSession),
 		warnings,
 	};
 }
@@ -374,193 +410,6 @@ export async function loadPromptIndexForSearch(sessionDir: string, onBackfillSta
 	return { prompts, warnings: warnings + currentDirectory.warnings };
 }
 
-function normalizeSingleLine(text: string): string {
-	return text.replace(/\s+/g, " ").trim();
-}
-
-function queryTokens(query: string): string[] {
-	return normalizeSingleLine(query).split(/\s+/).filter(Boolean);
-}
-
-function tokenMatchScore(token: string, text: string): number | null {
-	const lowerText = text.toLowerCase();
-	const lowerToken = token.toLowerCase();
-	const substringIndex = lowerText.indexOf(lowerToken);
-
-	if (substringIndex >= 0) {
-		const wordBoundary = substringIndex === 0 || /[\s\-_./:]/.test(lowerText[substringIndex - 1]!);
-		return substringIndex * 0.1 - (wordBoundary ? 10 : 0) - lowerToken.length;
-	}
-
-	const fuzzy = fuzzyMatch(token, text);
-	return fuzzy.matches ? 1000 + fuzzy.score : null;
-}
-
-function promptMatchScore(prompt: PromptRecord, query: string): number | null {
-	const searchable = normalizeSingleLine(prompt.text);
-	const normalizedQuery = normalizeSingleLine(query);
-	const tokens = queryTokens(query);
-	if (tokens.length === 0) return 0;
-
-	let score = 0;
-	for (const token of tokens) {
-		const tokenScore = tokenMatchScore(token, searchable);
-		if (tokenScore === null) return null;
-		score += tokenScore;
-	}
-
-	const lowered = searchable.toLowerCase();
-	const loweredQuery = normalizedQuery.toLowerCase();
-	const phraseIndex = lowered.indexOf(loweredQuery);
-	if (phraseIndex >= 0) {
-		score -= 500;
-		score += phraseIndex * 0.05;
-	}
-	if (lowered === loweredQuery) {
-		score -= 1000;
-	}
-
-	return score;
-}
-
-type MatchRange = {
-	start: number;
-	end: number;
-};
-
-function fuzzyMatchRanges(token: string, text: string): MatchRange[] {
-	const tokenLower = token.toLowerCase();
-	const textLower = text.toLowerCase();
-	const ranges: MatchRange[] = [];
-	let tokenIndex = 0;
-
-	for (let i = 0; i < textLower.length && tokenIndex < tokenLower.length; i++) {
-		if (textLower[i] === tokenLower[tokenIndex]) {
-			ranges.push({ start: i, end: i + 1 });
-			tokenIndex++;
-		}
-	}
-
-	return tokenIndex === tokenLower.length ? ranges : [];
-}
-
-function matchRangesForQuery(text: string, query: string): MatchRange[] {
-	const tokens = queryTokens(query);
-	if (tokens.length === 0) return [];
-
-	const lowerText = text.toLowerCase();
-	const ranges: MatchRange[] = [];
-
-	for (const token of tokens) {
-		const lowerToken = token.toLowerCase();
-		const exactRanges: MatchRange[] = [];
-		let start = lowerText.indexOf(lowerToken);
-		while (start >= 0) {
-			exactRanges.push({ start, end: start + token.length });
-			start = lowerText.indexOf(lowerToken, start + Math.max(1, token.length));
-		}
-
-		if (exactRanges.length > 0) {
-			ranges.push(...exactRanges);
-		} else if (fuzzyMatch(token, text).matches) {
-			ranges.push(...fuzzyMatchRanges(token, text));
-		}
-	}
-
-	return mergeRanges(ranges);
-}
-
-function mergeRanges(ranges: MatchRange[]): MatchRange[] {
-	const sorted = ranges.filter((range) => range.end > range.start).sort((a, b) => a.start - b.start || b.end - a.end);
-	const merged: MatchRange[] = [];
-
-	for (const range of sorted) {
-		const previous = merged[merged.length - 1];
-		if (!previous || range.start > previous.end) {
-			merged.push({ ...range });
-		} else {
-			previous.end = Math.max(previous.end, range.end);
-		}
-	}
-
-	return merged;
-}
-
-function excerptAroundFirstMatch(
-	text: string,
-	ranges: MatchRange[],
-	maxWidth: number,
-): { text: string; ranges: MatchRange[] } {
-	const width = Math.max(1, maxWidth);
-	if (visibleWidth(text) <= width) return { text, ranges };
-
-	if (ranges.length === 0) {
-		return { text: truncateToWidth(text, width, "…"), ranges: [] };
-	}
-
-	const first = ranges[0]!;
-	const last = ranges[ranges.length - 1]!;
-	const hasLeadingEllipsis = first.start > 0;
-	const hasTrailingEllipsis = last.end < text.length;
-	const markerWidth = (hasLeadingEllipsis ? 1 : 0) + (hasTrailingEllipsis ? 1 : 0);
-	const contentWidth = Math.max(1, width - markerWidth);
-	const fullMatchSpan = last.end - first.start;
-	const focus = fullMatchSpan <= contentWidth ? { start: first.start, end: last.end } : first;
-	const matchLength = Math.max(1, focus.end - focus.start);
-	let start = focus.start;
-
-	if (matchLength < contentWidth) {
-		start = focus.start - Math.floor((contentWidth - matchLength) / 2);
-	}
-	start = Math.max(0, Math.min(start, Math.max(0, text.length - contentWidth)));
-	let end = Math.min(text.length, start + contentWidth);
-	if (focus.end > end) {
-		end = Math.min(text.length, focus.end);
-		start = Math.max(0, end - contentWidth);
-	}
-
-	const prefix = start > 0 ? "…" : "";
-	const suffix = end < text.length ? "…" : "";
-	const excerpt = `${prefix}${text.slice(start, end)}${suffix}`;
-	const mappedRanges = ranges
-		.map((range) => ({
-			start: Math.max(range.start, start) - start + prefix.length,
-			end: Math.min(range.end, end) - start + prefix.length,
-		}))
-		.filter((range) => range.end > range.start);
-
-	return { text: excerpt, ranges: mappedRanges };
-}
-
-function highlightRanges(text: string, ranges: MatchRange[], theme: Theme): string {
-	if (ranges.length === 0) return text;
-
-	let rendered = "";
-	let offset = 0;
-	for (const range of ranges) {
-		rendered += text.slice(offset, range.start);
-		rendered += theme.bg(
-			"searchMatchBg",
-			theme.fg("searchMatchText", theme.bold(text.slice(range.start, range.end))),
-		);
-		offset = range.end;
-	}
-	rendered += text.slice(offset);
-	return rendered;
-}
-
-function highlightedPromptText(text: string, query: string, theme: Theme): string {
-	const displayText = text.trim();
-	return highlightRanges(displayText, matchRangesForQuery(displayText, query), theme);
-}
-
-function highlightedPromptExcerpt(text: string, query: string, maxWidth: number, theme: Theme): string {
-	const displayText = normalizeSingleLine(text);
-	const ranges = matchRangesForQuery(displayText, query);
-	const excerpt = excerptAroundFirstMatch(displayText, ranges, maxWidth);
-	return highlightRanges(excerpt.text, excerpt.ranges, theme);
-}
-
 function shortenPath(path: string): string {
 	const home = homedir();
 	return path.startsWith(home) ? `~${path.slice(home.length)}` : path;
@@ -577,204 +426,24 @@ function formatDate(timestamp: number): string {
 	});
 }
 
+/** Compact list date: time today, otherwise month and day (year only when it differs). */
+function formatShortDate(timestamp: number, now: number): string {
+	if (!timestamp) return "?";
+	const date = new Date(timestamp);
+	const today = new Date(now);
+	if (date.toDateString() === today.toDateString()) {
+		return date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+	}
+	return date.toLocaleDateString(undefined, {
+		month: "short",
+		day: "numeric",
+		...(date.getFullYear() === today.getFullYear() ? {} : { year: "numeric" }),
+	});
+}
+
 function shouldIndexInputText(text: string): boolean {
 	const trimmed = text.trim();
 	return trimmed.length > 0 && !trimmed.startsWith("/");
-}
-
-class PromptHistorySearchComponent implements Component, Focusable {
-	private readonly input = new Input();
-	private filtered: PromptRecord[];
-	private selectedIndex = 0;
-	private expandedSelected = false;
-	private _focused = false;
-
-	constructor(
-		private readonly tui: TUI,
-		private readonly theme: Theme,
-		private readonly keybindings: KeybindingsManager,
-		private readonly prompts: PromptRecord[],
-		initialQuery: string,
-		private readonly warnings: number,
-		private readonly done: (value: string | null) => void,
-	) {
-		this.input.setValue(normalizeSingleLine(initialQuery));
-		this.filtered = this.filterPrompts();
-	}
-
-	get focused(): boolean {
-		return this._focused;
-	}
-
-	set focused(value: boolean) {
-		this._focused = value;
-		this.input.focused = value;
-	}
-
-	invalidate(): void {
-		this.input.invalidate();
-	}
-
-	handleInput(data: string): void {
-		if (matchesKey(data, Key.alt("r"))) {
-			this.moveSelection(1);
-			return;
-		}
-		if (this.keybindings.matches(data, "tui.select.up")) {
-			this.moveSelection(-1);
-			return;
-		}
-		if (this.keybindings.matches(data, "tui.select.down")) {
-			this.moveSelection(1);
-			return;
-		}
-		if (this.keybindings.matches(data, "tui.select.pageUp")) {
-			this.moveSelection(-MAX_VISIBLE);
-			return;
-		}
-		if (this.keybindings.matches(data, "tui.select.pageDown")) {
-			this.moveSelection(MAX_VISIBLE);
-			return;
-		}
-		if (matchesKey(data, Key.right)) {
-			this.expandedSelected = true;
-			this.tui.requestRender();
-			return;
-		}
-		if (matchesKey(data, Key.left)) {
-			this.expandedSelected = false;
-			this.tui.requestRender();
-			return;
-		}
-		if (this.keybindings.matches(data, "tui.select.confirm")) {
-			const selected = this.filtered[this.selectedIndex];
-			if (selected) this.done(selected.text);
-			return;
-		}
-		if (this.keybindings.matches(data, "tui.select.cancel")) {
-			this.done(null);
-			return;
-		}
-
-		const before = this.input.getValue();
-		this.input.handleInput(data);
-		if (this.input.getValue() !== before) {
-			this.filtered = this.filterPrompts();
-			this.selectedIndex = 0;
-			this.expandedSelected = false;
-		}
-		this.tui.requestRender();
-	}
-
-	render(width: number): string[] {
-		const lines: string[] = [];
-		const title = `Prompt History - last 30 days (${this.filtered.length}/${this.prompts.length})`;
-		lines.push(truncateToWidth(this.theme.fg("accent", this.theme.bold(title)), width, ""));
-
-		const queryPrefix = this.theme.fg("muted", "reverse-i-search: ");
-		const queryWidth = Math.max(1, width - visibleWidth(queryPrefix));
-		const inputLine = this.input.render(queryWidth)[0] ?? "";
-		lines.push(truncateToWidth(queryPrefix + inputLine, width, ""));
-		lines.push(this.theme.fg("borderMuted", "─".repeat(Math.max(0, width))));
-
-		if (this.filtered.length === 0) {
-			lines.push(truncateToWidth(this.theme.fg("warning", "  No matching prompts"), width, ""));
-		} else {
-			const start = Math.max(
-				0,
-				Math.min(this.selectedIndex - Math.floor(MAX_VISIBLE / 2), this.filtered.length - MAX_VISIBLE),
-			);
-			const end = Math.min(start + MAX_VISIBLE, this.filtered.length);
-
-			for (let index = start; index < end; index++) {
-				const prompt = this.filtered[index]!;
-				const selected = index === this.selectedIndex;
-				const prefix = selected ? "› " : "  ";
-				const previewTextWidth = Math.max(1, width - visibleWidth(prefix));
-				const preview = truncateToWidth(
-					prefix + highlightedPromptExcerpt(prompt.text, this.input.getValue(), previewTextWidth, this.theme),
-					width,
-					"…",
-				);
-				const sessionFile = prompt.sessionPath ? basename(prompt.sessionPath, ".jsonl") : "current session";
-				const sessionLabel = prompt.sessionName?.trim()
-					? `${prompt.sessionName.trim()} · ${sessionFile}`
-					: sessionFile;
-				const metadata = truncateToWidth(
-					`  ${formatDate(prompt.timestamp)} · ${sessionLabel} · ${shortenPath(prompt.cwd)}`,
-					width,
-					"…",
-				);
-
-				if (selected) {
-					lines.push(this.theme.bg("selectedBg", this.theme.fg("accent", preview)));
-					lines.push(this.theme.bg("selectedBg", this.theme.fg("muted", metadata)));
-					if (this.expandedSelected) {
-						lines.push(...this.renderExpandedPrompt(prompt, width));
-					}
-				} else {
-					lines.push(preview);
-					lines.push(this.theme.fg("dim", metadata));
-				}
-			}
-		}
-
-		if (this.warnings > 0) {
-			lines.push(
-				truncateToWidth(
-					this.theme.fg(
-						"warning",
-						`Skipped, partially read, or repaired ${this.warnings} index/session file(s)`,
-					),
-					width,
-					"…",
-				),
-			);
-		}
-		lines.push(
-			truncateToWidth(
-				this.theme.fg(
-					"dim",
-					"type to search · Alt+R/↓ next · ↑ previous · → expand · ← collapse · Enter restore · Esc cancel",
-				),
-				width,
-				"…",
-			),
-		);
-		return lines;
-	}
-
-	private renderExpandedPrompt(prompt: PromptRecord, width: number): string[] {
-		const contentWidth = Math.max(1, width - 4);
-		const renderedText = highlightedPromptText(prompt.text, this.input.getValue(), this.theme);
-		const wrapped = wrapTextWithAnsi(renderedText, contentWidth);
-		const lines = [this.theme.fg("borderMuted", `  ${"─".repeat(Math.max(0, width - 2))}`)];
-
-		for (const line of wrapped) {
-			lines.push(truncateToWidth(`${this.theme.fg("borderMuted", "  │ ")}${line}`, width, ""));
-		}
-
-		lines.push(this.theme.fg("borderMuted", `  ${"─".repeat(Math.max(0, width - 2))}`));
-		return lines;
-	}
-
-	private filterPrompts(): PromptRecord[] {
-		const query = this.input.getValue();
-		if (queryTokens(query).length === 0) return this.prompts;
-
-		return this.prompts
-			.map((prompt) => ({ prompt, score: promptMatchScore(prompt, query) }))
-			.filter((result): result is { prompt: PromptRecord; score: number } => result.score !== null)
-			.sort((a, b) => a.score - b.score || b.prompt.timestamp - a.prompt.timestamp)
-			.map((result) => result.prompt);
-	}
-
-	private moveSelection(delta: number): void {
-		if (this.filtered.length === 0) return;
-		this.selectedIndex = (this.selectedIndex + delta + this.filtered.length) % this.filtered.length;
-		this.expandedSelected = false;
-		this.tui.requestRender();
-	}
 }
 
 async function openPromptHistory(ctx: ExtensionContext, initialQuery?: string): Promise<void> {
@@ -787,6 +456,8 @@ async function openPromptHistory(ctx: ExtensionContext, initialQuery?: string): 
 	let index: PromptIndex;
 	ctx.ui.setStatus("prompt-history-search", "Loading prompt history index…");
 	try {
+		// /prompt-history itself may have just queued a slash-command record.
+		await indexWriteQueue.catch(() => undefined);
 		index = await loadPromptIndexForSearch(ctx.sessionManager.getSessionDir(), () => {
 			ctx.ui.setStatus("prompt-history-search", "Building initial 30-day prompt history index…");
 		});
@@ -803,24 +474,186 @@ async function openPromptHistory(ctx: ExtensionContext, initialQuery?: string): 
 		return;
 	}
 
-	const selected = await ctx.ui.custom<string | null>((tui, theme, keybindings, done) => {
-		return new PromptHistorySearchComponent(
-			tui,
-			theme,
-			keybindings,
-			index.prompts,
-			initialQuery ?? originalDraft,
-			index.warnings,
-			done,
-		);
-	});
+	const selected = await ctx.ui.custom<string | null>(
+		(tui, theme, keybindings, done) =>
+			createPromptHistoryPicker({
+				tui,
+				theme: () => theme,
+				keybindings,
+				prompts: index.prompts,
+				warnings: index.warnings,
+				initialQuery: initialQuery ?? originalDraft,
+				cwd: ctx.cwd,
+				sessionPath: ctx.sessionManager.getSessionFile() ?? "",
+				done,
+			}),
+		{ overlay: true, overlayOptions: { anchor: "center", width: "90%", minWidth: 50, maxHeight: "85%" } },
+	);
 
 	if (selected !== null && selected !== undefined) {
 		ctx.ui.setEditorText(selected);
 	}
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export interface PromptHistoryPickerOptions {
+	tui: Parameters<typeof createPicker>[0]["tui"];
+	theme: Parameters<typeof createPicker>[0]["theme"];
+	keybindings: Parameters<typeof createPicker>[0]["keybindings"];
+	prompts: readonly PromptRecord[];
+	warnings: number;
+	initialQuery: string;
+	cwd: string;
+	sessionPath: string;
+	done: (value: string | null) => void;
+	now?: number;
+	copy?: (text: string) => Promise<void>;
+	delete?: (prompts: readonly PromptRecord[]) => Promise<void>;
+}
+
+/** The Alt+R picker: ranked search, preview, filters, multi-select insert, copy, and delete. */
+export function createPromptHistoryPicker(options: PromptHistoryPickerOptions) {
+	const now = options.now ?? Date.now();
+	const newest = options.prompts[0]?.timestamp ?? now;
+	const oldest = options.prompts.at(-1)?.timestamp ?? now;
+	const span = Math.max(1, newest - oldest);
+	const joined = (items: readonly PromptRecord[]) => items.map((item) => item.text).join("\n\n");
+	const sessionLabel = (prompt: PromptRecord) => {
+		const file = prompt.sessionPath ? basename(prompt.sessionPath, ".jsonl") : "current session";
+		return prompt.sessionName?.trim() ? `${prompt.sessionName.trim()} · ${file}` : file;
+	};
+	const filters: FilterGroup<PromptRecord>[] = [
+		{
+			id: "scope",
+			label: "Scope",
+			exclusive: true,
+			options: [
+				{ id: "project", label: "this project", test: (prompt) => prompt.cwd === options.cwd },
+				{
+					id: "session",
+					label: "this session",
+					test: (prompt) => options.sessionPath !== "" && prompt.sessionPath === options.sessionPath,
+				},
+			],
+		},
+		{
+			id: "age",
+			label: "Age",
+			exclusive: true,
+			options: [
+				{ id: "day", label: "24 hours", test: (prompt) => now - prompt.timestamp <= DAY_MS },
+				{ id: "week", label: "7 days", test: (prompt) => now - prompt.timestamp <= 7 * DAY_MS },
+			],
+		},
+		{
+			id: "kind",
+			label: "Kind",
+			exclusive: true,
+			options: [
+				{ id: "prompts", label: "prompts", test: (prompt) => !prompt.text.startsWith("/") },
+				{ id: "commands", label: "commands", test: (prompt) => prompt.text.startsWith("/") },
+			],
+		},
+	];
+	const actions: PickerAction<PromptRecord>[] = [
+		{
+			id: "insert",
+			label: "insert",
+			key: "tui.select.confirm",
+			primary: true,
+			run: (items) => options.done(joined(items)),
+		},
+		{
+			id: "copy",
+			label: "copy",
+			key: "ctrl+y",
+			run: async (items, context) => {
+				await (options.copy ?? copyToClipboard)(joined(items));
+				context.notify(items.length === 1 ? "Copied" : `Copied ${items.length} prompts`);
+			},
+		},
+		{
+			id: "delete",
+			label: "delete",
+			key: "ctrl+d",
+			confirm: (items) =>
+				`Press ⌃D again to delete ${items.length === 1 ? "this prompt" : `${items.length} prompts`} from history`,
+			run: async (items, context) => {
+				await (options.delete ?? deletePromptsFromPersistedIndex)(items);
+				context.remove(items);
+				context.notify(items.length === 1 ? "Deleted" : `Deleted ${items.length} prompts`);
+			},
+		},
+	];
+	return createPicker<PromptRecord>({
+		tui: options.tui,
+		theme: options.theme,
+		keybindings: options.keybindings,
+		title: "Prompt history · last 30 days",
+		items: options.prompts,
+		text: (prompt) => prompt.text,
+		row: (prompt) => ({
+			primary: prompt.text.replace(/\s+/gu, " ").trim(),
+			secondary: `${formatShortDate(prompt.timestamp, now)} · ${basename(prompt.cwd) || "~"}`,
+		}),
+		preview: (prompt) =>
+			`${formatDate(prompt.timestamp)} · ${sessionLabel(prompt)} · ${shortenPath(prompt.cwd)}\n\n${prompt.text}`,
+		filters,
+		actions,
+		multiSelect: true,
+		initialQuery: options.initialQuery.replace(/\s+/gu, " ").trim(),
+		// Prompts arrive newest first; recency breaks ties between equally good matches.
+		boost: (prompt) => (prompt.timestamp - oldest) / span,
+		nextKeys: ["alt+r"],
+		emptyMessage: "No matching prompts",
+		...(options.warnings > 0
+			? {
+					notice: {
+						text: `Skipped, partially read, or repaired ${options.warnings} index/session file(s)`,
+						tone: "warning" as const,
+					},
+				}
+			: {}),
+		onClose: () => options.done(null),
+	});
+}
+
 export default function promptHistorySearchExtension(pi: ExtensionAPI): void {
+	let uiContext: ExtensionContext | undefined;
+	pi.on("session_start", (_event, ctx) => {
+		uiContext = ctx;
+		if (ctx.mode !== "tui") return;
+		// Offer persisted prompts (all projects, newest first) to an Up/Down-capable
+		// editor. Reads only the saved index; it never scans sessions at startup.
+		void indexWriteQueue
+			.catch(() => undefined)
+			.then(readPersistedIndex)
+			.then((index) => {
+				const prompts = [...new Set(index.prompts.map((prompt) => prompt.text))].slice(0, RECALL_LIMIT);
+				if (prompts.length) pi.events.emit("prompt-history-search:recent", { prompts });
+			})
+			.catch(() => undefined);
+	});
+
+	// Built-in and extension slash commands can bypass the input event entirely.
+	// The optional composer integration reports actual submissions, never selections.
+	pi.events.on("prompt-truly-mine:slash-submit", (value) => {
+		const prompt = promptRecordFromUnknown(value);
+		if (!prompt?.text.startsWith("/")) return;
+		void appendPromptToPersistedIndex(prompt).catch((error: unknown) => {
+			if (uiContext?.hasUI) {
+				const message = error instanceof Error ? error.message : String(error);
+				uiContext.ui.notify(`Could not persist command history: ${message}`, "warning");
+			}
+		});
+	});
+	pi.on("session_shutdown", async () => {
+		// Includes /quit and /reload, whose handlers run immediately after submission.
+		await indexWriteQueue.catch(() => undefined);
+		uiContext = undefined;
+	});
+
 	pi.on("input", async (event, ctx) => {
 		if (event.source === "extension" || !shouldIndexInputText(event.text)) return { action: "continue" as const };
 
