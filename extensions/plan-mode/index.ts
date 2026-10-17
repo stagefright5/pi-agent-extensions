@@ -199,8 +199,10 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		await showDocument(
 			ctx,
 			{
-				title: `∆ Plan diff · ${iteration - 1} → ${iteration}`,
-				subtitle: planTitle ?? "",
+				kind: "Plan diff",
+				title: planTitle ?? "",
+				meta: `iteration ${iteration - 1} → ${iteration}`,
+				subtitle: planPath() ?? "",
 				content: diff,
 				format: "diff",
 			},
@@ -222,7 +224,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		const versions = [...iterations];
 		const title = allChanges
 			? "Summary of all plan changes"
-			: `Changes · v${versions.length - 1} → v${versions.length}`;
+			: `Changes · iteration ${versions.length - 1} → ${versions.length}`;
 		const prompt = allChanges
 			? `Summarize ALL changes across these ${versions.length} plan iterations. What evolved, was added, removed, or restructured? Be concise and use markdown.\n\n${versions.map((plan, i) => `### Version ${i + 1}\n${plan}`).join("\n\n---\n\n")}`
 			: `Summarize the changes between these two plan versions. What was added, removed, or modified? Be concise and use markdown.\n\n### Previous Version\n${versions.at(-2)}\n\n### Current Version\n${versions.at(-1)}`;
@@ -239,7 +241,20 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 				throw new Error(response.errorMessage || response.stopReason);
 			return getMessageText(response.content) || "(empty summary)";
 		});
-		if (summary !== undefined && !signal.aborted) await showDocument(ctx, { title, content: summary }, signal);
+		if (summary !== undefined && !signal.aborted)
+			await showDocument(
+				ctx,
+				{
+					kind: "Plan summary",
+					title: planTitle ?? "",
+					meta: allChanges
+						? `all ${versions.length} iterations`
+						: `iteration ${versions.length - 1} → ${versions.length}`,
+					subtitle: planPath() ?? "",
+					content: summary,
+				},
+				signal,
+			);
 	}
 
 	async function showQA(ctx: ExtensionContext, signal = scope.signal): Promise<void> {
@@ -251,8 +266,10 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		await showDocument(
 			ctx,
 			{
-				title: `§ Q&A history · ${qaMessages.length} messages`,
-				subtitle: planTitle ?? "",
+				kind: "Q&A history",
+				title: planTitle ?? "",
+				meta: `${qaMessages.length} ${qaMessages.length === 1 ? "message" : "messages"}`,
+				subtitle: planPath() ?? "",
 				content: qaMessages
 					.map((message) => `### ${message.role === "assistant" ? "Agent" : "You"}\n\n${message.content}`)
 					.join("\n\n---\n\n"),
@@ -277,7 +294,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		try {
 			while (!signal.aborted) {
 				const actions: DocumentAction[] = [
-					{ key: "a", label: "approve", value: "approve" },
+					{ key: "a", label: "approve", value: "approve", primary: true },
 					{ key: "r", label: "revise", value: "revise" },
 					...(iteration > 1
 						? ([
@@ -291,7 +308,9 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 				const action = await showDocument(
 					ctx,
 					{
-						title: `▣ Plan review · iteration ${iteration}${title ? ` · ${title}` : ""}`,
+						kind: "Plan review",
+						title: title ?? "",
+						meta: `iteration ${iteration}`,
 						subtitle: planPath() ?? "",
 						content: plan,
 						actions,

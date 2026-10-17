@@ -7,6 +7,8 @@ import {
 	type KeybindingsManager,
 	type Theme,
 } from "@earendil-works/pi-coding-agent";
+import { keyLabel, paintRow, paletteFromTheme, type Palette } from "@stagefright5/pi-picker";
+import { homedir } from "node:os";
 import {
 	Key,
 	Markdown,
@@ -28,9 +30,15 @@ export interface DocumentAction {
 	key: KeyId;
 	label: string;
 	value: ReviewAction;
+	/** Drawn as the one emphasised action. */
+	primary?: boolean;
 }
 export interface DocumentOptions {
+	/** What the view is, e.g. "Plan review"; drawn in the accent colour before the title. */
+	kind?: string;
 	title: string;
+	/** Right side of the header, e.g. "iteration 2". */
+	meta?: string;
 	subtitle?: string;
 	content: string;
 	format?: "markdown" | "diff";
@@ -46,6 +54,17 @@ export interface DocumentHost {
 
 type Point = { line: number; col: number };
 const singleLine = (text: string) => stripTerminalSequences(text).replace(/[\r\n\t]/g, " ");
+const tildePath = (text: string) => {
+	const home = homedir();
+	return home && text.startsWith(home + "/") ? "~" + text.slice(home.length) : text;
+};
+/** Left text and right text on one row; the right side wins when space runs out. */
+function spread(left: string, right: string, width: number): string {
+	const room = width - visibleWidth(right);
+	if (room < 2) return truncateToWidth(right, width, "");
+	const head = truncateToWidth(left, room - 1, "…");
+	return head + " ".repeat(Math.max(1, room - visibleWidth(head))) + right;
+}
 
 /** Markdown owns parsing/highlighting; cached ANSI is discarded on theme invalidation. */
 class DocumentBody implements Component {
@@ -102,6 +121,7 @@ export class PlanDocumentView implements Component {
 	private bodyTop = 0;
 	private bodyHeight = 1;
 	private width = 0;
+	private padLeft = 0;
 	private actionRow = -1;
 	private actionTargets: Array<{ from: number; to: number; value: ReviewAction | "copy" }> = [];
 	private anchor?: Point;
@@ -148,33 +168,72 @@ export class PlanDocumentView implements Component {
 		}
 		this.width = width;
 		const theme = this.host.theme();
+		const palette = paletteFromTheme(theme);
 		const height = Math.max(1, Math.floor(this.host.rows() * 0.9));
 		const compact = height < 8;
-		const title = theme.fg("accent", theme.bold(singleLine(this.options.title)));
-		const rule = theme.fg("borderMuted", "─".repeat(width));
-		const header = compact
-			? height > 1
-				? [title]
-				: []
-			: [title, theme.fg("muted", singleLine(this.options.subtitle ?? "")), rule];
-		const footerHeight = compact ? (height > 2 ? 1 : 0) : 3;
-		this.bodyTop = header.length;
-		this.bodyHeight = Math.max(1, height - header.length - footerHeight);
-		this.bodyLines = this.scroll.render(width);
+		// Bands (header, footer) sit on the lighter surface, the document on the darker panel, so
+		// the overlay reads as one card that is clearly apart from the transcript behind it.
+		const band = (line: string) => paintRow(truncateToWidth(line, width, ""), width, palette.text, palette.surface);
+		const sheet = (line: string) => paintRow(truncateToWidth(line, width, ""), width, palette.text, palette.panel);
+		this.padLeft = width >= 40 ? 3 : width >= 12 ? 1 : 0;
+		const padRight = width >= 40 ? 3 : width >= 12 ? 1 : 0;
+		const inner = Math.max(1, width - this.padLeft - padRight);
+		const gutter = " ".repeat(this.padLeft);
+
+		const headerHeight = compact ? (height > 1 ? 1 : 0) : 3;
+		const footerHeight = compact ? (height > 2 ? 1 : 0) : 2;
+		this.bodyTop = headerHeight;
+		this.bodyHeight = Math.max(1, height - headerHeight - footerHeight);
+		this.bodyLines = this.scroll.render(inner);
 		this.scroll.updateLayout(this.bodyLines.length, this.bodyHeight, () => {
 			if (!this.closed) this.host.requestRender();
 		});
-		const body = this.bodyLines
-			.slice(this.scroll.scrollTop, this.scroll.scrollTop + this.bodyHeight)
-			.map((line, i) => this.highlight(line, this.scroll.scrollTop + i));
-		while (body.length < this.bodyHeight) body.push("");
-		const actions = this.renderActions();
-		this.actionRow = compact ? -1 : header.length + body.length + 1;
-		const position = this.bodyLines.length
-			? `${this.scroll.scrollTop + 1}–${Math.min(this.bodyLines.length, this.scroll.scrollTop + this.bodyHeight)}/${this.bodyLines.length}`
-			: "0/0";
-		const hint = theme.fg("dim", this.status || `${position} · ↑↓/PgUp/PgDn scroll · c copy · Esc close`);
-		const footer = compact ? (footerHeight ? [hint] : []) : [rule, actions, hint];
+		const total = this.bodyLines.length;
+		const top = this.scroll.scrollTop;
+		const overflow = total > this.bodyHeight;
+
+		const kind = this.options.kind ? palette.fg("accent", palette.bold(singleLine(this.options.kind))) : "";
+		const title = palette.bold(singleLine(this.options.title));
+		const heading = kind && this.options.title ? `${kind}  ${title}` : kind || title;
+		const position = overflow
+			? top === 0
+				? "top"
+				: top + this.bodyHeight >= total
+					? "end"
+					: `${Math.round((top / Math.max(1, total - this.bodyHeight)) * 100)}%`
+			: "";
+		const meta = [this.options.meta ? singleLine(this.options.meta) : "", position].filter(Boolean).join(" · ");
+		const titleRow = gutter + spread(heading, palette.fg("dim", meta), inner);
+		const header = compact
+			? headerHeight
+				? [band(titleRow)]
+				: []
+			: [
+					band(titleRow),
+					band(gutter + palette.fg("dim", tildePath(singleLine(this.options.subtitle ?? "")))),
+					sheet(""),
+				];
+
+		// A thin thumb in the right padding shows where the visible part sits in a long document.
+		const thumbSize = overflow ? Math.max(1, Math.round((this.bodyHeight * this.bodyHeight) / total)) : 0;
+		const thumbTop = overflow
+			? Math.round((top / Math.max(1, total - this.bodyHeight)) * (this.bodyHeight - thumbSize))
+			: 0;
+		const body: string[] = [];
+		for (let row = 0; row < this.bodyHeight; row++) {
+			const line = this.bodyLines[top + row];
+			const text = line === undefined ? "" : this.highlight(line, top + row);
+			const thumb =
+				overflow && padRight >= 2 && row >= thumbTop && row < thumbTop + thumbSize
+					? palette.fg("dim", "┃")
+					: "";
+			const filled = gutter + text + " ".repeat(Math.max(0, inner - visibleWidth(text)));
+			body.push(sheet(thumb ? filled + " ".repeat(Math.max(0, padRight - 2)) + thumb : filled));
+		}
+
+		const footerRow = this.renderFooter(palette, width);
+		this.actionRow = compact ? -1 : headerHeight + this.bodyHeight + 1;
+		const footer = compact ? (footerHeight ? [band(footerRow)] : []) : [sheet(""), band(footerRow)];
 		return [...header, ...body, ...footer].slice(0, height).map((line) => truncateToWidth(line, width, ""));
 	}
 
@@ -230,22 +289,54 @@ export class PlanDocumentView implements Component {
 		return undefined;
 	}
 
-	private renderActions(): string {
-		const theme = this.host.theme();
+	/** Workflow actions on the left (the primary one as a chip), copy and close on the right. */
+	private renderFooter(palette: Palette, width: number): string {
 		this.actionTargets = [];
-		let line = "";
-		const actions: Array<{ key: string; label: string; value: ReviewAction | "copy" }> = [
-			...(this.options.actions ?? []),
+		const gutter = " ".repeat(this.padLeft);
+		const room = Math.max(1, width - 2 * this.padLeft);
+		const tail: Array<{ key: string; label: string; value: ReviewAction | "copy" }> = [
 			{ key: "c", label: "copy", value: "copy" },
-			{ key: "Esc", label: "close", value: "cancel" },
+			{ key: "escape", label: "close", value: "cancel" },
 		];
-		for (const action of actions) {
-			if (line) line += theme.fg("borderMuted", " · ");
-			const from = visibleWidth(line);
-			line += theme.fg("accent", action.key) + theme.fg("muted", ` ${action.label}`);
-			this.actionTargets.push({ from, to: visibleWidth(line), value: action.value });
+		// Plain letters stay lowercase: "A" would read as Shift+A.
+		const keyText = (key: string) => (key.length === 1 ? key : keyLabel(key));
+		const chip = (action: { key: string; label: string; primary?: boolean }) =>
+			action.primary
+				? paintRow(
+						palette.fg("accent", palette.bold(` ${keyText(action.key)} ${action.label} `)),
+						visibleWidth(` ${keyText(action.key)} ${action.label} `),
+						"",
+						palette.selected,
+					)
+				: palette.fg("muted", keyText(action.key)) + " " + palette.fg("dim", action.label);
+		const join = (items: ReadonlyArray<{ key: string; label: string; primary?: boolean }>) =>
+			items.map(chip).join("   ");
+		const right = this.status
+			? palette.fg(this.status.startsWith("Copy failed") ? "error" : "success", this.status)
+			: join(tail);
+		// Drop secondary actions from the end until the row fits; the primary one stays.
+		const shown = [...(this.options.actions ?? [])];
+		while (shown.length > 1 && visibleWidth(join(shown)) + 3 + visibleWidth(right) > room) {
+			const last = shown.findLastIndex((action) => !action.primary);
+			if (last < 0) break;
+			shown.splice(last, 1);
 		}
-		return line;
+		const left = join(shown);
+		let x = this.padLeft;
+		for (const action of shown) {
+			const cell = visibleWidth(chip(action));
+			this.actionTargets.push({ from: x, to: x + cell, value: action.value });
+			x += cell + 3;
+		}
+		if (!this.status) {
+			let rx = this.padLeft + Math.max(visibleWidth(left) + 1, room - visibleWidth(right));
+			for (const action of tail) {
+				const cell = visibleWidth(chip(action));
+				this.actionTargets.push({ from: rx, to: rx + cell, value: action.value });
+				rx += cell + 3;
+			}
+		}
+		return gutter + spread(left, right, room);
 	}
 
 	private inBody(y: number): boolean {
@@ -257,7 +348,8 @@ export class PlanDocumentView implements Component {
 			this.bodyLines.length - 1,
 			this.scroll.scrollTop + Math.max(0, Math.min(this.bodyHeight - 1, event.y - this.bodyTop)),
 		);
-		return { line, col: Math.max(0, Math.min(this.width, visibleWidth(this.bodyLines[line] ?? ""), event.x)) };
+		const col = event.x - this.padLeft;
+		return { line, col: Math.max(0, Math.min(this.width, visibleWidth(this.bodyLines[line] ?? ""), col)) };
 	}
 
 	private selection(): { start: Point; end: Point } | undefined {
@@ -440,13 +532,13 @@ export function createPlanMessageComponent(
 	return {
 		render(width) {
 			if (width <= 0) return [];
+			const heading =
+				theme.fg("accent", theme.bold("Plan")) + (title ? `  ${theme.bold(singleLine(title))}` : "");
 			return [
-				theme.fg(
-					"accent",
-					theme.bold(`Plan · iteration ${iteration}${title ? ` · ${singleLine(title)}` : ""}`),
-				),
-				...(path ? [theme.fg("muted", singleLine(path))] : []),
+				spread(heading, theme.fg("dim", `iteration ${iteration}`), width),
+				...(path ? [theme.fg("dim", tildePath(singleLine(path)))] : []),
 				theme.fg("borderMuted", "─".repeat(width)),
+				"",
 				...markdown.render(width),
 			].map((line) => truncateToWidth(line, width, ""));
 		},

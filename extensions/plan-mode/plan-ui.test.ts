@@ -69,7 +69,7 @@ function setup(content = document) {
 			subtitle: "path\nnot another row",
 			content,
 			actions: [
-				{ key: "a", label: "approve", value: "approve" },
+				{ key: "a", label: "approve", value: "approve", primary: true },
 				{ key: "shift+s", label: "all changes", value: "allSummary" },
 			],
 		},
@@ -141,12 +141,13 @@ test("keyboard and normalized wheel use bounded native scroll state", () => {
 test("fullscreen drag selection is local, clipped, and copies plain text once", async () => {
 	const { view, copied } = setup("one two three");
 	view.render(80);
-	assert.equal(view.handleMouse(mouse("press", 0, 3))?.capture, true);
-	view.handleMouse(mouse("drag", 3, 3));
-	view.handleMouse(mouse("release", 3, 3));
+	// The document starts below the two header rows and a spacer, inset three cells.
+	assert.equal(view.handleMouse(mouse("press", 3, 3))?.capture, true);
+	view.handleMouse(mouse("drag", 6, 3));
+	view.handleMouse(mouse("release", 6, 3));
 	await Promise.resolve();
 	assert.deepEqual(copied, ["one"]);
-	view.handleMouse(mouse("release", 3, 3));
+	view.handleMouse(mouse("release", 6, 3));
 	assert.deepEqual(copied, ["one"]);
 	view.handleMouse(mouse("press", -5, 3));
 	view.handleMouse(mouse("release", 999, 999));
@@ -257,4 +258,28 @@ test("real pi renderers: fullscreen dispatch reaches handleMouse; regular mode s
 			tui.stop();
 		}
 	}
+});
+
+test("review card: lighter header and footer bands, inset document, primary action chip, clickable legend", () => {
+	const s = setup("# Heading\n\nBody text");
+	const lines = s.view.render(80);
+	const text = lines.map(stripTerminalSequences);
+	const bg = (line: string) => {
+		const start = line.indexOf("\u001b[48;2;");
+		return start < 0 ? undefined : line.slice(start, line.indexOf("m", start));
+	};
+	assert.match(text[0]!, /^ {3}Plan 世界 +$/u);
+	assert.match(text[1]!, /^ {3}path not another row/u);
+	assert.equal(text[2]!.trim(), "");
+	assert.match(text[3]!, /^ {3}Heading/u);
+	// Bands and the document sheet use different backgrounds; every row is filled to the edge.
+	assert.ok(bg(lines[0]!) && bg(lines[3]!) && bg(lines[0]!) !== bg(lines[3]!));
+	assert.equal(bg(lines[0]!), bg(lines.at(-1)!));
+	for (const line of lines) assert.equal(visibleWidth(line), 80);
+	const footer = text.at(-1)!;
+	assert.match(footer, /^ {4}a approve {4}⇧S all changes +c copy {3}esc close {3}$/u);
+	// The legend is clickable where it is drawn.
+	const row = lines.length - 1;
+	s.view.handleMouse(mouse("click", footer.indexOf("all changes"), row));
+	assert.deepEqual(s.actions, ["allSummary"]);
 });
