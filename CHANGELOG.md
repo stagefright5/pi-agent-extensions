@@ -1,8 +1,39 @@
 # Changelog
 
-This file records workspace changes. Published packages keep their release history in `extensions/<package>/CHANGELOG.md`.
+This file records workspace changes. Package release histories live in `extensions/<package>/CHANGELOG.md` and `packages/<library>/CHANGELOG.md`.
 
-## Unreleased
+## 2026-10-17 (IST)
+
+Release 13 packages from commit `1359b39`, including the first releases of Background Bash, Tool Explain, Pi Extension Utilities, and Pi Picker. Each package has its own GitHub release and tag.
+
+| Package                                                                                                                                                         | Version | Details                                                    |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ---------------------------------------------------------- |
+| [`@stagefright5/pi-artifact-design`](https://github.com/stagefright5/pi-agent-extensions/releases/tag/%40stagefright5%2Fpi-artifact-design%400.2.2)             | 0.2.2   | [Changelog](extensions/artifact-design/CHANGELOG.md)       |
+| [`@stagefright5/pi-bg-bash`](https://github.com/stagefright5/pi-agent-extensions/releases/tag/%40stagefright5%2Fpi-bg-bash%400.1.0)                             | 0.1.0   | [Changelog](extensions/bg-bash/CHANGELOG.md)               |
+| [`@stagefright5/pi-obsidian-ui`](https://github.com/stagefright5/pi-agent-extensions/releases/tag/%40stagefright5%2Fpi-obsidian-ui%400.2.1)                     | 0.2.1   | [Changelog](extensions/obsidian-ui/CHANGELOG.md)           |
+| [`@stagefright5/pi-openai-fast`](https://github.com/stagefright5/pi-agent-extensions/releases/tag/%40stagefright5%2Fpi-openai-fast%400.1.3)                     | 0.1.3   | [Changelog](extensions/openai-fast/CHANGELOG.md)           |
+| [`@stagefright5/pi-plan-mode`](https://github.com/stagefright5/pi-agent-extensions/releases/tag/%40stagefright5%2Fpi-plan-mode%400.2.0)                         | 0.2.0   | [Changelog](extensions/plan-mode/CHANGELOG.md)             |
+| [`@stagefright5/pi-prompt-history-search`](https://github.com/stagefright5/pi-agent-extensions/releases/tag/%40stagefright5%2Fpi-prompt-history-search%400.2.0) | 0.2.0   | [Changelog](extensions/prompt-history-search/CHANGELOG.md) |
+| [`@stagefright5/pi-prompt-truly-mine`](https://github.com/stagefright5/pi-agent-extensions/releases/tag/%40stagefright5%2Fpi-prompt-truly-mine%400.4.0)         | 0.4.0   | [Changelog](extensions/prompt-truly-mine/CHANGELOG.md)     |
+| [`@stagefright5/pi-provider-url-logger`](https://github.com/stagefright5/pi-agent-extensions/releases/tag/%40stagefright5%2Fpi-provider-url-logger%400.1.3)     | 0.1.3   | [Changelog](extensions/provider-url-logger/CHANGELOG.md)   |
+| [`@stagefright5/pi-status-bar`](https://github.com/stagefright5/pi-agent-extensions/releases/tag/%40stagefright5%2Fpi-status-bar%400.4.0)                       | 0.4.0   | [Changelog](extensions/status-bar/CHANGELOG.md)            |
+| [`@stagefright5/pi-tool-explain`](https://github.com/stagefright5/pi-agent-extensions/releases/tag/%40stagefright5%2Fpi-tool-explain%400.1.0)                   | 0.1.0   | [Changelog](extensions/tool-explain/CHANGELOG.md)          |
+| [`@stagefright5/pi-tool-output-browser`](https://github.com/stagefright5/pi-agent-extensions/releases/tag/%40stagefright5%2Fpi-tool-output-browser%400.3.0)     | 0.3.0   | [Changelog](extensions/tool-output-browser/CHANGELOG.md)   |
+| [`@stagefright5/pi-extension-utils`](https://github.com/stagefright5/pi-agent-extensions/releases/tag/%40stagefright5%2Fpi-extension-utils%400.1.0)             | 0.1.0   | [Changelog](packages/pi-extension-utils/CHANGELOG.md)      |
+| [`@stagefright5/pi-picker`](https://github.com/stagefright5/pi-agent-extensions/releases/tag/%40stagefright5%2Fpi-picker%400.1.0)                               | 0.1.0   | [Changelog](packages/pi-picker/CHANGELOG.md)               |
+
+Highlights:
+
+- Background jobs with a fixed 10-second foreground period, job inspection tools, and a live jobs manager.
+- Tool explanations with structured summary labels and per-tool preferences.
+- Shared ranked pickers for history, tool output, and composer suggestions.
+- Dollar-name skill/template references, persistent command recall, and an integrated composer/status footer.
+- Revised plan review, branch-aware plan restoration, safer persistence, session-lifecycle guards, and UI-summary usage accounting.
+- Plain-language documentation, comments, skills, and prompts. Standalone skills under `skills/` remain Git-distributed rather than npm packages.
+
+Validation: 288 tests passed, all 14 workspace packages passed packing checks, and formatting passed. Lint reported only two existing cleanup-review warnings. Jenkins CLI Operations remains at 0.2.0 and is not part of this release batch.
+
+## Earlier workspace changes
 
 ### Jenkins CLI operations
 
@@ -13,7 +44,7 @@ This file records workspace changes. Published packages keep their release histo
 - Require `--replace` to overwrite a named profile. Lock configuration writes and replace the file atomically.
 - Shorten the skill workflow and document profile setup, selection, migration, and rollback. Keep the dry-run and explicit confirmation requirements for Jenkins mutations.
 - Add tests for profile selection, credential isolation, migration, CLI compatibility, build execution through a fake CLI, and temporary credential cleanup. All 19 Jenkins tests pass without a live controller.
-- Add a pending minor Changeset for `@stagefright5/pi-jenkins-cli-operations`. Package versions remain unchanged.
+- Released as `@stagefright5/pi-jenkins-cli-operations@0.2.0`; it is not awaiting a version bump.
 
 See the [Jenkins package changelog](extensions/jenkins-cli-operations/CHANGELOG.md) for details.
 

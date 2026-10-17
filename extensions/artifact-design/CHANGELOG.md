@@ -2,9 +2,11 @@
 
 ## 0.2.2
 
-### Patch Changes
+### Changed
 
-- 8b3189e: Shorten documentation, remove narration-style comments, and use concrete wording in design guidance, Plan Mode prompts, and artifact validation messages. Preserve approval requirements, command behavior, and compatibility notes. Mark the edited design fundamentals as adapted from upstream rather than verbatim.
+- Shorten the README, skill instructions, and design references without changing approval requirements or command behavior.
+- Clarify artifact validation and preview-stub messages.
+- Mark the design fundamentals as adapted from upstream rather than a verbatim extract, retaining attribution.
 
 ## 0.2.1
 

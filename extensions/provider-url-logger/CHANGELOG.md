@@ -2,13 +2,17 @@
 
 ## 0.1.3
 
-### Patch Changes
+### Fixed
 
-- 8b0bcc5: Preserve bash output and truncation notices on timeout through the host adapter protocol. Restore accent-colored model statuses and legacy fast-status placement. Guard delayed notifications against retired contexts, retain reported summary usage during cancellation and bounded shutdown draining, keep legacy plan restoration read-only until new activity, silently skip unconfigured summaries without a current model, and avoid indexing repeated tool payloads. Narrow status shims and separate settings helpers from storage.
-- 00fb29b: Align with pi 1.2.0: rebuild plan review on public TUI APIs with cancellable interactions and serialized transactional saves, account for every session usage category, and respect configured agent/session directories. Add strict SDK typechecking and regression coverage for workflow, narrow viewports, mouse dispatch, cancellation, and profile isolation.
-- 8b0bcc5: Audit fixes for pi 1.3.0: keep prompt-history I/O off submission with cross-process locking; reconstruct plan state from branch messages/results and activate its tool only in plan mode; store extension preferences separately from Pi settings; protect and clean background logs; rotate physical-model logs without blocking requests; account for UI summary costs in the status bar; share status contracts; expose structured/nested tool results; and use erasable TypeScript with centralized host version pins.
+- Record the dispatched physical model and its configured base URL on the first provider stream event, including when the selected model is virtual.
+- Queue file I/O off the request path and drain it during orderly shutdown.
+- Rotate at 1 MiB, retain one archive, use owner-only files, and protect rotation/appends with a cross-process lock.
+- Respect the configured agent directory. Warn at most once per session on logging failures and never notify through a retired context.
 
-  Existing plan snapshots and recorded directories remain readable. Composer shortcuts and dollar-reference behavior, and all-tool explanations by default, are retained intentionally. Summary costs use durable custom usage entries; Pi's native session total cannot include UI-only calls through the public 1.3.0 API.
+### Limitations
+
+- Requests that fail before their first stream event are not recorded. Forced exits can lose queued lines, and overlapping streams cannot be reliably attributed through the Pi 1.3.0 hooks.
+- The log records configured model URLs, not intercepted HTTP destinations, and does not automatically redact URL query parameters.
 
 ## 0.1.2
 

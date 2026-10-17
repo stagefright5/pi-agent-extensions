@@ -2,11 +2,11 @@
 
 ## 0.1.3
 
-### Patch Changes
+### Fixed
 
-- 8b0bcc5: Audit fixes for pi 1.3.0: keep prompt-history I/O off submission with cross-process locking; reconstruct plan state from branch messages/results and activate its tool only in plan mode; store extension preferences separately from Pi settings; protect and clean background logs; rotate physical-model logs without blocking requests; account for UI summary costs in the status bar; share status contracts; expose structured/nested tool results; and use erasable TypeScript with centralized host version pins.
-
-  Existing plan snapshots and recorded directories remain readable. Composer shortcuts and dollar-reference behavior, and all-tool explanations by default, are retained intentionally. Summary costs use durable custom usage entries; Pi's native session total cannot include UI-only calls through the public 1.3.0 API.
+- Save overrides in `<agent-dir>/openai-fast.json` using private, atomic writes instead of rewriting Pi's settings.
+- Continue reading the legacy `openaiFast` setting when no override exists. Reject malformed saved configuration rather than overwriting it.
+- Register the Fast indicator through the shared model-status contract and remove it on session shutdown. Preserve `/fast`, `--fast`, and OpenAI priority-tier behavior.
 
 ## 0.1.2
 
