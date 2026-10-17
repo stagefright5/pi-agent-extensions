@@ -41,6 +41,7 @@
     ],
     "extensions": [
       "./extensions/bang-dont-ghost/index.ts",
+      "./extensions/codemode-explain/index.ts",
       "./extensions/obsidian-ui/index.ts",
       "./extensions/openai-fast/index.ts",
       "./extensions/plan-mode/index.ts",

@@ -56,6 +56,16 @@ importers:
         version: 1.2.0(@aws-sdk/credential-provider-node@3.972.86)(@smithy/signature-v4@5.7.4)(ws@8.21.3)
     publishDirectory: ../../.tmp/publish/bang-dont-ghost
 
+  extensions/codemode-explain:
+    devDependencies:
+      '@earendil-works/pi-coding-agent':
+        specifier: 'catalog:'
+        version: 1.2.0(@aws-sdk/credential-provider-node@3.972.86)(@smithy/signature-v4@5.7.4)(ws@8.21.3)
+      '@earendil-works/pi-tui':
+        specifier: 'catalog:'
+        version: 1.2.0
+    publishDirectory: ../../.tmp/publish/codemode-explain
+
   extensions/jenkins-cli-operations:
     devDependencies:
       '@earendil-works/pi-coding-agent':

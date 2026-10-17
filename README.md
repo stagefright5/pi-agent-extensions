@@ -16,6 +16,7 @@ The workspace develops and typechecks against pi 1.2.0. Bang Don't Ghost additio
 | ---------------------------------------------------------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
 | [Artifact Design](./extensions/artifact-design/README.md)                    | `@stagefright5/pi-artifact-design`        | Design self-contained HTML artifacts with a local Vite dev server, theme/CSP harness, and single-file build | `/skill:artifact-design`                     |
 | [Bang Don't Ghost](./extensions/bang-dont-ghost/README.md)                   | `@stagefright5/pi-bang-dont-ghost`        | Automatically continue pi after a user-entered single-bang shell command                                    | Automatic                                    |
+| [Codemode Explain](./extensions/codemode-explain/README.md)                  | `@stagefright5/pi-codemode-explain`       | Replace collapsed codemode script previews with a one-line summary written by a small model                 | Automatic                                    |
 | [Jenkins CLI Operations](./extensions/jenkins-cli-operations/README.md)      | `@stagefright5/pi-jenkins-cli-operations` | Guarded Jenkins operations for pi using the official Jenkins CLI                                            | `/skill:jenkins-cli-operations`              |
 | [Obsidian UI](./extensions/obsidian-ui/README.md)                            | `@stagefright5/pi-obsidian-ui`            | A copy-friendly graphite and ice theme with compact tool presentation for pi                                | Automatic tool styling; `obsidian-ice` theme |
 | [OpenAI Fast](./extensions/openai-fast/README.md)                            | `@stagefright5/pi-openai-fast`            | Toggle OpenAI Fast mode (priority service tier) in pi                                                       | `/fast`, `pi --fast`                         |
@@ -39,6 +40,7 @@ After a package is published, install only the extension or skill you want:
 ```bash
 pi install npm:@stagefright5/pi-artifact-design
 pi install npm:@stagefright5/pi-bang-dont-ghost
+pi install npm:@stagefright5/pi-codemode-explain
 pi install npm:@stagefright5/pi-jenkins-cli-operations
 pi install npm:@stagefright5/pi-obsidian-ui
 pi install npm:@stagefright5/pi-openai-fast
