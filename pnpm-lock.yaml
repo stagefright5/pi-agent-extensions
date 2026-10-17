@@ -194,6 +194,9 @@ importers:
       '@stagefright5/pi-extension-utils':
         specifier: workspace:*
         version: link:../../packages/pi-extension-utils
+      typebox:
+        specifier: 'catalog:'
+        version: 1.3.27
     publishDirectory: ../../.tmp/publish/tool-explain
 
   extensions/tool-output-browser:

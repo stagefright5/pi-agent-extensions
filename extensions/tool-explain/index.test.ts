@@ -66,6 +66,7 @@ const call = (code: unknown, toolName = "codemode") => ({
 	input: { code },
 });
 const settle = () => new Promise((resolve) => setImmediate(resolve));
+const label = (text: string) => [{ type: "toolCall", id: "label-1", name: "label", arguments: { label: text } }];
 
 test("wraps default-shell tools and future MCP tools but preserves unknown self-owned shells", () => {
 	const { resolver, commands } = harness();
@@ -110,7 +111,7 @@ test("the real self-shell edit renderer is explained by default and respects exc
 
 test("summarizes each new script once with a cheap model and stores the result", async () => {
 	const { handlers, entries } = harness();
-	const c = ctx(async () => ({ stopReason: "stop", content: [{ type: "text", text: "Read a file." }] }));
+	const c = ctx(async () => ({ stopReason: "stop", content: label("Read a file") }));
 	handlers.get("session_start")!({}, c);
 	assert.equal(handlers.get("tool_call")!(call("await tools.read({path:'a'})"), c), undefined);
 	handlers.get("tool_call")!(call("await tools.read({path:'a'})"), c);
@@ -119,6 +120,12 @@ test("summarizes each new script once with a cheap model and stores the result",
 	await settle();
 	assert.equal(c.requests.length, 1);
 	assert.equal(c.requests[0].model, haiku);
+	// Scripts use the same input shape and prompt as every other tool.
+	assert.deepEqual(JSON.parse(c.requests[0].context.messages[0].content[0].text), {
+		tool: "codemode",
+		arguments: { code: "await tools.read({path:'a'})" },
+	});
+	assert.match(c.requests[0].context.systemPrompt, /tool calls/);
 	assert.deepEqual(entries, [
 		{
 			customType: ENTRY_TYPE,
@@ -141,7 +148,7 @@ test("summary usage is recorded without blocking tools or changing their results
 		totalTokens: 5,
 		cost: { input: 0.1, output: 0.2, cacheRead: 0, cacheWrite: 0, total: 0.3 },
 	};
-	const c = ctx(async () => ({ stopReason: "stop", content: [{ type: "text", text: "Read files" }], usage }));
+	const c = ctx(async () => ({ stopReason: "stop", content: label("Read files"), usage }));
 	handlers.get("session_start")!({}, c);
 	assert.equal(handlers.get("tool_call")!(call("usage-check"), c), undefined);
 	await settle();
@@ -219,7 +226,7 @@ test("stored summaries are reused after a restart, and non-TUI modes make no req
 
 test("uses the configured model and warns when it is unavailable", async () => {
 	const { handlers } = harness();
-	const c = ctx(async () => ({ stopReason: "stop", content: [{ type: "text", text: "Go" }] }));
+	const c = ctx(async () => ({ stopReason: "stop", content: label("Go") }));
 	handlers.get("session_start")!({}, c);
 	try {
 		settings({ toolExplain: { model: "anthropic/claude-opus" } });
@@ -256,7 +263,7 @@ test("warns once on failure and drops results that land after the session ended"
 	handlers.get("tool_call")!(call("c"), slow);
 	await settle();
 	handlers.get("session_shutdown")!({}, slow);
-	finish({ stopReason: "stop", content: [{ type: "text", text: "late" }] });
+	finish({ stopReason: "stop", content: label("late") });
 	await settle();
 	assert.deepEqual(entries, []);
 	assert.equal(slow.requests[0].options.signal.aborted, true);
@@ -264,7 +271,7 @@ test("warns once on failure and drops results that land after the session ended"
 
 test("generic calls use tool identity, descriptions and arguments; reuse persisted summaries", async () => {
 	const { handlers, entries } = harness();
-	const c = ctx(async () => ({ stopReason: "stop", content: [{ type: "text", text: "List files" }] }));
+	const c = ctx(async () => ({ stopReason: "stop", content: label("List files") }));
 	handlers.get("session_start")!({}, c);
 	const event = { toolName: "bash", input: { command: "ls", timeout: 5 } };
 	handlers.get("tool_call")!(event, c);
@@ -335,7 +342,7 @@ test("an aborted old request cannot delete a new session's pending summary", asy
 	await settle();
 	handlers.get("tool_call")!(call("same"), fresh);
 	assert.equal(fresh.requests.length, 1);
-	finish({ stopReason: "stop", content: [{ type: "text", text: "Do work" }] });
+	finish({ stopReason: "stop", content: label("Do work") });
 	await settle();
 	assert.equal(entries.length, 1);
 });

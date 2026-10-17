@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-	cleanSummary,
+	cleanLabel,
+	LABEL_TOOL,
 	codeKey,
 	toolKey,
 	parseModelRef,
@@ -39,14 +40,10 @@ test("model references and summaries are normalized", () => {
 		id: "google/gemini-flash",
 	});
 	for (const bad of [undefined, 3, "", "noslash", "/id", "provider/"]) assert.equal(parseModelRef(bad), undefined);
-	assert.equal(
-		cleanSummary('\n  - Summary: "Read config files and report versions."\nmore'),
-		"Read config files and report versions",
-	);
-	assert.equal(cleanSummary("\u001b[31m**List MCP tools**\u001b[0m"), "List MCP tools");
-	assert.equal(cleanSummary("   "), "");
+	assert.equal(cleanLabel("\u001b[31mList MCP\n\ttools\u0007 "), "List MCP tools");
+	assert.equal(cleanLabel("   "), "");
 	// The renderer wraps long summaries.
-	assert.equal(cleanSummary("word ".repeat(60)), "word ".repeat(60).trim());
+	assert.equal(cleanLabel("word ".repeat(60)), "word ".repeat(60).trim());
 	assert.equal(codeKey("a"), codeKey("a"));
 	assert.notEqual(codeKey("a"), codeKey("b"));
 	assert.equal(toolKey("codemode", { code: "x" }), codeKey("x"));
@@ -59,7 +56,7 @@ test("model references and summaries are normalized", () => {
 	assert.notEqual(toolKey("x", [1, 2]), toolKey("x", [2, 1]));
 });
 
-test("summarize sends the script without reasoning and rejects provider failures", async () => {
+test("summarize requests a structured label with minimal reasoning and no token cap", async () => {
 	let seen: { context: any; options: any } | undefined;
 	const registry = (message: object) => ({
 		streamSimple: (_model: unknown, context: unknown, options: unknown) => {
@@ -67,19 +64,32 @@ test("summarize sends the script without reasoning and rejects provider failures
 			return { result: async () => message };
 		},
 	});
-	const ok = registry({ stopReason: "stop", content: [{ type: "text", text: "Read twenty files." }] });
+	const labelled = (label: unknown, text = "") =>
+		registry({
+			stopReason: "toolUse",
+			content: [
+				...(text ? [{ type: "text", text }] : []),
+				{ type: "toolCall", id: "1", name: "label", arguments: { label } },
+			],
+		});
+	const ok = labelled("Read twenty files", "We need describe script");
 	const signal = new AbortController().signal;
+	// Free-form reply text never becomes the label.
 	assert.equal(await summarize(ok as never, model("a", "b", 0, 0), CODE, signal), "Read twenty files");
 	assert.equal(seen?.context.messages[0].content[0].text, CODE);
+	assert.deepEqual(seen?.context.tools, [LABEL_TOOL]);
 	assert.equal(seen?.options.signal, signal);
-	assert.equal(seen?.options.reasoning, undefined);
+	assert.equal(seen?.options.reasoning, "minimal");
+	assert.equal("maxTokens" in seen!.options, false);
 	const huge = "x".repeat(20_000);
 	await summarize(ok as never, model("a", "b", 0, 0), huge, signal);
-	assert.match(seen?.context.messages[0].content[0].text, /8000 more characters$/);
+	assert.match(seen?.context.messages[0].content[0].text, /\[\.\.\. 8000 more characters\]$/);
 	const failed = registry({ stopReason: "error", errorMessage: "rate limited", content: [] });
 	await assert.rejects(summarize(failed as never, model("a", "b", 0, 0), CODE, signal), /rate limited/);
-	const empty = registry({ stopReason: "stop", content: [{ type: "text", text: " " }] });
-	await assert.rejects(summarize(empty as never, model("a", "b", 0, 0), CODE, signal), /empty summary/);
+	const textOnly = registry({ stopReason: "stop", content: [{ type: "text", text: "Read twenty files" }] });
+	await assert.rejects(summarize(textOnly as never, model("a", "b", 0, 0), CODE, signal), /no label/);
+	for (const bad of [" ", 3, undefined])
+		await assert.rejects(summarize(labelled(bad) as never, model("a", "b", 0, 0), CODE, signal), /no label/);
 });
 
 test("the store redraws waiting rows only once and forgets them on clear", () => {

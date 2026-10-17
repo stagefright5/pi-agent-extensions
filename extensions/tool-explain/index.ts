@@ -1,6 +1,6 @@
 import { createEditToolDefinition, getAgentDir, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { createUsageTracker, notifyIfActive } from "@stagefright5/pi-extension-utils";
-import { toolKey, ENTRY_TYPE, pickModel, summarize, SummaryStore, TOOL_SYSTEM_PROMPT } from "./explain.ts";
+import { toolKey, ENTRY_TYPE, pickModel, summarize, SummaryStore } from "./explain.ts";
 import { enabled, loadSettings, registerPicker, type ExplainSettings } from "./settings.ts";
 import { explainRenderers, stopAnimations } from "./renderer.ts";
 
@@ -67,16 +67,15 @@ export default function toolExplain(pi: ExtensionAPI): void {
 		if (store.get(key)) return;
 		const configured = settings.model;
 		if (session.signal.aborted || (!configured && !ctx.model)) return;
-		const input = isCode
-			? (code as string)
-			: JSON.stringify({
-					tool: event.toolName,
-					description: pi
-						.getAllTools()
-						.find((tool) => tool.name === event.toolName)
-						?.description?.slice(0, 2000),
-					arguments: event.input,
-				});
+		// Arguments come before the description, so clipping a long input drops description text first.
+		const input = JSON.stringify({
+			tool: event.toolName,
+			arguments: event.input,
+			description: pi
+				.getAllTools()
+				.find((tool) => tool.name === event.toolName)
+				?.description?.slice(0, 2000),
+		});
 		store.set(key, { status: "pending" });
 		const { signal } = session;
 		const requestSignal = AbortSignal.any([signal, AbortSignal.timeout(TIMEOUT_MS)]);
@@ -98,14 +97,7 @@ export default function toolExplain(pi: ExtensionAPI): void {
 						return;
 					}
 					modelName = `${model.provider}/${model.id}`;
-					return summarize(
-						ctx.modelRegistry,
-						model,
-						input,
-						requestSignal,
-						isCode ? undefined : TOOL_SYSTEM_PROMPT,
-						accounting.record,
-					);
+					return summarize(ctx.modelRegistry, model, input, requestSignal, accounting.record);
 				})(),
 			)
 			.then((summary) => {
