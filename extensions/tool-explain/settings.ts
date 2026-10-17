@@ -1,6 +1,5 @@
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { readJsonFile, writeJsonFile, getSetting } from "@stagefright5/pi-extension-utils";
 import { join } from "node:path";
-import { randomUUID } from "node:crypto";
 import { getAgentDir, getSettingsListTheme, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Container, SettingsList, Text } from "@earendil-works/pi-tui";
 import { parseModelRef, type ModelRef } from "./explain.ts";
@@ -12,23 +11,12 @@ function object(value: unknown): value is Record<string, unknown> {
 	return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function readSettings(dir: string): Record<string, unknown> {
-	let text: string;
-	try {
-		text = readFileSync(join(dir, "settings.json"), "utf8");
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
-		throw error;
-	}
-	const value: unknown = JSON.parse(text);
-	if (!object(value)) throw new Error("settings.json must contain an object");
-	return value;
-}
-
-export function loadSettings(dir = getAgentDir()): ExplainSettings {
-	const raw = readSettings(dir).toolExplain;
-	if (raw !== undefined && !object(raw)) throw new Error("toolExplain must be an object");
-	const value = raw ?? {};
+export function loadSettings(dir = getAgentDir(), effective: object = {}): ExplainSettings {
+	const saved = readJsonFile(join(dir, "tool-explain.json"));
+	if (saved !== undefined && !object(saved)) throw new Error("tool-explain.json must contain an object");
+	const legacy = getSetting(effective, "toolExplain") ?? getSetting(effective, "codemodeExplain");
+	if (legacy !== undefined && !object(legacy)) throw new Error("toolExplain must be an object");
+	const value = { ...legacy, ...saved };
 	const strings = (v: unknown): v is string[] => Array.isArray(v) && v.every((s) => typeof s === "string");
 	if (value.tools !== undefined && value.tools !== "all" && !strings(value.tools))
 		throw new Error('toolExplain.tools must be "all" or a list of tool names');
@@ -45,25 +33,16 @@ export function enabled(selection: Selection, name: string): boolean {
 	return (selection.tools === "all" || selection.tools.includes(name)) && !selection.excludeTools.includes(name);
 }
 
-/** Merge into the current file. Abort if it cannot be read or parsed. */
+/** A complete selection in an extension-owned file; never rewrite Pi's shared settings. */
 export function saveSelection(selection: Selection, dir = getAgentDir()): void {
-	const settings = readSettings(dir);
-	const previous = settings.toolExplain;
-	if (previous !== undefined && !object(previous)) throw new Error("toolExplain must be an object");
-	settings.toolExplain = { ...previous, ...selection };
-	mkdirSync(dir, { recursive: true });
-	const temporary = join(dir, `.settings-${randomUUID()}.tmp`);
-	try {
-		writeFileSync(temporary, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600, flag: "wx" });
-		renameSync(temporary, join(dir, "settings.json"));
-	} finally {
-		rmSync(temporary, { force: true });
-	}
+	loadSettings(dir); // Fail closed on malformed saved configuration.
+	const saved = readJsonFile(join(dir, "tool-explain.json"));
+	writeJsonFile(join(dir, "tool-explain.json"), { ...(object(saved) ? saved : {}), ...selection });
 }
 
 export function registerPicker(pi: ExtensionAPI): void {
 	pi.registerCommand("tool-explain", {
-		description: "Choose tools with AI explanations (saved in agent settings)",
+		description: "Choose tools with AI explanations (saved in tool-explain.json)",
 		handler: async (_args, ctx) => {
 			if (ctx.mode !== "tui") {
 				ctx.ui.notify("/tool-explain requires TUI mode", "warning");
@@ -72,7 +51,7 @@ export function registerPicker(pi: ExtensionAPI): void {
 			await ctx.waitForIdle();
 			let selection: Selection;
 			try {
-				selection = loadSettings();
+				selection = loadSettings(getAgentDir(), pi.getSettings());
 			} catch (error) {
 				ctx.ui.notify(`tool-explain: ${String(error)}`, "error");
 				return;

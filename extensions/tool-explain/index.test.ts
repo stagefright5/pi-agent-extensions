@@ -1,15 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createEditToolDefinition } from "@earendil-works/pi-coding-agent";
 import extension from "./index.ts";
 import { codeKey, ENTRY_TYPE, toolKey } from "./explain.ts";
 
 // Isolate tests from the user's agent settings.
 const agentDir = mkdtempSync(join(tmpdir(), "tool-explain-"));
 process.env.PI_CODING_AGENT_DIR = agentDir;
-const settings = (value: object) => writeFileSync(join(agentDir, "settings.json"), JSON.stringify(value));
+let effectiveSettings: object = {};
+const settings = (value: object) => {
+	effectiveSettings = value;
+	rmSync(join(agentDir, "tool-explain.json"), { force: true });
+};
+process.on("exit", () => rmSync(agentDir, { recursive: true, force: true }));
 settings({});
 
 type Handler = (event: any, ctx: any) => unknown;
@@ -20,6 +26,7 @@ function harness() {
 	const entries: { customType: string; data: any }[] = [];
 	let resolver: ((name: string, next: () => unknown) => unknown) | undefined;
 	extension({
+		getSettings: () => effectiveSettings,
 		on: (name: string, handler: Handler) => void handlers.set(name, handler),
 		registerCommand: (name: string, command: { handler: Handler }) => void commands.set(name, command),
 		getAllTools: () => [{ name: "bash", description: "Execute shell commands" }],
@@ -43,7 +50,7 @@ function ctx(reply: () => Promise<object>, stored: object[] = []) {
 		ui: { notify: (text: string) => notices.push(text) },
 		sessionManager: { getEntries: () => stored },
 		modelRegistry: {
-			getAvailable: () => [opus, haiku],
+			getAvailableOfType: async () => [opus, haiku],
 			streamSimple: (model: unknown, context: unknown, options: unknown) => {
 				requests.push({ model, context, options });
 				return { result: reply };
@@ -60,16 +67,44 @@ const call = (code: unknown, toolName = "codemode") => ({
 });
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 
-test("wraps all tools including self-shell and not-yet-registered MCP tools", () => {
+test("wraps default-shell tools and future MCP tools but preserves unknown self-owned shells", () => {
 	const { resolver, commands } = harness();
 	assert.ok(commands.has("tool-explain"));
 	for (const name of ["codemode", "bash", "edit", "mcp__future__search"]) {
 		const native = { renderShell: "self", renderCall() {}, renderResult() {} };
-		const wrapped = resolver(name, () => native) as typeof native;
-		assert.notEqual(wrapped.renderCall, native.renderCall);
-		assert.notEqual(wrapped.renderResult, native.renderResult);
+		assert.equal(
+			resolver(name, () => native),
+			native,
+		);
+		const defaultShell = { ...native, renderShell: "default" };
+		const wrapped = resolver(name, () => defaultShell) as typeof native;
+		assert.notEqual(wrapped.renderCall, defaultShell.renderCall);
 		assert.equal(wrapped.renderShell, "default");
 		assert.ok(resolver(name, () => undefined));
+	}
+});
+
+test("the real self-shell edit renderer is explained by default and respects exclusions", () => {
+	const native = createEditToolDefinition("/tmp");
+	assert.equal(native.renderShell, "self");
+	try {
+		for (const selection of [{}, { tools: "all", excludeTools: ["edit"] }, { tools: ["bash"] }]) {
+			settings({ toolExplain: selection });
+			const { handlers, resolver } = harness();
+			handlers.get("session_start")!(
+				{},
+				ctx(async () => ({})),
+			);
+			const wrapped = resolver("edit", () => native) as typeof native;
+			if ("tools" in selection) assert.equal(wrapped, native);
+			else {
+				assert.equal(wrapped.renderShell, "default");
+				assert.notEqual(wrapped.renderCall, native.renderCall);
+				assert.notEqual(wrapped.renderResult, native.renderResult);
+			}
+		}
+	} finally {
+		settings({});
 	}
 });
 
@@ -96,6 +131,81 @@ test("summarizes each new script once with a cheap model and stores the result",
 	]);
 });
 
+test("summary usage is recorded without blocking tools or changing their results", async () => {
+	const { handlers, entries } = harness();
+	const usage = {
+		input: 2,
+		output: 3,
+		cacheRead: 0,
+		cacheWrite: 0,
+		totalTokens: 5,
+		cost: { input: 0.1, output: 0.2, cacheRead: 0, cacheWrite: 0, total: 0.3 },
+	};
+	const c = ctx(async () => ({ stopReason: "stop", content: [{ type: "text", text: "Read files" }], usage }));
+	handlers.get("session_start")!({}, c);
+	assert.equal(handlers.get("tool_call")!(call("usage-check"), c), undefined);
+	await settle();
+	const recorded = entries.filter((entry) => entry.customType === "extension-model-usage");
+	assert.deepEqual(
+		recorded.map((entry) => entry.data),
+		[{ source: "tool-explain", usage }],
+	);
+	handlers.get("tool_call")!(call("usage-check"), c);
+	await settle();
+	assert.equal(entries.filter((entry) => entry.customType === "extension-model-usage").length, 1);
+});
+
+test("shutdown records usage returned by an aborted request, but never its summary", async () => {
+	const { handlers, entries } = harness();
+	let finish!: (value: object) => void;
+	const c = ctx(
+		() =>
+			new Promise((resolve) => {
+				finish = resolve;
+			}),
+	);
+	handlers.get("session_start")!({}, c);
+	handlers.get("tool_call")!(call("cancelled-billable"), c);
+	await settle();
+	const shutdown = handlers.get("session_shutdown")!({}, c);
+	assert.equal(c.requests[0].options.signal.aborted, true);
+	const usage = { cost: { total: 0.25 } };
+	finish({ stopReason: "aborted", content: [], usage });
+	await shutdown;
+	assert.deepEqual(entries, [{ customType: "extension-model-usage", data: { source: "tool-explain", usage } }]);
+	assert.deepEqual(c.notices, []);
+});
+
+test("an absent default model is silent and does not start discovery or generation", async () => {
+	const { handlers, entries } = harness();
+	const c = { ...ctx(async () => ({})), model: undefined };
+	c.modelRegistry.getAvailableOfType = async () => {
+		throw new Error("must not discover");
+	};
+	handlers.get("session_start")!({}, c);
+	handlers.get("tool_call")!(call("no-model"), c);
+	await settle();
+	assert.deepEqual(c.notices, []);
+	assert.deepEqual(c.requests, []);
+	assert.deepEqual(entries, []);
+});
+
+test("a revoked notification context cannot cause an unhandled rejection", async () => {
+	const { handlers } = harness();
+	const c = ctx(async () => {
+		throw new Error("provider failed");
+	});
+	handlers.get("session_start")!({}, c);
+	Object.defineProperty(c, "ui", {
+		get() {
+			throw new Error("stale context");
+		},
+	});
+	handlers.get("tool_call")!(call("stale-notice"), c);
+	await settle();
+	await handlers.get("session_shutdown")!({}, c);
+});
+
 test("stored summaries are reused after a restart, and non-TUI modes make no requests", async () => {
 	const { handlers } = harness();
 	const stored = [{ type: "custom", customType: ENTRY_TYPE, data: { key: codeKey("x"), summary: "Do x" } }];
@@ -113,8 +223,11 @@ test("uses the configured model and warns when it is unavailable", async () => {
 	handlers.get("session_start")!({}, c);
 	try {
 		settings({ toolExplain: { model: "anthropic/claude-opus" } });
+		handlers.get("session_start")!({}, c);
 		handlers.get("tool_call")!(call("p"), c);
+		await settle();
 		settings({ toolExplain: { model: "openai/missing" } });
+		handlers.get("session_start")!({}, c);
 		handlers.get("tool_call")!(call("q"), c);
 		handlers.get("tool_call")!(call("r"), c);
 	} finally {
@@ -141,6 +254,7 @@ test("warns once on failure and drops results that land after the session ended"
 	const slow = ctx(() => new Promise((resolve) => (finish = resolve)));
 	handlers.get("session_start")!({}, slow);
 	handlers.get("tool_call")!(call("c"), slow);
+	await settle();
 	handlers.get("session_shutdown")!({}, slow);
 	finish({ stopReason: "stop", content: [{ type: "text", text: "late" }] });
 	await settle();
@@ -206,6 +320,7 @@ test("an aborted old request cannot delete a new session's pending summary", asy
 	);
 	handlers.get("session_start")!({}, old);
 	handlers.get("tool_call")!(call("same"), old);
+	await settle();
 	let finish: (value: object) => void = () => {};
 	const fresh = ctx(
 		() =>
@@ -215,6 +330,7 @@ test("an aborted old request cannot delete a new session's pending summary", asy
 	);
 	handlers.get("session_start")!({}, fresh);
 	handlers.get("tool_call")!(call("same"), fresh);
+	await settle();
 	reject(new Error("aborted"));
 	await settle();
 	handlers.get("tool_call")!(call("same"), fresh);
@@ -224,7 +340,7 @@ test("an aborted old request cannot delete a new session's pending summary", asy
 	assert.equal(entries.length, 1);
 });
 
-test("picker saves choices to agent settings and reloads only after a change", async () => {
+test("picker saves choices to its own file and reloads only after a change", async () => {
 	const host = new URL(".", import.meta.resolve("@earendil-works/pi-coding-agent"));
 	const { initTheme, theme } = await import(new URL("modes/interactive/theme/theme.js", host).href);
 	initTheme("dark");

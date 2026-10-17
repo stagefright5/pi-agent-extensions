@@ -3,7 +3,7 @@ import test from "node:test";
 import { stripVTControlCharacters as plain } from "node:util";
 import { visibleWidth, type TUI } from "@earendil-works/pi-tui";
 import { browserFrame } from "./browser-layout.ts";
-import { ToolOutputBrowser, type ToolOutputRecord } from "./index.ts";
+import { collectToolOutputs, ToolOutputBrowser, type ToolOutputRecord } from "./index.ts";
 
 const host = new URL(".", import.meta.resolve("@earendil-works/pi-coding-agent"));
 const { KeybindingsManager } = await import(new URL("core/keybindings.js", host).href);
@@ -23,6 +23,90 @@ const record: ToolOutputRecord = {
 	output: Array.from({ length: 100 }, (_, i) => `${i} 世界 é 🧊`).join("\n"),
 	searchText: "read src/世界.ts",
 };
+
+test("structured and nested results are collected, searchable, and available in detail tabs", () => {
+	const results = collectToolOutputs({
+		sessionManager: {
+			getBranch: () => [
+				{
+					id: "s",
+					type: "message",
+					message: {
+						role: "toolResult",
+						toolCallId: "nested",
+						toolName: "codemode",
+						content: [],
+						structuredContent: { value: "structured-value" },
+						nestedCalls: { calls: [{ name: "child-tool" }] },
+					},
+				},
+			],
+		},
+	} as never);
+	assert.match(results[0].searchText, /structured-value/);
+	assert.match(results[0].searchText, /child-tool/);
+	const browser = new ToolOutputBrowser(
+		tui,
+		() => theme,
+		new KeybindingsManager(),
+		results,
+		"",
+		() => {},
+	);
+	browser.handleInput("\r");
+	for (let i = 0; i < 3; i++) browser.handleInput("\t");
+	assert.match(browser.render(100).map(plain).join("\n"), /structured-value/);
+	browser.handleInput("\t");
+	assert.match(browser.render(100).map(plain).join("\n"), /child-tool/);
+});
+
+test("search indexes large repeated output once without changing structured or nested views", () => {
+	const output = "unique-output-line\n".repeat(20_000);
+	const structuredContent = { output, exit_code: 17, extra: "structured-only" };
+	const nestedCalls = [{ result: { output }, extra: "nested-only" }];
+	const [result] = collectToolOutputs({
+		sessionManager: {
+			getBranch: () => [
+				{
+					id: "bash",
+					type: "message",
+					message: {
+						role: "toolResult",
+						toolCallId: "bash",
+						toolName: "bash",
+						content: [{ type: "text", text: output + "\nCommand exited with code 17" }],
+						structuredContent,
+						nestedCalls,
+					},
+				},
+			],
+		},
+	} as never);
+	assert.equal(result.searchText.split("unique-output-line").length - 1, 20_000);
+	assert.ok(result.searchText.length < output.length + 300);
+	assert.match(result.searchText, /structured-only/);
+	assert.match(result.searchText, /nested-only/);
+	assert.match(result.searchText, /exit_code/);
+	assert.equal(result.structuredContent, structuredContent);
+	assert.equal(result.nestedCalls, nestedCalls);
+});
+
+test("detail navigation honors remapped cancel and selection bindings", () => {
+	const kb = new KeybindingsManager({ "tui.select.cancel": ["ctrl+q"], "tui.select.down": ["ctrl+n"] });
+	const browser = new ToolOutputBrowser(
+		tui,
+		() => theme,
+		kb,
+		[record],
+		"",
+		() => {},
+	);
+	browser.handleInput("\r");
+	browser.handleInput("\x0e");
+	assert.match(browser.render(100).map(plain).join("\n"), /2-\d+\/100/);
+	browser.handleInput("\x11");
+	assert.match(browser.render(100).map(plain).join("\n"), /Tool output/);
+});
 
 test("open-sided frames fit tiny and wide terminals without vertical rails", () => {
 	for (const width of [0, 1, 2, 10, 40, 80, 120, 160]) {

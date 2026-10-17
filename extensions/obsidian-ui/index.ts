@@ -13,7 +13,7 @@ export default function obsidianUi(pi: ExtensionAPI): void {
 		pi.on("session_start", (_event, ctx) => {
 			if (ctx.mode === "tui")
 				ctx.ui.notify(
-					"Obsidian UI tool styling requires pi 1.2+. The theme can still be selected separately.",
+					"Obsidian UI tool styling requires pi 1.0.1+. The theme can still be selected separately.",
 					"warning",
 				);
 		});

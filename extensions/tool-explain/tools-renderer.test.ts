@@ -59,7 +59,7 @@ test("generic rows hide raw arguments/output, wrap summaries, and expand native 
 		text: "List files in the current working directory",
 	});
 	const call = r.call();
-	assert.match(render(call), /✓ bash executed: List files/);
+	assert.match(render(call), /✓ bash tool completed: List files/);
 	assert.doesNotMatch(render(call), /native arguments/);
 	for (const line of call.render(15)) assert.ok(visibleWidth(line) <= 15);
 	assert.match(render(call, 15).replace(/\s+/g, " "), /current working directory/);
@@ -71,11 +71,11 @@ test("generic rows hide raw arguments/output, wrap summaries, and expand native 
 
 test("fallback tools preserve raw JSON and text on expansion and show failures collapsed", () => {
 	const r = row("mcp__test__search", {}, { query: "hello" });
-	assert.equal(render(r.call()), "✓ mcp__test__search executed");
+	assert.equal(render(r.call()), "✓ mcp__test__search tool completed");
 	r.context.isError = true;
 	const call = r.call();
 	assert.match(render(r.result("Access denied\nstack trace")), /tool failed · Took 123ms/);
-	assert.match(render(call), /✗ mcp__test__search failed\n✗ mcp__test__search — Access denied/);
+	assert.match(render(call), /✗ mcp__test__search tool failed\n✗ mcp__test__search — Access denied/);
 	assert.doesNotMatch(render(call), /stack trace/);
 	r.context.expanded = true;
 	assert.match(render(r.call()), /"query": "hello"/);
@@ -108,12 +108,12 @@ test("generic rows animate writing, executing and summary pending phases", (t) =
 	const r = row("write");
 	r.context.isPartial = true;
 	r.context.argsComplete = false;
-	assert.match(render(r.call()), /Writing write tool call/);
+	assert.match(render(r.call()), /Calling write tool/);
 	r.context.argsComplete = true;
-	assert.match(render(r.call()), /Executing write/);
+	assert.match(render(r.call()), /Running write tool/);
 	r.context.isPartial = false;
 	r.store.set(toolKey("write", r.context.args), { status: "pending" });
-	assert.match(render(r.call()), /✓ write executed:/);
+	assert.match(render(r.call()), /✓ write tool completed:/);
 	r.store.set(toolKey("write", r.context.args), { status: "failed" });
-	assert.equal(render(r.call()), "✓ write executed");
+	assert.equal(render(r.call()), "✓ write tool completed");
 });

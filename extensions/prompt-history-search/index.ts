@@ -1,4 +1,7 @@
-import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import lockfile from "proper-lockfile";
+import { notifyIfActive } from "@stagefright5/pi-extension-utils";
+import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import {
@@ -256,10 +259,14 @@ async function writePersistedIndex(
 		prompts: mergePrompts([prompts], tombstones),
 		...(tombstones.length ? { deleted: tombstones } : {}),
 	};
-	const tempPath = `${indexPath}.${process.pid}.tmp`;
-	await mkdir(dirname(indexPath), { recursive: true });
-	await writeFile(tempPath, `${JSON.stringify(payload)}\n`, "utf8");
-	await rename(tempPath, indexPath);
+	const tempPath = `${indexPath}.${randomUUID()}.tmp`;
+	await mkdir(dirname(indexPath), { recursive: true, mode: 0o700 });
+	try {
+		await writeFile(tempPath, `${JSON.stringify(payload)}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
+		await rename(tempPath, indexPath);
+	} finally {
+		await rm(tempPath, { force: true });
+	}
 }
 
 async function updatePersistedIndex(
@@ -270,20 +277,29 @@ async function updatePersistedIndex(
 	},
 ): Promise<PromptRecord[]> {
 	let updatedPrompts: PromptRecord[] = [];
+	// Capture the profile at submission, before queued work or session replacement.
+	const indexPath = historyIndexPath();
 	const run = indexWriteQueue
 		.catch(() => undefined)
 		.then(async () => {
-			// Resolve the profile once: reading one profile and writing another would replace its history.
-			const indexPath = historyIndexPath();
-			const current = await readPersistedIndex(indexPath);
-			if (current.unreadable) {
-				// Never overwrite history that could not be read; keep it next to the fresh index.
-				await rename(indexPath, `${indexPath}.unreadable-${Date.now()}`);
+			await mkdir(dirname(indexPath), { recursive: true, mode: 0o700 });
+			// Atomic rename alone cannot protect a cross-process read/modify/write.
+			const release = await lockfile.lock(indexPath, {
+				realpath: false,
+				retries: { retries: 100, minTimeout: 10, maxTimeout: 100 },
+			});
+			try {
+				const current = await readPersistedIndex(indexPath);
+				if (current.unreadable) {
+					await rename(indexPath, `${indexPath}.unreadable-${Date.now()}`);
+				}
+				const next = update(current);
+				const deleted = next.deleted ?? current.deleted;
+				updatedPrompts = mergePrompts([next.prompts], deleted);
+				await writePersistedIndex(indexPath, updatedPrompts, next.bootstrappedAt, deleted);
+			} finally {
+				await release();
 			}
-			const next = update(current);
-			const deleted = next.deleted ?? current.deleted;
-			updatedPrompts = mergePrompts([next.prompts], deleted);
-			await writePersistedIndex(indexPath, updatedPrompts, next.bootstrappedAt, deleted);
 		});
 	indexWriteQueue = run;
 	await run;
@@ -636,7 +652,11 @@ export function createPromptHistoryPicker(options: PromptHistoryPickerOptions) {
 
 export default function promptHistorySearchExtension(pi: ExtensionAPI): void {
 	let uiContext: ExtensionContext | undefined;
+	let session = new AbortController();
 	pi.on("session_start", (_event, ctx) => {
+		session.abort();
+		session = new AbortController();
+		const { signal } = session;
 		uiContext = ctx;
 		if (ctx.mode !== "tui") return;
 		// Offer persisted prompts (all projects, newest first) to an Up/Down-capable
@@ -645,6 +665,7 @@ export default function promptHistorySearchExtension(pi: ExtensionAPI): void {
 			.catch(() => undefined)
 			.then(() => readPersistedIndex())
 			.then((index) => {
+				if (signal.aborted) return;
 				const prompts = [...new Set(index.prompts.map((prompt) => prompt.text))].slice(0, RECALL_LIMIT);
 				if (prompts.length) pi.events.emit("prompt-history-search:recent", { prompts });
 			})
@@ -656,36 +677,32 @@ export default function promptHistorySearchExtension(pi: ExtensionAPI): void {
 	pi.events.on("prompt-truly-mine:slash-submit", (value) => {
 		const prompt = promptRecordFromUnknown(value);
 		if (!prompt?.text.startsWith("/")) return;
+		const ctx = uiContext;
+		const { signal } = session;
 		void appendPromptToPersistedIndex(prompt).catch((error: unknown) => {
-			if (uiContext?.hasUI) {
-				const message = error instanceof Error ? error.message : String(error);
-				uiContext.ui.notify(`Could not persist command history: ${message}`, "warning");
-			}
+			if (ctx) notifyIfActive(signal, ctx, `Could not persist command history: ${String(error)}`);
 		});
 	});
 	pi.on("session_shutdown", async () => {
-		// Includes /quit and /reload, whose handlers run immediately after submission.
-		await indexWriteQueue.catch(() => undefined);
+		// Stop UI work before draining persistence, including on /reload and replacement.
+		session.abort();
 		uiContext = undefined;
+		await indexWriteQueue.catch(() => undefined);
 	});
 
-	pi.on("input", async (event, ctx) => {
+	pi.on("input", (event, ctx) => {
 		if (event.source === "extension" || !shouldIndexInputText(event.text)) return { action: "continue" as const };
 
-		try {
-			await appendPromptToPersistedIndex({
-				text: event.text.trim(),
-				timestamp: Date.now(),
-				sessionPath: ctx.sessionManager.getSessionFile() ?? "",
-				sessionName: ctx.sessionManager.getSessionName(),
-				cwd: ctx.cwd,
-			});
-		} catch (error) {
-			if (ctx.hasUI) {
-				const message = error instanceof Error ? error.message : String(error);
-				ctx.ui.notify(`Could not persist prompt history: ${message}`, "warning");
-			}
-		}
+		const { signal } = session;
+		void appendPromptToPersistedIndex({
+			text: event.text.trim(),
+			timestamp: Date.now(),
+			sessionPath: ctx.sessionManager.getSessionFile() ?? "",
+			sessionName: ctx.sessionManager.getSessionName(),
+			cwd: ctx.cwd,
+		}).catch((error: unknown) => {
+			notifyIfActive(signal, ctx, `Could not persist prompt history: ${String(error)}`);
+		});
 
 		return { action: "continue" as const };
 	});

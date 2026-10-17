@@ -13,8 +13,8 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "test": "node --experimental-transform-types --test src/**/*.test.ts",
-    "bench": "node --experimental-transform-types bench/bench.ts",
+    "test": "node --test src/**/*.test.ts",
+    "bench": "node bench/bench.ts",
     "prepack": "node ../../scripts/package-tools.mjs stage-package"
   },
   "peerDependencies": {

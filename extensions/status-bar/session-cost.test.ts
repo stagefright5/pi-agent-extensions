@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
+import { EXTENSION_USAGE_TYPE } from "@stagefright5/pi-extension-utils";
 import { createSessionCostReader, totalSessionCost } from "./session-cost.ts";
 
 const usage = (cost: number) => ({
@@ -54,6 +55,14 @@ test("includes assistant, tool, compaction, branch-summary, and standalone usage
 		]),
 		15,
 	);
+});
+
+test("UI-owned summary costs are included once, across branches and reloads", () => {
+	const session = SessionManager.inMemory();
+	session.appendCustomEntry(EXTENSION_USAGE_TYPE, { source: "plan-mode-summary", usage: usage(0.25) });
+	session.appendCustomEntry(EXTENSION_USAGE_TYPE, { source: "tool-explain", usage: usage(0.1) });
+	session.appendCustomEntry(EXTENSION_USAGE_TYPE, { usage: { cost: { total: "invalid" } } });
+	assert.equal(totalSessionCost(session.getEntries()), 0.35);
 });
 
 test("cost cache invalidates on appended entries, branch movement, and session replacement", () => {

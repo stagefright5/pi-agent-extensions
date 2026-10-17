@@ -8,12 +8,14 @@
     "fast-mode"
   ],
   "scripts": {
+    "test": "node --test *.test.ts",
     "prepack": "node ../../scripts/package-tools.mjs stage-package"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*"
   },
   "devDependencies": {
+    "@stagefright5/pi-extension-utils": "workspace:*",
     "@earendil-works/pi-coding-agent": "catalog:"
   },
   "pi": {

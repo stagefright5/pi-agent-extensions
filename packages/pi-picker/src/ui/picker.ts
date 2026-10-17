@@ -137,7 +137,10 @@ export class Picker<T> implements Component, Focusable {
 	private listRows = 0;
 	private _focused = false;
 
-	constructor(private readonly options: PickerOptions<T>) {
+	private readonly options: PickerOptions<T>;
+
+	constructor(options: PickerOptions<T>) {
+		this.options = options;
 		this.index = new SearchIndex(options.text, options.items);
 		const boost = options.boost;
 		this.searcher = new Searcher(this.index, {

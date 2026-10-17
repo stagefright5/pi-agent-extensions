@@ -1,3 +1,4 @@
+import { EXTENSION_USAGE_TYPE } from "@stagefright5/pi-extension-utils";
 import type { ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 
 /** Match pi's cumulative billing: all branches, including non-assistant usage. */
@@ -6,6 +7,9 @@ export function totalSessionCost(entries: readonly SessionEntry[]): number {
 	for (const entry of entries) {
 		if (entry.type === "usage" || entry.type === "compaction" || entry.type === "branch_summary") {
 			total += entry.usage?.cost.total ?? 0;
+		} else if (entry.type === "custom" && entry.customType === EXTENSION_USAGE_TYPE) {
+			const cost = (entry.data as { usage?: { cost?: { total?: unknown } } })?.usage?.cost?.total;
+			if (typeof cost === "number" && Number.isFinite(cost) && cost >= 0) total += cost;
 		} else if (entry.type === "message") {
 			const message = entry.message;
 			if (message.role === "assistant" || message.role === "toolResult") {

@@ -17,7 +17,7 @@ The footer includes:
 - the current working directory, shortened to `~` when it is inside the home directory
 - the current Git branch, when available
 - estimated context usage and total model context window
-- cumulative session cost, including assistant messages, tool/nested-call usage, compaction, branch summaries, and standalone usage entries such as cache warming
+- cumulative session cost, including assistant messages, tool/nested-call usage, compaction, branch summaries, standalone usage such as cache warming, and `extension-model-usage` entries from plan-mode/tool-explain. These UI-owned summary costs are not included in Pi 1.3.0's built-in `/session` totals.
 - the active provider, model display name, and thinking level, such as `anthropic/Claude Sonnet 4.6 (high)`; non-reasoning models show `(off)`
 - `⚡︎` immediately after the thinking/effort level when OpenAI Fast mode is active; omitted when off
 - other active statuses published by extensions through `ctx.ui.setStatus()`
@@ -30,7 +30,7 @@ With Fast mode on, the model group reads:
 openai/GPT-6 Astra · high · ⚡︎ · 71.5%/272k · $16.991
 ```
 
-The `fast` status is consumed by this indicator rather than duplicated beside the directory. It remains attached to the effort level when the model label is shortened.
+OpenAI Fast registers its status in the shared contract's model-status slot (`registerModelStatus`). Any extension can use the same presentation metadata; model statuses use the theme's accent color. For independently upgraded installations, the footer also recognizes the legacy `fast` status id and converts its old `fast` text to `⚡︎`. The status is shown here rather than duplicated beside the directory. It remains attached to the effort level when the model label is shortened.
 
 ## Colors and width
 
@@ -63,7 +63,7 @@ Because pi supports only one custom footer at a time, another footer extension l
 
 ## Inside the Prompt Truly Mine composer
 
-When [Prompt Truly Mine](../prompt-truly-mine/README.md) is loaded, its composer draws this status line inside its own footer bar and this footer returns no rows, saving a screen row. The line is lent through a global key (`Symbol.for("@stagefright5/pi-status-line/v1")`) rather than an import, so each package still works alone. Whenever the composer is not focused or cannot draw it (a picker, selector, or overlay is open, or the terminal is too small), this footer shows the line again in the same frame. The composer passes its own segments, most important first (its mode label, then undo/redo hints or an overflow indicator). They follow the directory and branch, before extension statuses. When space runs out the last segment goes first, before any field is shortened, and the first segment outlives the directory on narrow terminals.
+When [Prompt Truly Mine](../prompt-truly-mine/README.md) is loaded, its composer draws this status line inside its own footer bar and this footer returns no rows, saving a screen row. The contract lives in `@stagefright5/pi-extension-utils`, vendored into each published consumer. Its global key (`Symbol.for("@stagefright5/pi-status-line/v1")`) remains compatible with older packages, and each extension still works alone. Whenever the composer is not focused or cannot draw it (a picker, selector, or overlay is open, or the terminal is too small), this footer shows the line again in the same frame. The composer passes its own segments, most important first (its mode label, then undo/redo hints or an overflow indicator). They follow the directory and branch, before extension statuses. When space runs out the last segment goes first, before any field is shortened, and the first segment outlives the directory on narrow terminals.
 
 <!-- package-tools:install:start -->
 

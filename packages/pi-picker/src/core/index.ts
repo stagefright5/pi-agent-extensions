@@ -12,10 +12,10 @@ export class SearchIndex<T> {
 	readonly maps: (Uint32Array | undefined)[] = [];
 	version = 0;
 
-	constructor(
-		private readonly toText: (item: T) => string,
-		items: Iterable<T> = [],
-	) {
+	private readonly toText: (item: T) => string;
+
+	constructor(toText: (item: T) => string, items: Iterable<T> = []) {
+		this.toText = toText;
 		this.add(items);
 	}
 

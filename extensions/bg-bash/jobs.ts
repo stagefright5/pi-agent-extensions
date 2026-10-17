@@ -10,7 +10,15 @@
  * changes; `output` fires at most every OUTPUT_EVENT_MS per manager, never per chunk.
  */
 import { spawn, type ChildProcess } from "node:child_process";
-import { createReadStream, createWriteStream, mkdirSync, type WriteStream } from "node:fs";
+import {
+	createReadStream,
+	createWriteStream,
+	mkdirSync,
+	mkdtempSync,
+	chmodSync,
+	lstatSync,
+	type WriteStream,
+} from "node:fs";
 import { open, rm } from "node:fs/promises";
 import { constants as osConstants, tmpdir } from "node:os";
 import { join } from "node:path";
@@ -312,14 +320,18 @@ export class Job {
 		return new Promise((resolve) => this.exitWaiters.add(resolve));
 	}
 
+	/** Resolves after the background log stream closes. Absent for foreground-only jobs. */
+	logClosed?: Promise<void>;
+
 	/** @internal Move to the background: assign an id and start the log file. */
 	background(id: string, logPath: string): void {
 		this.id = id;
 		this.backgrounded = true;
 		this.backgroundedAt = Date.now();
 		this.logPath = logPath;
-		const log = createWriteStream(logPath, { flags: "w" });
+		const log = createWriteStream(logPath, { flags: "wx", mode: 0o600 });
 		log.on("error", () => {});
+		this.logClosed = new Promise((resolve) => log.once("close", resolve));
 		if (this.foregroundDropped) log.write("[earlier output dropped]\n");
 		for (const chunk of this.foreground ?? []) log.write(chunk);
 		this.foreground = undefined;
@@ -402,8 +414,9 @@ export class JobManager {
 	private seq = 0;
 	private nextId = 1;
 	logDir: string;
+	private sessionLogDirs?: Map<string, string>;
 
-	constructor(logDir = join(tmpdir(), "pi-bg-bash")) {
+	constructor(logDir = join(tmpdir(), `pi-bg-bash-${process.getuid?.() ?? process.pid}`)) {
 		this.logDir = logDir;
 	}
 
@@ -417,8 +430,17 @@ export class JobManager {
 	/** Move a foreground job to the background and list it. */
 	background(job: Job, session = "default"): void {
 		if (job.backgrounded) return;
-		const dir = join(this.logDir, session.replace(/[^\w.-]/gu, "_"));
-		mkdirSync(dir, { recursive: true });
+		mkdirSync(this.logDir, { recursive: true, mode: 0o700 });
+		const info = lstatSync(this.logDir);
+		if (!info.isDirectory() || (process.getuid && info.uid !== process.getuid()))
+			throw new Error("Unsafe background log directory");
+		chmodSync(this.logDir, 0o700);
+		const directories = (this.sessionLogDirs ??= new Map());
+		let dir = directories.get(session);
+		if (!dir) {
+			dir = mkdtempSync(join(this.logDir, `${session.replace(/[^\w.-]/gu, "_")}-`));
+			directories.set(session, dir);
+		}
 		const id = `j${this.nextId++}`;
 		this.jobs.set(id, job);
 		job.background(id, join(dir, `${id}.log`));
@@ -476,13 +498,28 @@ export class JobManager {
 	}
 
 	/** Kill everything and forget the listed jobs (session end). */
-	reset(): void {
+	async reset(): Promise<void> {
+		const listed = [...this.jobs.values()];
+		const running = [...this.running];
+		const directories = [...(this.sessionLogDirs?.values() ?? [])];
+		this.sessionLogDirs?.clear();
 		this.killAll();
 		this.jobs.clear();
 		this.dirtyOutput.clear();
 		clearTimeout(this.outputTimer);
 		this.outputTimer = undefined;
 		this.nextId = 1;
+		await Promise.race([
+			Promise.all(running.map((job) => job.exited())),
+			new Promise((resolve) => setTimeout(resolve, KILL_GRACE_MS + 500).unref()),
+		]);
+		await Promise.race([
+			Promise.all(listed.map((job) => job.logClosed)),
+			new Promise((resolve) => setTimeout(resolve, 1000).unref()),
+		]);
+		await Promise.all(listed.map((job) => (job.logPath ? rm(job.logPath, { force: true }) : undefined)));
+		// Only directories allocated by this manager are recursively removed.
+		await Promise.all(directories.map((dir) => rm(dir, { recursive: true, force: true })));
 	}
 
 	/** @internal */

@@ -10,7 +10,7 @@
     "tui"
   ],
   "scripts": {
-    "test": "node --experimental-transform-types --test *.test.ts",
+    "test": "node --test *.test.ts",
     "prepack": "node ../../scripts/package-tools.mjs stage-package"
   },
   "peerDependencies": {
@@ -19,6 +19,7 @@
     "typebox": "*"
   },
   "devDependencies": {
+    "@stagefright5/pi-extension-utils": "workspace:*",
     "@earendil-works/pi-coding-agent": "catalog:",
     "@earendil-works/pi-tui": "catalog:",
     "@stagefright5/pi-picker": "workspace:*",

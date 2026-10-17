@@ -14,7 +14,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const tag = { fg: (token: string, text: string) => `<${token}>${text}</${token}>` };
 const manager = () => new JobManager(mkdtempSync(join(tmpdir(), "bg-bash-footer-")));
 
-/** Start a job and move it to the background right away (what `bash` does with `wait: 0`). */
+/** Start a background job directly, without exercising the tool\'s fixed foreground timer. */
 function background(jobs: JobManager, command: string, timeout?: number): Job {
 	const job = jobs.start({ command, cwd: process.cwd(), shell, timeout });
 	jobs.background(job, "footer");

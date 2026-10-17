@@ -1,3 +1,4 @@
+import type { NestedUsage } from "@stagefright5/pi-extension-utils";
 import { createHash } from "node:crypto";
 import { stripVTControlCharacters } from "node:util";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -89,6 +90,7 @@ export async function summarize(
 	code: string,
 	signal: AbortSignal,
 	systemPrompt = SYSTEM_PROMPT,
+	onUsage?: (usage: NestedUsage | undefined) => void,
 ) {
 	const clipped =
 		code.length > MAX_CODE_CHARS
@@ -104,6 +106,7 @@ export async function summarize(
 			{ maxTokens: 300, signal },
 		)
 		.result();
+	onUsage?.(message.usage);
 	if (message.stopReason === "error" || message.stopReason === "aborted")
 		throw new Error(message.errorMessage ?? message.stopReason);
 	const text = cleanSummary(message.content.map((block) => (block.type === "text" ? block.text : "")).join("\n"));

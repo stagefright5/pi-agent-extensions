@@ -2,7 +2,7 @@
  * The `bash` override and the `job_*` companion tools.
  *
  * `bash` reuses pi's built-in definition (renderers, streaming, truncation, temp files, PI_* env)
- * and only swaps its process backend: commands that finish within `wait` seconds return exactly as
+ * and only swaps its process backend: commands that finish within 10 seconds return exactly as
  * before; slower ones keep running as background jobs.
  */
 import { access } from "node:fs/promises";
@@ -20,7 +20,7 @@ import {
 import { Type, type Static } from "typebox";
 import { formatDuration, readJobOutput, type ForegroundOutcome, type Job, type JobManager } from "./jobs.ts";
 
-export const DEFAULT_WAIT_SECONDS = 10;
+export const BACKGROUND_AFTER_SECONDS = 10;
 const MAX_TIMEOUT_SECONDS = 2_147_483_647 / 1000;
 const STRUCTURED = { type: "json_schema", strict: "prefer" } as const;
 
@@ -49,14 +49,6 @@ const bashSchema = Type.Object({
 				"Timeout in seconds (optional, no default timeout); also applies after the command moves to the background",
 		}),
 	),
-	wait: Type.Optional(
-		Type.Number({
-			description:
-				"Seconds to wait for the command before it moves to the background and returns a job id (0 = background immediately, for servers and watchers)",
-			minimum: 0,
-			default: DEFAULT_WAIT_SECONDS,
-		}),
-	),
 });
 
 const bashOutputSchema = Type.Object({
@@ -70,10 +62,28 @@ const bashOutputSchema = Type.Object({
 	log_path: Type.Optional(Type.String({ description: "Complete output of the background job" })),
 });
 
-/** Strict tool calling may send `null` for omitted optional fields; treat it as absent. */
-function opt<T>(value: T | null | undefined): T | undefined {
-	return value === null ? undefined : value;
+/** Normalize strict-mode nulls before the host validates the schema. */
+function normalizeArguments<T>(args: unknown): T {
+	if (!args || typeof args !== "object" || Array.isArray(args)) return args as T;
+	return Object.fromEntries(Object.entries(args).filter(([, value]) => value !== null)) as T;
 }
+
+const idSchema = Type.String({ description: "Job id from the bash result, for example j3" });
+const jobOutputParameters = Type.Object({
+	id: idSchema,
+	tail_lines: Type.Optional(Type.Integer({ description: "Number of last lines", minimum: 1, default: 200 })),
+	offset: Type.Optional(
+		Type.Integer({ description: "First line to read (1-indexed) instead of the tail", minimum: 1 }),
+	),
+	limit: Type.Optional(
+		Type.Integer({
+			description: "Lines (or matches) to read with offset or grep",
+			minimum: 1,
+			default: 200,
+		}),
+	),
+	grep: Type.Optional(Type.String({ description: "Only lines matching this regular expression" })),
+});
 
 function validateSeconds(name: string, value: number | undefined, allowZero: boolean): void {
 	if (value === undefined) return;
@@ -83,9 +93,9 @@ function validateSeconds(name: string, value: number | undefined, allowZero: boo
 	if (value > MAX_TIMEOUT_SECONDS) throw new Error(`Invalid ${name}: maximum is ${MAX_TIMEOUT_SECONDS} seconds`);
 }
 
-function backgroundNote(job: Job, wait: number): string {
+function backgroundNote(job: Job): string {
 	return (
-		`[Still running in background as job ${job.id} (pid ${job.pid ?? "?"}) after ${wait}s. Log: ${job.logPath}. ` +
+		`[Still running in background as job ${job.id} (pid ${job.pid ?? "?"}) after ${BACKGROUND_AFTER_SECONDS}s. Log: ${job.logPath}. ` +
 		"Check it with job_output or job_status and stop it with job_kill; a bg-job message arrives when it exits.]"
 	);
 }
@@ -97,22 +107,26 @@ export function createBashTool(options: ToolOptions) {
 	return defineTool<typeof bashSchema, BackgroundBashDetails | undefined>({
 		...base,
 		description:
-			`${base.description} Commands still running after \`wait\` seconds (default ${DEFAULT_WAIT_SECONDS}) move to the background ` +
-			"and return a job id instead of their final output.",
+			`${base.description} Commands still running after ${BACKGROUND_AFTER_SECONDS} seconds move to the background ` +
+			"and return a job id instead of their final output. This threshold is fixed and cannot be overridden by tool arguments.",
 		promptGuidelines: [
 			...(base.promptGuidelines ?? []),
-			`bash commands still running after \`wait\` seconds (default ${DEFAULT_WAIT_SECONDS}) continue as background jobs: the result says "Still running in background as job jN", and a bg-job message reports the exit later. Do not poll in a loop; continue with other work or end your turn.`,
-			"Pass a larger `wait` to bash when you need the result in this turn (for example tests or builds), and `wait: 0` for servers and watchers. Use job_output, job_status, and job_kill to inspect or stop background jobs.",
+			`bash commands still running after ${BACKGROUND_AFTER_SECONDS} seconds always continue as background jobs: the result says "Still running in background as job jN", and a bg-job message reports the exit later. This threshold is fixed; there is no wait argument. Do not poll in a loop; continue with other work or end your turn.`,
+			"Use job_output, job_status, and job_kill to inspect or stop background jobs. The optional timeout limits total runtime; it does not extend the foreground period.",
 		],
 		parameters: bashSchema,
+		prepareArguments: (args) => {
+			const normalized = normalizeArguments<Static<typeof bashSchema> & { wait?: unknown }>(args);
+			// Discard stale calls' former override, including calls from cached schemas.
+			if (normalized && typeof normalized === "object") delete normalized.wait;
+			return normalized;
+		},
 		outputSchema: bashOutputSchema,
 		constrainedSampling: STRUCTURED,
 		async execute(toolCallId, params, signal, onUpdate, ctx) {
 			const command = params.command;
-			const timeout = opt(params.timeout);
-			const wait = opt(params.wait) ?? DEFAULT_WAIT_SECONDS;
+			const timeout = params.timeout;
 			validateSeconds("timeout", timeout, false);
-			validateSeconds("wait", wait, true);
 			const settings = options.shell();
 			let job: Job | undefined;
 			let outcome: ForegroundOutcome | undefined;
@@ -134,7 +148,7 @@ export function createBashTool(options: ToolOptions) {
 					// The built-in accumulator throttles transcript updates; forward chunks as they come.
 					const detach = started.attach(onData);
 					try {
-						outcome = await started.waitForeground(wait * 1000, abort);
+						outcome = await started.waitForeground(BACKGROUND_AFTER_SECONDS * 1000, abort);
 					} finally {
 						detach();
 					}
@@ -145,6 +159,8 @@ export function createBashTool(options: ToolOptions) {
 					}
 					if (outcome === "exit") {
 						manager.discard(started);
+						// Pi\'s BashOperations adapter requires this sentinel to preserve captured output
+						// (including truncation/file notices) before adding its friendly timeout message.
 						if (started.state === "timed-out") throw new Error(`timeout:${timeout}`);
 						return { exitCode: started.exitCode };
 					}
@@ -164,7 +180,7 @@ export function createBashTool(options: ToolOptions) {
 
 			const text = result.content.find((block) => block.type === "text")?.text ?? "";
 			const prior = text === "(no output)" ? "" : text;
-			const note = backgroundNote(job, wait);
+			const note = backgroundNote(job);
 			const { exit_code: _exitCode, ...structured } = (result.structuredContent ?? {}) as Record<string, unknown>;
 			return {
 				content: [{ type: "text", text: prior ? `${prior}\n\n${note}` : note }],
@@ -230,7 +246,6 @@ function unknownJob(manager: JobManager, id: string): string {
 	return `No background job "${id}".${known.length ? ` Known jobs: ${known.join(", ")}.` : " There are no background jobs."}`;
 }
 
-const idSchema = Type.String({ description: "Job id from the bash result, for example j3" });
 const listSchema = Type.Object({ jobs: Type.Array(jobInfoSchema), error: Type.Optional(Type.String()) });
 
 export function createJobTools(options: ToolOptions) {
@@ -243,12 +258,13 @@ export function createJobTools(options: ToolOptions) {
 			"Show the state, exit code, runtime, pid, and log path of a background job started by bash, or of all jobs when no id is given.",
 		promptSnippet: "Check background bash jobs (state, exit code, runtime)",
 		parameters: Type.Object({ id: Type.Optional(idSchema) }),
+		prepareArguments: (args) => normalizeArguments<{ id?: string }>(args),
 		outputSchema: listSchema,
 		constrainedSampling: STRUCTURED,
 		annotations: { readOnlyHint: true },
 		executionMode: "parallel",
 		async execute(_toolCallId, params) {
-			const id = opt(params.id);
+			const id = params.id;
 			const jobs = id === undefined ? manager.list() : [manager.get(id)].filter((job) => job !== undefined);
 			if (id !== undefined && jobs.length === 0) {
 				const error = unknownJob(manager, id);
@@ -263,6 +279,8 @@ export function createJobTools(options: ToolOptions) {
 
 	const jobList = defineTool({
 		name: "job_list",
+		// Retain the alias for explicit opt-in and old sessions, without another default declaration.
+		defaultActive: false,
 		label: "job list",
 		description: "List background jobs started by bash, newest first.",
 		promptSnippet: "List background bash jobs",
@@ -284,21 +302,8 @@ export function createJobTools(options: ToolOptions) {
 		label: "job output",
 		description: `Read the output of a background job: its last lines (default 200), a line range from \`offset\`, or lines matching \`grep\` (a case-insensitive regular expression). Output is truncated to ${DEFAULT_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB.`,
 		promptSnippet: "Read a background bash job's output (tail, line range, or grep)",
-		parameters: Type.Object({
-			id: idSchema,
-			tail_lines: Type.Optional(Type.Integer({ description: "Number of last lines", minimum: 1, default: 200 })),
-			offset: Type.Optional(
-				Type.Integer({ description: "First line to read (1-indexed) instead of the tail", minimum: 1 }),
-			),
-			limit: Type.Optional(
-				Type.Integer({
-					description: "Lines (or matches) to read with offset or grep",
-					minimum: 1,
-					default: 200,
-				}),
-			),
-			grep: Type.Optional(Type.String({ description: "Only lines matching this regular expression" })),
-		}),
+		parameters: jobOutputParameters,
+		prepareArguments: (args) => normalizeArguments<Static<typeof jobOutputParameters>>(args),
 		outputSchema: Type.Object({
 			id: Type.String(),
 			state: Type.Optional(Type.String()),
@@ -314,12 +319,7 @@ export function createJobTools(options: ToolOptions) {
 		executionMode: "parallel",
 		async execute(_toolCallId, params) {
 			const { id } = params;
-			const [tail_lines, offset, limit, grep] = [
-				opt(params.tail_lines),
-				opt(params.offset),
-				opt(params.limit),
-				opt(params.grep),
-			];
+			const { tail_lines, offset, limit, grep } = params;
 			const job = manager.get(id);
 			if (!job) {
 				const error = unknownJob(manager, id);
@@ -355,7 +355,7 @@ export function createJobTools(options: ToolOptions) {
 			error: Type.Optional(Type.String()),
 		}),
 		constrainedSampling: STRUCTURED,
-		annotations: { destructiveHint: true, idempotentHint: true },
+		annotations: { destructiveHint: true, idempotentHint: true, openWorldHint: false },
 		executionMode: "sequential",
 		async execute(_toolCallId, { id }) {
 			const job = manager.get(id);

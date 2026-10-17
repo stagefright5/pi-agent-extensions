@@ -1,10 +1,10 @@
 /**
- * Background Bash: replaces the built-in `bash` tool. Commands that finish within `wait` seconds
+ * Background Bash: replaces the built-in `bash` tool. Commands that finish within a fixed 10 seconds
  * return exactly as before; slower ones continue as background jobs that the agent can inspect with
  * `job_*` tools and hears about when they exit. `/jobs` (or Alt+J, or a click on the footer
  * indicator) opens the jobs manager.
  */
-import { SettingsManager, type ExtensionAPI, type ExtensionContext, type Theme } from "@earendil-works/pi-coding-agent";
+import { type ExtensionAPI, type ExtensionContext, type Theme } from "@earendil-works/pi-coding-agent";
 import { Key, truncateToWidth, wrapTextWithAnsi, type Component } from "@earendil-works/pi-tui";
 import { jobTail, JobsBrowser } from "./browser.ts";
 import { FooterStatus, STATUS_ID } from "./footer.ts";
@@ -92,15 +92,6 @@ class JobMessageComponent implements Component {
 	}
 }
 
-function readShellSettings(cwd: string): ShellSettings {
-	try {
-		const settings = SettingsManager.create(cwd);
-		return { shellPath: settings.getShellPath(), commandPrefix: settings.getShellCommandPrefix() };
-	} catch {
-		return {};
-	}
-}
-
 const EXIT_HOOK = Symbol.for("@stagefright5/pi-bg-bash/exit-hook");
 
 export default function backgroundBash(pi: ExtensionAPI): void {
@@ -139,7 +130,10 @@ export default function backgroundBash(pi: ExtensionAPI): void {
 	async function openJobs(ctx: ExtensionContext): Promise<void> {
 		if (ctx.mode !== "tui") {
 			if (ctx.hasUI)
-				ctx.ui.notify("The jobs manager needs the interactive terminal UI; use job_list instead", "warning");
+				ctx.ui.notify(
+					"The jobs manager needs the interactive terminal UI; use job_status without an id instead",
+					"warning",
+				);
 			return;
 		}
 		if (browserOpen) return;
@@ -178,7 +172,8 @@ export default function backgroundBash(pi: ExtensionAPI): void {
 	pi.on("session_start", (_event, ctx) => {
 		context = ctx;
 		session = ctx.sessionManager.getSessionId();
-		shell = readShellSettings(ctx.cwd);
+		const settings = pi.getSettings();
+		shell = { shellPath: settings.shellPath, commandPrefix: settings.shellCommandPrefix };
 		const store = globalThis as typeof globalThis & { [EXIT_HOOK]?: boolean };
 		if (!store[EXIT_HOOK]) {
 			// Detached process groups would outlive pi; stop them when the process exits.
@@ -212,7 +207,7 @@ export default function backgroundBash(pi: ExtensionAPI): void {
 		for (const job of manager.list()) notify(job);
 	});
 
-	pi.on("session_shutdown", (event) => {
+	pi.on("session_shutdown", async (event) => {
 		offChange?.();
 		offChange = undefined;
 		offAction?.();
@@ -221,6 +216,6 @@ export default function backgroundBash(pi: ExtensionAPI): void {
 		footer = undefined;
 		context = undefined;
 		// Reload replaces this runtime but keeps the session: let builds keep running.
-		if (event.reason !== "reload") manager.reset();
+		if (event.reason !== "reload") await manager.reset();
 	});
 }

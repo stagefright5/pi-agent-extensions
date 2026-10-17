@@ -18,7 +18,7 @@ pi install npm:@stagefright5/pi-openai-fast
 
 ## Usage
 
-- `/fast` toggles it and saves the choice as `"openaiFast": true` in `~/.pi/agent/settings.json`.
+- `/fast` toggles it and atomically saves `{ "enabled": true }` or `false` in `getAgentDir()/openai-fast.json`, an owner-only file. It never rewrites Pi's shared settings. Until a saved override exists, the effective merged `openaiFast` setting remains the default.
 - `pi --fast` turns it on for one run without saving.
 - The footer shows `⚡︎` while it is on and the current model is OpenAI. With Compact Status Bar, it appears immediately after the thinking/effort level.
 

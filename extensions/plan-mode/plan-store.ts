@@ -29,10 +29,13 @@ export class SerialTaskQueue {
 }
 
 export class PlanRepository {
-	constructor(
-		private readonly exec: ExtensionAPI["exec"],
-		private readonly baseDir: string,
-	) {}
+	private readonly exec: ExtensionAPI["exec"];
+	private readonly baseDir: string;
+
+	constructor(exec: ExtensionAPI["exec"], baseDir: string) {
+		this.exec = exec;
+		this.baseDir = baseDir;
+	}
 
 	private async git(dir: string, args: string[], signal?: AbortSignal, allowFailure = false) {
 		signal?.throwIfAborted();

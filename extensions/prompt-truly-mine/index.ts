@@ -11,13 +11,12 @@
  * autocomplete, prompt history, paste handling, image paste, etc.
  */
 
-import { readFile } from "node:fs/promises";
+import { access } from "node:fs/promises";
+import { constants } from "node:fs";
 import { dirname } from "node:path";
 import {
 	CustomEditor,
 	copyToClipboard,
-	parseFrontmatter,
-	stripFrontmatter,
 	type ExtensionAPI,
 	type ExtensionContext,
 	type KeybindingsManager,
@@ -261,11 +260,9 @@ async function loadContextResources(
 
 	for (const command of commands) {
 		try {
-			const raw = await readFile(command.path, "utf8");
-			const body = command.source === "skill" ? stripFrontmatter(raw).trim() : parseFrontmatter(raw).body.trim();
+			await access(command.path, constants.R_OK);
 			loaded.push({
 				...command,
-				body,
 				baseDir: dirname(command.path),
 			});
 		} catch (error) {
@@ -299,18 +296,27 @@ export class UndoRedoEditor extends CustomEditor implements StatusLineHost {
 	private readonly appKeybindings: KeybindingsManager;
 	private readonly isComposableCommand: (value: string) => boolean;
 
+	private readonly labelColor: (text: string) => string;
+	private readonly getSurfaceTheme?: () => Theme;
+	private readonly onSlashSubmit?: (text: string) => void;
+	private readonly copyText: (text: string) => Promise<void>;
+
 	constructor(
 		tui: TUI,
 		theme: EditorTheme,
 		keybindings: KeybindingsManager,
 		isComposableCommand: (value: string) => boolean,
 		options?: EditorOptions,
-		private readonly labelColor: (text: string) => string = (text) => text,
-		private readonly getSurfaceTheme?: () => Theme,
-		private readonly onSlashSubmit?: (text: string) => void,
-		private readonly copyText: (text: string) => Promise<void> = copyToClipboard,
+		labelColor: (text: string) => string = (text) => text,
+		getSurfaceTheme?: () => Theme,
+		onSlashSubmit?: (text: string) => void,
+		copyText: (text: string) => Promise<void> = copyToClipboard,
 	) {
 		super(tui, theme, keybindings, options);
+		this.labelColor = labelColor;
+		this.getSurfaceTheme = getSurfaceTheme;
+		this.onSlashSubmit = onSlashSubmit;
+		this.copyText = copyText;
 		this.appKeybindings = keybindings;
 		this.isComposableCommand = isComposableCommand;
 	}

@@ -1,0 +1,30 @@
+{
+  "name": "@stagefright5/pi-extension-utils",
+  "version": "0.0.0",
+  "description": "Shared status-line, private storage, and usage contracts for pi extensions",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --test src/*.test.ts",
+    "prepack": "node ../../scripts/package-tools.mjs stage-package"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "catalog:"
+  },
+  "publishConfig": {
+    "directory": "../../.tmp/publish/pi-extension-utils",
+    "linkDirectory": false
+  },
+  "packageTools": {
+    "title": "Pi Extension Utilities",
+    "interface": "Library: status-line and storage contracts",
+    "include": [
+      "src"
+    ]
+  }
+}

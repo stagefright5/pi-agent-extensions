@@ -49,7 +49,6 @@ export type ReferenceIndex = {
 };
 
 export type LoadedContextResource = ComposableCommand & {
-	body: string;
 	baseDir: string;
 };
 

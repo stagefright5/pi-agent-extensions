@@ -50,7 +50,10 @@ class TopK {
 	readonly ids: Uint32Array;
 	size = 0;
 
-	constructor(readonly capacity: number) {
+	readonly capacity: number;
+
+	constructor(capacity: number) {
+		this.capacity = capacity;
 		this.scores = new Float64Array(capacity);
 		this.ids = new Uint32Array(capacity);
 	}
@@ -181,10 +184,13 @@ export class Searcher<T> {
 	private lastBuffer = 1;
 	private writing = 0;
 
-	constructor(
-		readonly index: SearchIndex<T>,
-		private readonly options: SearcherOptions = {},
-	) {}
+	readonly index: SearchIndex<T>;
+	private readonly options: SearcherOptions;
+
+	constructor(index: SearchIndex<T>, options: SearcherOptions = {}) {
+		this.index = index;
+		this.options = options;
+	}
 
 	private plan(query: PreparedQuery, allowed: Uint8Array | undefined, limit: number): Plan {
 		const last = this.last;

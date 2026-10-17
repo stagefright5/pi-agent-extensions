@@ -2,7 +2,7 @@
 
 Most of this extension was written with the pi agent CLI.
 
-Plan Mode adds interactive planning using pi 1.2.0's public extension and TUI APIs. It supports review, approval, revision history, diffs, summaries, and Q&A.
+Plan Mode adds interactive planning using pi 1.3.0's public extension and TUI APIs. It supports review, approval, revision history, diffs, summaries, and Q&A.
 
 [Back to the extension workspace](../../README.md)
 
@@ -90,29 +90,26 @@ Use these shortcuts while Plan Mode is active outside the review overlay:
 Each plan is stored under:
 
 ```text
-~/.pi/plans/<timestamp>_<title-slug>_<unique-suffix>/plan.md
+~/.pi/agent/plans/<timestamp>_<title-slug>_<unique-suffix>/plan.md
 ```
+
+New plans use `getAgentDir()/plans`, respecting `PI_CODING_AGENT_DIR`. Resumed sessions keep their recorded plan directory, including older `~/.pi/plans` locations; existing files are not moved.
 
 The containing directory is a dedicated Git repository. Plan Mode creates a seed commit, then commits changed plan content. Unique directories prevent same-second title collisions. Diffs compare the active branch's saved iteration text, including identical iterations, rather than assuming Git HEAD matches the active session branch.
 
-`plan_output` is model-only and sequential. A session-local queue and the SDK file-mutation queue serialize saves. State advances only after storage succeeds; failed saves are real tool errors, not successful “plan presented” results. New-repository failures are cleaned up, and failed edits restore the previous file. Cancelled tool batches do not automatically open a review; `/plan-review` can reopen any successfully saved plan.
+`plan_output` is model-only and sequential, registered inactive, and enabled only in TUI plan mode. Mode changes preserve the other active tools. Calls outside plan mode are rejected. A session-local queue and the SDK file-mutation queue serialize saves. State advances only after storage succeeds; failed saves are real tool errors, not successful “plan presented” results. New-repository failures are cleaned up, and failed edits restore the previous file. Cancelled tool batches do not automatically open a review; `/plan-review` can reopen any successfully saved plan.
 
-Plan Mode also saves the following state for each session branch through `pi.appendEntry()`:
+Plan Mode saves only small workflow flags and metadata through `pi.appendEntry()`: active/revision state, title, directory, and workflow reset boundaries. Each successful `plan_output` result stores that iteration in `details`; Q&A is reconstructed from user/assistant messages. Ordinary messages no longer append full plan/Q&A snapshots. Legacy snapshots remain readable.
 
-- whether the mode is active
-- plan directory and all iteration text
-- current title
-- Q&A messages
-- whether a revision is pending
+Plan Mode restores state from the active session branch on startup, reload, resume, fork, and tree navigation. When you navigate the session tree, it uses that branch's latest state. Restoration itself is read-only: a legacy branch gets its small v2 replay boundary only when new messages or workflow changes occur, not merely when opened or navigated.
 
-Plan Mode restores state from the active session branch on startup, reload, resume, fork, and tree navigation. When you navigate the session tree, it uses that branch's latest state.
-
-Plan Mode excludes the display-only plan message created after closing review from model context to avoid duplicating stale plans.
+Closing review appends a display-only custom entry with an entry renderer, never a model message. Filters for legacy display/context messages remain for older sessions.
 
 ## Model and data usage
 
 - Planning uses the current agent model.
-- Change summaries call the selected model directly and require an available API key. Plan Mode sends the relevant plan versions to that provider.
+- Change summaries use provider-neutral `streamSimple()` with the selected model and send the relevant versions to that provider. Usage is saved as `extension-model-usage` entries and included by Compact Status Bar. Pi 1.3.0 has no public API to append native usage from UI commands, so built-in `/session` totals exclude these entries.
+- Reported usage is retained even when a summary is cancelled. During session teardown, requests are aborted and given up to one second to return usage before the old runtime is closed; late results never write into a replacement session. Providers that omit usage or ignore cancellation past that grace period can still cause under-reporting, so these totals are not a billing ledger.
 - Q&A history stores the text of user and assistant messages captured while Plan Mode is active in the pi session.
 - Plans remain on local disk until you remove their directories.
 
@@ -127,6 +124,7 @@ Plan Mode excludes the display-only plan message created after closing review fr
 ## Files
 
 - [`index.ts`](./index.ts) owns tool/event registration, branch state, and workflow lifecycle.
+- [`state.ts`](./state.ts) reconstructs branch state, including legacy snapshots.
 - [`planning.ts`](./planning.ts) contains the planning prompt and routing helpers.
 - [`plan-ui.ts`](./plan-ui.ts) provides native Markdown/editor/loader components, bounded ScrollView-based viewing, and normalized mouse handling.
 - [`plan-store.ts`](./plan-store.ts) serializes saves, commits plans, and generates diffs.

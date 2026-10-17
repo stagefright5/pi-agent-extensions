@@ -8,14 +8,16 @@
     "logging"
   ],
   "scripts": {
-    "test": "node --experimental-transform-types --test *.test.ts",
+    "test": "node --test *.test.ts",
     "prepack": "node ../../scripts/package-tools.mjs stage-package"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*"
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "catalog:"
+    "@stagefright5/pi-extension-utils": "workspace:*",
+    "@earendil-works/pi-coding-agent": "catalog:",
+    "@types/proper-lockfile": "^4.1.4"
   },
   "pi": {
     "extensions": [
@@ -29,5 +31,8 @@
   "packageTools": {
     "title": "Provider URL Logger",
     "interface": "Automatic"
+  },
+  "dependencies": {
+    "proper-lockfile": "4.1.2"
   }
 }

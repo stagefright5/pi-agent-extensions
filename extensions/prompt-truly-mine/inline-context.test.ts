@@ -195,12 +195,10 @@ test("keeps the request first and verbatim, then lists referenced resources as f
 	const resources: LoadedContextResource[] = [
 		{
 			...commands[1]!,
-			body: "# Angular\n\nUse standalone components.",
 			baseDir: "/home/me/.agents/skills/angular-developer",
 		},
 		{
 			...commands[0]!,
-			body: "Review this complete request: $ARGUMENTS\nFirst token: $1",
 			baseDir: "/home/me/.pi/agent/prompts",
 		},
 	];

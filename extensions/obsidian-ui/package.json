@@ -8,7 +8,7 @@
     "tui"
   ],
   "scripts": {
-    "test": "node --experimental-transform-types --test *.test.ts",
+    "test": "node --test *.test.ts",
     "prepack": "node ../../scripts/package-tools.mjs stage-package"
   },
   "peerDependencies": {
@@ -16,8 +16,8 @@
     "@earendil-works/pi-tui": "*"
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "1.2.0",
-    "@earendil-works/pi-tui": "1.2.0"
+    "@earendil-works/pi-coding-agent": "catalog:",
+    "@earendil-works/pi-tui": "catalog:"
   },
   "pi": {
     "extensions": [

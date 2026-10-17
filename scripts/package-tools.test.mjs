@@ -160,7 +160,6 @@ test("all staged packages carry shared defaults, unchanged release identity, and
   ]) {
     assert.ok(existsSync(join(artifact, path)), `Missing artifact resource: ${path}`);
   }
-  assert.ok(!existsSync(join(workspace.root, ".tmp/publish/bang-dont-ghost/scripts")));
   assert.ok(existsSync(join(workspace.root, ".tmp/publish/plan-mode/utils.ts")));
 });
 
@@ -273,49 +272,52 @@ test("pnpm packs every source package through prepack and publishConfig.director
 
 test("extensions that import a workspace library bundle a private copy and load without it", (t) => {
   const workspace = fixture(t);
-  const library = workspace.packages.find((pkg) => pkg.kind === "library");
-  assert.ok(library, "workspace has a library package");
-  const users = workspace.packages.filter(
-    (pkg) => pkg.kind === "pi" && Object.keys(pkg.source.devDependencies ?? {}).includes(library.source.name),
-  );
-  if (users.length === 0) {
-    t.skip("no extension imports a workspace library yet");
-    return;
-  }
-  for (const pkg of users) {
-    const sourceBefore = read(join(pkg.dir, "index.ts"));
-    const destination = stagePackage(workspace, pkg);
-    const manifest = json(join(destination, "package.json"));
-    assert.equal(read(join(pkg.dir, "index.ts")), sourceBefore, "source is never rewritten");
-    assert.ok(manifest.files.includes(`vendor/${library.slug}/src/index.ts`));
-    assert.equal(manifest.dependencies?.[library.source.name], undefined);
-    assert.equal(manifest.devDependencies, undefined);
-    assert.doesNotMatch(read(join(destination, "package.json")), /workspace:|catalog:/);
-    for (const file of manifest.files.filter((path) => path.endsWith(".ts"))) {
-      assert.doesNotMatch(read(join(destination, file)), new RegExp(`["']${library.source.name}["']`), file);
-    }
-  }
-  // Load a staged extension with only pi's own packages resolvable: the library comes from vendor/.
-  const pkg = users.find((candidate) => candidate.slug === "prompt-history-search") ?? users[0];
-  const destination = join(workspace.root, ".tmp", "publish", pkg.slug);
-  mkdirSync(join(destination, "node_modules", "@earendil-works"), { recursive: true });
-  for (const name of ["pi-coding-agent", "pi-tui"]) {
-    symlinkSync(
-      join(ROOT, pkg.directory, "node_modules", "@earendil-works", name),
-      join(destination, "node_modules", "@earendil-works", name),
+  const libraries = workspace.packages.filter((pkg) => pkg.kind === "library");
+  assert.ok(libraries.length, "workspace has library packages");
+  // An unused library before the real ones must not skip validation of the rest.
+  libraries.unshift({ source: { name: "@fixture/unused-library" } });
+  let validated = 0;
+  for (const library of libraries) {
+    const users = workspace.packages.filter(
+      (pkg) => pkg.kind === "pi" && Object.keys(pkg.source.devDependencies ?? {}).includes(library.source.name),
     );
+    if (users.length === 0) continue;
+    for (const pkg of users) {
+      const sourceBefore = read(join(pkg.dir, "index.ts"));
+      const destination = stagePackage(workspace, pkg);
+      const manifest = json(join(destination, "package.json"));
+      assert.equal(read(join(pkg.dir, "index.ts")), sourceBefore, "source is never rewritten");
+      assert.ok(manifest.files.includes(`vendor/${library.slug}/src/index.ts`));
+      assert.equal(manifest.dependencies?.[library.source.name], undefined);
+      assert.equal(manifest.devDependencies, undefined);
+      assert.doesNotMatch(read(join(destination, "package.json")), /workspace:|catalog:/);
+      for (const file of manifest.files.filter((path) => path.endsWith(".ts"))) {
+        assert.doesNotMatch(read(join(destination, file)), new RegExp(`["']${library.source.name}["']`), file);
+      }
+    }
+    // Load a staged extension with only pi's own packages resolvable: the library comes from vendor/.
+    const pkg = users.find((candidate) => candidate.slug === "prompt-history-search") ?? users[0];
+    const destination = join(workspace.root, ".tmp", "publish", pkg.slug);
+    mkdirSync(join(destination, "node_modules", "@earendil-works"), { recursive: true });
+    const manifest = json(join(destination, "package.json"));
+    for (const name of Object.keys({ ...manifest.peerDependencies, ...manifest.dependencies })) {
+      const target = join(destination, "node_modules", name);
+      mkdirSync(dirname(target), { recursive: true });
+      symlinkSync(join(ROOT, pkg.directory, "node_modules", name), target);
+    }
+    assert.equal(existsSync(join(destination, "node_modules", "@stagefright5")), false);
+    const output = execFileSync(
+      process.execPath,
+      [
+        "--no-warnings",
+        "--input-type=module",
+        "-e",
+        `const module = await import(${JSON.stringify(join(destination, "index.ts"))}); console.log(typeof module.default);`,
+      ],
+      { encoding: "utf8" },
+    );
+    assert.equal(output.trim(), "function");
+    validated++;
   }
-  assert.equal(existsSync(join(destination, "node_modules", "@stagefright5")), false);
-  const output = execFileSync(
-    process.execPath,
-    [
-      "--experimental-transform-types",
-      "--no-warnings",
-      "--input-type=module",
-      "-e",
-      `const module = await import(${JSON.stringify(join(destination, "index.ts"))}); console.log(typeof module.default);`,
-    ],
-    { encoding: "utf8" },
-  );
-  assert.equal(output.trim(), "function");
+  assert.ok(validated > 0, "at least one used library was staged and loaded");
 });

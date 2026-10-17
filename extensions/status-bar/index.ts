@@ -196,14 +196,21 @@ export default function statusBarExtension(pi: ExtensionAPI): void {
 								? theme.fg("warning", contextText)
 								: theme.fg("dim", contextText);
 
-					const fast = extensionStatuses.get("fast") ? theme.fg("accent", "⚡︎") : "";
+					// Compatibility with openai-fast releases predating presentation metadata.
+					const isModelStatus = (id: string) => id === "fast" || channel.modelStatuses?.has(id);
+					const modelStatuses = [...extensionStatuses]
+						.filter(([id]) => isModelStatus(id))
+						.map(([id, raw]) => sanitizeStatusText(id === "fast" && raw.trim() === "fast" ? "⚡︎" : raw))
+						.filter(Boolean)
+						.map((text) => theme.fg("accent", text))
+						.join(separator);
 					const statuses: string[] = [];
 					const statusIds: string[] = [];
 					const focused = channel.focusedStatus;
 					for (const [id, raw] of [...extensionStatuses.entries()].sort(([left], [right]) =>
 						left.localeCompare(right),
 					)) {
-						if (id === "fast") continue;
+						if (isModelStatus(id)) continue;
 						const text = sanitizeStatusText(raw);
 						if (!text) continue;
 						const action = id === focused ? channel.statusActions?.get(id) : undefined;
@@ -211,7 +218,7 @@ export default function statusBarExtension(pi: ExtensionAPI): void {
 						statusIds.push(id);
 					}
 					const modelName = ctx.model ? sanitizeStatusText(ctx.model.name) : "";
-					const effort = theme.fg("dim", thinking) + (fast ? separator + fast : "");
+					const effort = theme.fg("dim", thinking) + (modelStatuses ? separator + modelStatuses : "");
 					const model = ctx.model
 						? theme.fg("dim", `${ctx.model.provider}/`) + theme.fg("muted", modelName) + separator + effort
 						: "";

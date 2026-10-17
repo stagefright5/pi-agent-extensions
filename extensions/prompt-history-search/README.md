@@ -28,7 +28,7 @@ Restoring a prompt does not submit it or switch to its source session.
 
 ## Search scope
 
-The index contains text from user prompts sent in the last 30 days. The extension adds new prompts as you send them.
+The index contains text from user prompts sent in the last 30 days. Submissions queue persistence and return immediately; they do not wait for index I/O. A cross-process lock covers each read/merge/atomic-replace transaction, including deletion tombstones, so simultaneous Pi instances cannot overwrite each other's updates. New files are owner-only. A forced exit can lose queued work; orderly shutdown/reload and opening search drain the queue.
 
 With [Prompt Truly Mine](../prompt-truly-mine/README.md) also loaded, the index includes submitted slash commands: built-in and extension commands, including their arguments. Prompts with `$skill` or `$template` references are ordinary prompts and are indexed as typed. That editor reports submissions before command dispatch, since commands can bypass Pi's normal input event. Merely selecting a completion is not recorded. Selecting a command from history restores it into the draft without executing it. Pending writes are drained before opening search and during orderly shutdown/reload.
 

@@ -78,23 +78,23 @@ export function headerText(
 	failed: boolean,
 	name = "codemode",
 ): string {
-	const label = (text: string) => theme.fg("toolTitle", theme.bold(text));
+	const tool = theme.fg("toolTitle", theme.bold(name));
+	const label = (before: string, after: string) => `${theme.fg("muted", before)}${tool}${theme.fg("muted", after)}`;
 	const spin = (p: Exclude<Phase, "done">) => theme.fg("accent", frame(p));
 	const done = summary?.status === "done" ? summary.text : undefined;
-	const withSummary = (text: string, summaryText: string) =>
-		`${theme.fg("muted", text)} ${theme.fg("accent", summaryText)}`;
+	const withSummary = (title: string, summaryText: string) => `${title} ${theme.fg("accent", summaryText)}`;
 	switch (phase) {
 		case "writing":
-			return `${spin("writing")} ${label(`Writing ${name} tool call…`)}`;
+			return `${spin("writing")} ${label("Calling ", " tool…")}`;
 		case "executing":
 			return done
-				? `${spin("executing")} ${withSummary(name === "codemode" ? "Executing code:" : `Executing ${name}:`, done)}`
-				: `${spin("executing")} ${label(name === "codemode" ? "Executing code…" : `Executing ${name}…`)}`;
+				? `${spin("executing")} ${withSummary(label("Running ", " tool:"), done)}`
+				: `${spin("executing")} ${label("Running ", " tool…")}`;
 		default: {
 			const mark = failed ? theme.fg("error", "✗") : theme.fg("success", "✓");
-			const title = `${name === "codemode" ? "Codemode" : name} ${failed ? "failed" : "executed"}`;
-			if (phase === "summarizing") return `${mark} ${label(`${title}:`)} ${spin("summarizing")}`;
-			return done ? `${mark} ${withSummary(`${title}:`, done)}` : `${mark} ${label(title)}`;
+			const status = ` tool ${failed ? "failed" : "completed"}`;
+			if (phase === "summarizing") return `${mark} ${label("", `${status}:`)} ${spin("summarizing")}`;
+			return done ? `${mark} ${withSummary(label("", `${status}:`), done)}` : `${mark} ${label("", status)}`;
 		}
 	}
 }
@@ -213,11 +213,15 @@ export function failureText(theme: Theme, failures: readonly Failure[], expanded
 
 /** Read failures at draw time. Pi calls renderCall before renderResult populates them. */
 class FailureLines implements Component {
-	constructor(
-		private readonly state: RowState,
-		private readonly theme: Theme,
-		private readonly expanded: boolean,
-	) {}
+	private readonly state: RowState;
+	private readonly theme: Theme;
+	private readonly expanded: boolean;
+
+	constructor(state: RowState, theme: Theme, expanded: boolean) {
+		this.state = state;
+		this.theme = theme;
+		this.expanded = expanded;
+	}
 	invalidate(): void {}
 	render(width: number): string[] {
 		const failures = this.state.failures ?? [];

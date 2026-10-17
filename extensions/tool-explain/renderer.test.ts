@@ -103,10 +103,10 @@ test("a live row never shows code while collapsed and ends with the full summary
 		{ name: "bash", args: '{"command":"grep"}', status: "error", durationMs: 10 },
 	];
 
-	assert.match(withoutSpinner(r.call()), /^# Writing codemode tool call…$/);
+	assert.match(withoutSpinner(r.call()), /^# Calling codemode tool…$/);
 	r.ctx.argsComplete = true;
 	store.set(codeKey(CODE), { status: "pending" });
-	assert.match(withoutSpinner(r.call({ executionStarted: true })), /^# Executing code…$/);
+	assert.match(withoutSpinner(r.call({ executionStarted: true })), /^# Running codemode tool…$/);
 	assert.match(
 		r.result({ calls: calls.slice(0, 1).map((c) => ({ ...c, status: "running" })) }),
 		/1 call · 1 running · Elapsed/,
@@ -118,11 +118,11 @@ test("a live row never shows code while collapsed and ends with the full summary
 
 	store.set(codeKey(CODE), { status: "done", text: SUMMARY });
 	const executing = withoutSpinner(r.call());
-	assert.ok(executing.startsWith("# Executing code: Rewrites"));
+	assert.ok(executing.startsWith("# Running codemode tool: Rewrites"));
 	assert.match(executing.replace(/\s+/g, " "), /greps for shell$/);
 
 	const done = r.call({ isPartial: false, durationMs: 1000 });
-	assert.equal(done.replace(/\s+/g, " "), `✓ Codemode executed: ${SUMMARY}`);
+	assert.equal(done.replace(/\s+/g, " "), `✓ codemode tool completed: ${SUMMARY}`);
 	assert.doesNotMatch(done, /const v0|…$/);
 	assert.equal(
 		r.result({ calls }, '{"output":"34: for (const row of ..."}', false),
@@ -146,7 +146,7 @@ test("expanded rows keep the summary above the full code and pi's full result", 
 		durationMs: 1000,
 		expanded: true,
 	});
-	assert.ok(call.startsWith("✓ Codemode executed: Rewrites"));
+	assert.ok(call.startsWith("✓ codemode tool completed: Rewrites"));
 	assert.match(call, /const v0 = await tools\.read/);
 	assert.match(call, /const v19 = await tools\.read/);
 	const calls = [{ name: "bash", args: '{"command":"grep"}', status: "error", durationMs: 10, error: "boom" }];
@@ -162,13 +162,13 @@ test("finished rows without a summary and failed scripts stay code-free while co
 	const store = new SummaryStore();
 	const r = liveRow(store);
 	const done = r.call({ argsComplete: true, executionStarted: true, isPartial: false, isError: true, durationMs: 5 });
-	assert.equal(done, "✗ Codemode failed");
+	assert.equal(done, "✗ codemode tool failed");
 	assert.match(r.result(undefined, "Script error: x", false), /^\nscript failed · Took 5ms$/);
 
 	store.set(codeKey(CODE), { status: "pending" });
 	r.call({ isError: false });
 	r.result(undefined, "", false);
-	assert.match(withoutSpinner(render(r.lastCall())), /^✓ Codemode executed: #$/);
+	assert.match(withoutSpinner(render(r.lastCall())), /^✓ codemode tool completed: #$/);
 });
 
 test("invalid arguments keep pi's native presentation", () => {
@@ -257,19 +257,21 @@ test("failed calls and script errors appear under the header, collapsed and expa
 	call = render(r.lastCall(), 100);
 	assert.equal(
 		`${call}\n${result}`,
-		`✓ Codemode executed: Read files and test a missing one\n${failure}\n\n2 calls · 1 failed · Took 3.0s`,
+		`✓ codemode tool completed: Read files and test a missing one\n${failure}\n\n2 calls · 1 failed · Took 3.0s`,
 	);
 
 	r.call({ expanded: true });
 	r.result({ calls }, "{}", false);
 	const expanded = render(r.lastCall(), 100);
-	assert.ok(expanded.startsWith(`✓ Codemode executed: Read files and test a missing one\n${failure}\n\nconst v0`));
+	assert.ok(
+		expanded.startsWith(`✓ codemode tool completed: Read files and test a missing one\n${failure}\n\nconst v0`),
+	);
 
 	r.call({ expanded: false, isError: true });
 	r.result({ calls: [] }, "partial\nScript error: boom", false);
 	assert.equal(
 		render(r.lastCall(), 100),
-		"✗ Codemode failed: Read files and test a missing one\n✗ Script error: boom",
+		"✗ codemode tool failed: Read files and test a missing one\n✗ Script error: boom",
 	);
 });
 
@@ -298,17 +300,33 @@ test("the script error is always visible and outside the collapsed limit", () =>
 	assert.deepEqual(failuresOf(content, undefined, true), [{ label: "Script error:", error: "Error: thrown" }]);
 });
 
-test("the summary is drawn in the accent color beside a muted label", () => {
+test("summaries use accent color, status labels are muted, and tool names are styled separately", () => {
 	const summary = { status: "done" as const, text: "Read files" };
 	const done = headerText(theme, "done", summary, false);
 	assert.ok(done.includes(theme.fg("accent", "Read files")));
-	assert.ok(done.includes(theme.fg("muted", "Codemode executed:")));
+	assert.ok(done.includes(theme.fg("muted", " tool completed:")));
+	assert.ok(done.includes(theme.fg("toolTitle", theme.bold("codemode"))));
 	const running = headerText(theme, "executing", summary, false);
 	assert.ok(running.includes(theme.fg("accent", "Read files")));
-	assert.ok(running.includes(theme.fg("muted", "Executing code:")));
-	assert.ok(
-		headerText(theme, "done", undefined, true).includes(theme.fg("toolTitle", theme.bold("Codemode failed"))),
-	);
+	assert.ok(running.includes(theme.fg("muted", "Running ")));
+	assert.ok(running.includes(theme.fg("toolTitle", theme.bold("codemode"))));
+	assert.ok(headerText(theme, "done", undefined, true).includes(theme.fg("muted", " tool failed")));
+});
+
+test("all tool phases consistently name and style the called tool", () => {
+	for (const name of ["write", "edit", "bash", "codemode", "mcp__test__search"]) {
+		for (const [phase, expected] of [
+			["writing", `Calling ${name} tool…`],
+			["executing", `Running ${name} tool…`],
+			["done", `${name} tool completed`],
+		] as const) {
+			const header = headerText(theme, phase, undefined, false, name);
+			assert.equal(withoutSpinner(plain(header)), `${phase === "done" ? "✓" : "#"} ${expected}`);
+			assert.ok(header.includes(theme.fg("toolTitle", theme.bold(name))));
+			assert.doesNotMatch(plain(header), /Writing|Executing code/);
+		}
+		assert.equal(plain(headerText(theme, "done", undefined, true, name)), `✗ ${name} tool failed`);
+	}
 });
 
 test("failure lines are faint and dim, with only the ✗ mark in the error color", () => {

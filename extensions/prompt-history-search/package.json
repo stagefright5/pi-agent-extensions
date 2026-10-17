@@ -7,7 +7,7 @@
     "prompt-history"
   ],
   "scripts": {
-    "test": "node --experimental-transform-types --test *.test.ts",
+    "test": "node --test *.test.ts",
     "prepack": "node ../../scripts/package-tools.mjs stage-package"
   },
   "peerDependencies": {
@@ -15,9 +15,11 @@
     "@earendil-works/pi-tui": "*"
   },
   "devDependencies": {
+    "@stagefright5/pi-extension-utils": "workspace:*",
     "@earendil-works/pi-coding-agent": "catalog:",
     "@earendil-works/pi-tui": "catalog:",
-    "@stagefright5/pi-picker": "workspace:*"
+    "@stagefright5/pi-picker": "workspace:*",
+    "@types/proper-lockfile": "^4.1.4"
   },
   "pi": {
     "extensions": [
@@ -31,5 +33,8 @@
   "packageTools": {
     "title": "Global Prompt History Search",
     "interface": "`Alt+R`, `/prompt-history`"
+  },
+  "dependencies": {
+    "proper-lockfile": "4.1.2"
   }
 }

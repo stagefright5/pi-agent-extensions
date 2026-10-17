@@ -1,5 +1,7 @@
 /** Evidence-guided planning with session-scoped, cancellable review UI. */
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { createUsageTracker } from "@stagefright5/pi-extension-utils";
+import { restorePlanState, STATE_TYPE } from "./state.ts";
 import { Key, stripTerminalSequences, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { Check } from "typebox/value";
@@ -20,24 +22,8 @@ import {
 	isPlanRevisionIntent,
 } from "./planning.ts";
 
-const STATE_TYPE = "plan-mode-interactive";
 const PLAN_RENDER_MESSAGE_TYPE = "plan-mode-rendered-plan";
 const REMINDER_TYPE = "plan-mode-revision-reminder";
-const stateSchema = Type.Object({
-	active: Type.Optional(Type.Boolean()),
-	planDir: Type.Optional(Type.Union([Type.String(), Type.Null()])),
-	iterations: Type.Optional(Type.Array(Type.String())),
-	planTitle: Type.Optional(Type.Union([Type.String(), Type.Null()])),
-	qaMessages: Type.Optional(
-		Type.Array(
-			Type.Object({
-				role: Type.Union([Type.Literal("user"), Type.Literal("assistant")]),
-				content: Type.String(),
-			}),
-		),
-	),
-	revisionPending: Type.Optional(Type.Boolean()),
-});
 const renderDetailsSchema = Type.Object({
 	plan: Type.Optional(Type.String()),
 	title: Type.Optional(Type.Union([Type.String(), Type.Null()])),
@@ -75,8 +61,10 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 	let pendingReview = false;
 	let reviewToken: symbol | undefined;
 	let scope = new AbortController();
+	let usage = createUsageTracker(pi, "plan-mode-summary");
+	let needsMigration = false;
 	const saves = new SerialTaskQueue();
-	const repository = new PlanRepository((...args) => pi.exec(...args), join(homedir(), ".pi", "plans"));
+	const repository = new PlanRepository((...args) => pi.exec(...args), join(getAgentDir(), "plans"));
 
 	function requireTui(ctx: ExtensionContext): boolean {
 		if (ctx.mode === "tui") return true;
@@ -96,33 +84,35 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		reminderRequested = false;
 	}
 
-	function persistState(): void {
-		// appendEntry retains its data object: snapshots must not share mutable arrays.
+	function persistState(reset = false): void {
+		needsMigration = false;
 		pi.appendEntry(STATE_TYPE, {
+			version: 2,
 			active,
 			planDir,
-			iterations: [...iterations],
 			planTitle,
-			qaMessages: qaMessages.map((message) => ({ ...message })),
 			revisionPending,
+			...(reset ? { reset: true } : {}),
 		});
 	}
 
 	function restoreState(ctx: ExtensionContext): void {
 		resetInteractions();
-		const entry = ctx.sessionManager
-			.getBranch()
-			.findLast((item) => item.type === "custom" && item.customType === STATE_TYPE);
-		const data = entry?.type === "custom" && Check(stateSchema, entry.data) ? entry.data : undefined;
-		active = ctx.mode === "tui" && (data?.active ?? false);
-		planDir = data?.planDir ?? null;
-		iterations = [...(data?.iterations ?? [])];
-		planTitle = data?.planTitle ?? null;
-		qaMessages = (data?.qaMessages ?? []).map((message) => ({ ...message }));
-		revisionPending = data?.revisionPending ?? false;
+		const branch = ctx.sessionManager.getBranch();
+		const restored = restorePlanState(branch);
+		({ planDir, iterations, planTitle, qaMessages, revisionPending } = restored);
+		active = ctx.mode === "tui" && restored.active;
+		const latest = branch.findLast((entry) => entry.type === "custom" && entry.customType === STATE_TYPE);
+		const data = latest?.type === "custom" ? (latest.data as { version?: unknown } | undefined) : undefined;
+		// Navigation is read-only. Delimit legacy snapshots before the next new message instead.
+		needsMigration = ctx.mode === "tui" && !!data && data.version !== 2;
 	}
 
 	function updateUI(ctx: ExtensionContext): void {
+		const tools = pi.getActiveTools();
+		const enabled = active && ctx.mode === "tui";
+		if (tools.includes("plan_output") !== enabled)
+			pi.setActiveTools(enabled ? [...tools, "plan_output"] : tools.filter((name) => name !== "plan_output"));
 		if (ctx.mode !== "tui") return;
 		const theme = ctx.ui.theme;
 		ctx.ui.setWorkingVisible(!active);
@@ -148,7 +138,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		planTitle = null;
 		qaMessages = [];
 		revisionPending = false;
-		persistState();
+		persistState(true);
 		updateUI(ctx);
 		ctx.ui.notify("▣ Plan mode activated. Gather material evidence before presenting a plan.", "info");
 	}
@@ -180,13 +170,19 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		);
 	});
 
+	pi.registerEntryRenderer(PLAN_RENDER_MESSAGE_TYPE, (entry, _options, theme) => {
+		const data = Check(renderDetailsSchema, entry.data) ? entry.data : undefined;
+		return createPlanMessageComponent(
+			data?.plan ?? "",
+			data?.title ?? null,
+			data?.iteration ?? 0,
+			data?.planPath ?? null,
+			theme,
+		);
+	});
+
 	function renderPlanInChat(plan: string, iteration: number): void {
-		pi.sendMessage({
-			customType: PLAN_RENDER_MESSAGE_TYPE,
-			content: `Plan iteration ${iteration} rendered in chat for review.`,
-			display: true,
-			details: { plan, title: planTitle, iteration, planPath: planPath() },
-		});
+		pi.appendEntry(PLAN_RENDER_MESSAGE_TYPE, { plan, title: planTitle, iteration, planPath: planPath() });
 	}
 
 	function sendFollowUp(ctx: ExtensionContext, content: string): void {
@@ -238,19 +234,29 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		const prompt = allChanges
 			? `Summarize ALL changes across these ${versions.length} plan iterations. What evolved, was added, removed, or restructured? Be concise and use markdown.\n\n${versions.map((plan, i) => `### Version ${i + 1}\n${plan}`).join("\n\n---\n\n")}`
 			: `Summarize the changes between these two plan versions. What was added, removed, or modified? Be concise and use markdown.\n\n### Previous Version\n${versions.at(-2)}\n\n### Current Version\n${versions.at(-1)}`;
-		const summary = await withLoader(ctx, `Generating ${title.toLowerCase()}…`, signal, async (requestSignal) => {
-			const response = await ctx.modelRegistry.complete(
-				model,
-				{
-					messages: [{ role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() }],
-				},
-				{ signal: requestSignal },
-			);
-			requestSignal.throwIfAborted();
-			if (response.stopReason === "error" || response.stopReason === "aborted")
-				throw new Error(response.errorMessage || response.stopReason);
-			return getMessageText(response.content) || "(empty summary)";
-		});
+		const accounting = usage;
+		const summary = await withLoader(ctx, `Generating ${title.toLowerCase()}…`, signal, (requestSignal) =>
+			accounting.track(
+				(async () => {
+					const response = await ctx.modelRegistry
+						.streamSimple(
+							model,
+							{
+								messages: [
+									{ role: "user", content: [{ type: "text", text: prompt }], timestamp: Date.now() },
+								],
+							},
+							{ signal: requestSignal },
+						)
+						.result();
+					accounting.record(response.usage);
+					requestSignal.throwIfAborted();
+					if (response.stopReason === "error" || response.stopReason === "aborted")
+						throw new Error(response.errorMessage || response.stopReason);
+					return getMessageText(response.content) || "(empty summary)";
+				})(),
+			),
+		);
 		if (summary !== undefined && !signal.aborted)
 			await showDocument(
 				ctx,
@@ -395,6 +401,9 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 
 	pi.registerTool({
 		name: "plan_output",
+		defaultActive: false,
+		outputSchema: outputDetailsSchema,
+		constrainedSampling: { type: "json_schema", strict: "prefer" },
 		label: "Plan Output",
 		description:
 			"Present a complete implementation plan for interactive review when planning evidence is sufficient. Use again only when the user requests a revision or replacement.",
@@ -411,6 +420,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		}),
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
 			if (ctx.mode !== "tui") throw new Error("Plan review requires TUI interactive mode.");
+			if (!active) throw new Error("Activate plan mode with /plan before presenting a plan.");
 			const operationSignal = AbortSignal.any([scope.signal, ...(signal ? [signal] : [])]);
 			return saves.run(async () => {
 				operationSignal.throwIfAborted();
@@ -434,7 +444,8 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 							text: "Plan saved for interactive review. Do not continue until the user approves, requests revisions, or asks a follow-up question.",
 						},
 					],
-					details: { presented: true, iteration, planDir: savedDir },
+					details: { presented: true, iteration, planDir: savedDir, plan: params.plan, title: params.title },
+					structuredContent: { presented: true, iteration, planDir: savedDir },
 					terminate: true,
 				};
 			});
@@ -524,7 +535,9 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		}
 	});
 	pi.on("tool_call", (event) => {
-		if (!active || event.toolName !== "plan_output" || !iterations.length || revisionPending) return;
+		if (event.toolName !== "plan_output") return;
+		if (!active) return { block: true, reason: "Activate plan mode with /plan first." };
+		if (!iterations.length || revisionPending) return;
 		if (lastUserInputPlanIteration === iterations.length && isPlanRevisionIntent(lastUserInputText)) return;
 		return {
 			block: true,
@@ -546,6 +559,9 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		if (event.aborted) pendingReview = false;
 		else if (pendingReview) void openPlanReview(ctx);
 	});
+	pi.on("message_start", () => {
+		if (active && needsMigration) persistState();
+	});
 	pi.on("message_end", (event) => {
 		if (!active) return;
 		const message = event.message;
@@ -566,11 +582,9 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			const replacement =
 				"△ Plan revision is pending. The complete revised plan must be presented through plan_output for review.";
 			qaMessages.push({ role: "assistant", content: replacement });
-			persistState();
 			return { message: { ...message, content: [{ type: "text", text: replacement }] } };
 		}
 		qaMessages.push({ role: message.role, content: text });
-		persistState();
 	});
 	pi.on("agent_before_settle", (event) => {
 		if (!revisionReminder || event.outcome !== "completed" || !event.context.canContinue) return;
@@ -595,11 +609,14 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			if (message.role !== "custom") return true;
 			return (
 				message.customType !== PLAN_RENDER_MESSAGE_TYPE &&
+				// Keep filtering legacy custom messages when resuming pre-migration sessions.
 				(active || (message.customType !== "plan-mode-context" && message.customType !== REMINDER_TYPE))
 			);
 		}),
 	}));
 	pi.on("session_start", (_event, ctx) => {
+		usage.close();
+		usage = createUsageTracker(pi, "plan-mode-summary");
 		restoreState(ctx);
 		if (pi.getFlag("plan") === true && ctx.mode === "tui") enterPlanMode(ctx);
 		else updateUI(ctx);
@@ -612,7 +629,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		scope.abort();
 		pendingReview = false;
 		reviewToken = undefined;
-		await saves.idle();
+		await Promise.all([saves.idle(), usage.drain()]);
 		if (ctx.mode === "tui") {
 			ctx.ui.setWorkingVisible(true);
 			ctx.ui.setStatus("plan-mode", undefined);

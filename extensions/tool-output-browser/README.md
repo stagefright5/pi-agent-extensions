@@ -27,9 +27,9 @@ In an opened result:
 - Press `Up` / `Down` or `j` / `k` to scroll one visual line.
 - Press `Page Up` / `Page Down` or `Space` to scroll one page.
 - Press `Home` / `End` or `g` / `G` to jump to the start or end.
-- Press `Tab` / `Right` to switch among output, arguments, and details.
+- Press `Tab` / `Right` to switch among output, arguments, details, structured content, and nested calls.
 - Press `n` / `p` to open the next or previous matching tool result.
-- Press `Escape` / `Left` to return to the picker.
+- Use the configured `tui.select.cancel` binding (default `Escape`) or `Left` to return to the picker. Scrolling respects `tui.select.up`, `down`, `pageUp`, and `pageDown`; the footer shows the configured keys.
 - Press `Ctrl+C` to close the browser.
 
 Pi's normal `Ctrl+O` remains unchanged and still expands or collapses every tool row in the transcript.
@@ -44,7 +44,7 @@ Rendering and navigation are tested against pi 1.3.0, including tiny widths and 
 
 The browser reads tool-result messages from the current active branch. Newest results appear first; results that exist only on alternate branches are not shown.
 
-The output view shows the complete text stored in the tool-result message, rather than the compact transcript preview. The arguments and details views show the corresponding stored metadata. The browser shows image blocks as MIME-type markers, not terminal images.
+The output view shows the complete text stored in the tool-result message, rather than the compact transcript preview. The arguments and details views show the corresponding stored metadata. Structured and nested views expose `structuredContent` and the full stored `nestedCalls` record, including completeness/truncation metadata; these fields are searchable too. Repeated payload strings are indexed once (including bash output duplicated in structured/nested results), while the detail tabs retain the complete original values. The browser shows image blocks as MIME-type markers, not terminal images.
 
 The browser uses an overlay because pi's public extension API exposes only the global tool-expansion state. It cannot focus or expand individual built-in transcript rows.
 

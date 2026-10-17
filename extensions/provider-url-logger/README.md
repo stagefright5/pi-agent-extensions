@@ -2,13 +2,13 @@
 
 Most of this extension was written with the pi agent CLI.
 
-Records which provider endpoint pi selects for each request.
+Records the dispatched physical model and its configured endpoint for each request that emits a provider stream event.
 
 [Back to the extension workspace](../../README.md)
 
 ## Logged data
 
-Each `before_provider_request` event appends one line in this format:
+The first `provider_stream_event` after each `before_provider_request` queues one line in this format. Its provider/model identity is physical even when the selected model is virtual:
 
 ```text
 2026-07-15T12:58:12.345Z provider/model-id https://provider.example/v1
@@ -32,7 +32,7 @@ The extension appends entries to:
 
 This is the default path. The extension uses `getAgentDir()` and respects `PI_CODING_AGENT_DIR`, creating the configured directory if necessary.
 
-The file is never truncated or rotated automatically. Remove or rotate it yourself if it grows too large. A base URL may still reveal private infrastructure or query parameters, so treat the log as potentially sensitive.
+Before the active file would exceed 1 MiB, it rotates to `provider-urls.log.1`, replacing the previous archive. Both files are owner-only. A cross-process lock protects rotation and append. A base URL may still reveal private infrastructure or query parameters, so treat the log as potentially sensitive.
 
 <!-- package-tools:install:start -->
 
@@ -50,6 +50,8 @@ For source development, load this directory with `pi -e ./extensions/provider-ur
 
 ## Limitations
 
-- File I/O is asynchronous and awaited immediately before provider request handling.
-- If the log cannot be opened or written, pi reports the extension hook error and continues according to pi's extension error handling.
-- There is no command, filter, retention policy, or automatic redaction of the configured base URL.
+- File I/O is queued off the request/stream path and drained during orderly session shutdown. A forced process exit can lose queued lines.
+- Logging failures produce at most one UI warning per session and do not block provider requests. Delayed failures never notify through a retired context or break the write queue.
+- Request deduplication assumes Pi's serial agent-request lifecycle. Pi 1.3.0 exposes no request id on these hooks, so overlapping/interleaved streams cannot be reliably attributed and may be missed. This is a diagnostic log, not a complete HTTP access or billing log.
+- Requests that fail before their first provider stream event are not recorded. The URL is the physical model's configured base URL, not an intercepted HTTP destination; redirects or authentication-time URL overrides may differ.
+- There is no command, filter, or automatic redaction of the configured base URL.

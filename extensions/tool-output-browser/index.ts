@@ -33,15 +33,17 @@ export type ToolOutputRecord = {
 	arguments?: Record<string, unknown>;
 	content: unknown[];
 	details?: unknown;
+	structuredContent?: unknown;
+	nestedCalls?: unknown;
 	isError: boolean;
 	timestamp: number;
 	output: string;
 	searchText: string;
 };
 
-type DetailView = "output" | "arguments" | "details";
+type DetailView = "output" | "arguments" | "details" | "structured" | "nested";
 
-const DETAIL_VIEWS: DetailView[] = ["output", "arguments", "details"];
+const DETAIL_VIEWS: DetailView[] = ["output", "arguments", "details", "structured", "nested"];
 const OVERLAY_HEIGHT_RATIO = 0.85;
 
 function safeJson(value: unknown): string {
@@ -51,6 +53,28 @@ function safeJson(value: unknown): string {
 	} catch {
 		return String(value);
 	}
+}
+
+/** Index repeated payload strings once; preserve the original objects for the detail tabs. */
+function searchText(toolName: string, output: string, ...values: unknown[]): string {
+	const seen = new Set([toolName, output]);
+	const parts = [toolName, output];
+	for (const value of values) {
+		try {
+			parts.push(
+				JSON.stringify(value, (_key, item: unknown) => {
+					if (typeof item !== "string") return item;
+					// A bash text result can contain its structured output plus a truncation/status notice.
+					if (seen.has(item) || (item.length >= 256 && output.includes(item))) return "";
+					seen.add(item);
+					return item;
+				}) ?? "",
+			);
+		} catch {
+			parts.push(String(value));
+		}
+	}
+	return parts.join("\n").toLowerCase();
 }
 
 function normalizeSingleLine(value: string): string {
@@ -83,7 +107,7 @@ function timestampFrom(entry: { timestamp?: unknown }, message: { timestamp?: un
 	return 0;
 }
 
-function collectToolOutputs(ctx: ExtensionContext): ToolOutputRecord[] {
+export function collectToolOutputs(ctx: ExtensionContext): ToolOutputRecord[] {
 	const calls = new Map<string, ToolCallInfo>();
 	const records: ToolOutputRecord[] = [];
 
@@ -120,6 +144,8 @@ function collectToolOutputs(ctx: ExtensionContext): ToolOutputRecord[] {
 			toolName?: unknown;
 			content?: unknown;
 			details?: unknown;
+			structuredContent?: unknown;
+			nestedCalls?: unknown;
 			isError?: unknown;
 			timestamp?: unknown;
 		};
@@ -130,8 +156,6 @@ function collectToolOutputs(ctx: ExtensionContext): ToolOutputRecord[] {
 		const content = Array.isArray(result.content) ? result.content : [];
 		const output = contentToText(content);
 		const sequence = records.length + 1;
-		const argumentsText = safeJson(call?.arguments);
-		const detailsText = safeJson(result.details);
 
 		records.push({
 			entryId: rawEntry.id,
@@ -141,10 +165,19 @@ function collectToolOutputs(ctx: ExtensionContext): ToolOutputRecord[] {
 			arguments: call?.arguments,
 			content,
 			details: result.details,
+			structuredContent: result.structuredContent,
+			nestedCalls: result.nestedCalls,
 			isError: result.isError === true,
 			timestamp: timestampFrom(rawEntry, result),
 			output,
-			searchText: `${toolName}\n${argumentsText}\n${output}\n${detailsText}`.toLowerCase(),
+			searchText: searchText(
+				toolName,
+				output,
+				call?.arguments,
+				result.details,
+				result.structuredContent,
+				result.nestedCalls,
+			),
 		});
 	}
 
@@ -178,16 +211,25 @@ export class ToolOutputBrowser implements Component, Focusable {
 	private scrollOffset = 0;
 	private cachedDetail?: { recordId: string; view: DetailView; width: number; lines: string[] };
 	private _focused = false;
+	private readonly keybindings: KeybindingsManager;
+
+	private readonly tui: TUI;
+	private readonly getTheme: () => Theme;
+	private readonly done: () => void;
 
 	constructor(
-		private readonly tui: TUI,
-		private readonly getTheme: () => Theme,
+		tui: TUI,
+		getTheme: () => Theme,
 		keybindings: KeybindingsManager,
 		records: ToolOutputRecord[],
 		initialQuery: string,
-		private readonly done: () => void,
+		done: () => void,
 		copy: (text: string) => Promise<void> = copyToClipboard,
 	) {
+		this.keybindings = keybindings;
+		this.tui = tui;
+		this.getTheme = getTheme;
+		this.done = done;
 		const counts = new Map<string, number>();
 		for (const record of records) counts.set(record.toolName, (counts.get(record.toolName) ?? 0) + 1);
 		const tools = [...counts.entries()]
@@ -301,7 +343,7 @@ export class ToolOutputBrowser implements Component, Focusable {
 	}
 
 	private handleDetailInput(data: string): void {
-		if (matchesKey(data, Key.escape) || matchesKey(data, Key.left)) {
+		if (this.keybindings.matches(data, "tui.select.cancel") || matchesKey(data, Key.left)) {
 			this.mode = "list";
 			this.picker.focused = this._focused;
 			this.tui.requestRender();
@@ -315,19 +357,19 @@ export class ToolOutputBrowser implements Component, Focusable {
 			this.cycleView(-1);
 			return;
 		}
-		if (matchesKey(data, Key.up) || matchesKey(data, "k")) {
+		if (this.keybindings.matches(data, "tui.select.up") || matchesKey(data, "k")) {
 			this.scrollBy(-1);
 			return;
 		}
-		if (matchesKey(data, Key.down) || matchesKey(data, "j")) {
+		if (this.keybindings.matches(data, "tui.select.down") || matchesKey(data, "j")) {
 			this.scrollBy(1);
 			return;
 		}
-		if (matchesKey(data, Key.pageUp)) {
+		if (this.keybindings.matches(data, "tui.select.pageUp")) {
 			this.scrollBy(-this.detailPageSize());
 			return;
 		}
-		if (matchesKey(data, Key.pageDown) || matchesKey(data, Key.space)) {
+		if (this.keybindings.matches(data, "tui.select.pageDown") || matchesKey(data, Key.space)) {
 			this.scrollBy(this.detailPageSize());
 			return;
 		}
@@ -392,9 +434,14 @@ export class ToolOutputBrowser implements Component, Focusable {
 			wrapped.length === 0
 				? "0/0"
 				: `${this.scrollOffset + 1}-${Math.min(this.scrollOffset + pageSize, wrapped.length)}/${wrapped.length}`;
+		const back = this.keybindings.getKeys("tui.select.cancel").join("/");
+		const scroll = [
+			...this.keybindings.getKeys("tui.select.up"),
+			...this.keybindings.getKeys("tui.select.down"),
+		].join("/");
 		lines.push(
 			row(
-				` ${this.theme.fg("dim", width < 80 ? `${position} · tab view · esc back` : `${position} · ↑↓ scroll · tab view · n/p result · esc back · ctrl+c close`)}`,
+				` ${this.theme.fg("dim", width < 80 ? `${position} · tab view · ${back} back` : `${position} · ${scroll} scroll · tab view · n/p result · ${back} back · ctrl+c close`)}`,
 			),
 		);
 		lines.push(rule());
@@ -414,6 +461,12 @@ export class ToolOutputBrowser implements Component, Focusable {
 		switch (this.detailView) {
 			case "arguments":
 				text = safeJson(record.arguments) || "(arguments unavailable)";
+				break;
+			case "structured":
+				text = safeJson(record.structuredContent) || "(no structured content)";
+				break;
+			case "nested":
+				text = safeJson(record.nestedCalls) || "(no nested calls)";
 				break;
 			case "details":
 				text = safeJson(record.details) || "(no details)";

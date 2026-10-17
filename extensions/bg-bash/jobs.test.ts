@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, statSync, existsSync, chmodSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import test from "node:test";
 import backgroundBash, { MESSAGE_TYPE } from "./index.ts";
 import { JobManager, jobManager, lastLines, readJobOutput, TailRing } from "./jobs.ts";
@@ -32,20 +32,75 @@ const toolContext = (cwd = process.cwd()) =>
 		thinkingLevel: undefined,
 	}) as never;
 
-type AnyTool = { name: string; execute: Function };
+type AnyTool = { name: string; execute: Function; prepareArguments?: (args: unknown) => unknown };
+// Accelerate the scheduler only in tests, while asserting every production call requests 10s.
+const foregroundDelays = new WeakMap<JobManager, number>();
+function accelerateForeground(manager: JobManager, milliseconds = 50): void {
+	if (foregroundDelays.has(manager)) return;
+	foregroundDelays.set(manager, milliseconds);
+	const start = manager.start.bind(manager);
+	manager.start = (options) => {
+		const job = start(options);
+		const wait = job.waitForeground.bind(job);
+		job.waitForeground = (milliseconds, signal) => {
+			assert.equal(milliseconds, 10_000, "the tool must always enforce its fixed threshold");
+			return wait(foregroundDelays.get(manager)!, signal);
+		};
+		return job;
+	};
+}
 function tools(manager = new JobManager(mkdtempSync(join(tmpdir(), "bg-bash-test-")))) {
+	accelerateForeground(manager);
 	const options = { manager, session: () => "test-session", shell: () => ({}) };
 	const all = [createBashTool(options), ...createJobTools(options)] as unknown as AnyTool[];
 	const byName = Object.fromEntries(all.map((tool) => [tool.name, tool]));
 	const run = (name: string, params: object, signal?: AbortSignal) =>
-		byName[name]!.execute("call", params, signal, undefined, toolContext()) as Promise<{
+		byName[name]!.execute(
+			"call",
+			byName[name]!.prepareArguments?.(params) ?? params,
+			signal,
+			undefined,
+			toolContext(),
+		) as Promise<{
 			content: { type: string; text: string }[];
 			structuredContent?: Record<string, unknown>;
 			details?: { job?: { id: string } };
 			isError?: boolean;
 		}>;
-	return { manager, run };
+	return { manager, run, setForegroundDelay: (ms: number) => foregroundDelays.set(manager, ms) };
 }
+
+test("background logs are private even with a permissive umask and removed on reset", async () => {
+	const { manager, run } = tools();
+	chmodSync(manager.logDir, 0o777);
+	const oldMask = process.umask(0);
+	try {
+		await run("bash", { command: "echo private; sleep 30" });
+		const job = manager.get("j1")!;
+		await until(() => existsSync(job.logPath!));
+		if (process.platform !== "win32") {
+			assert.equal(statSync(job.logPath!).mode & 0o777, 0o600);
+			assert.equal(statSync(dirname(job.logPath!)).mode & 0o777, 0o700);
+			assert.equal(statSync(manager.logDir).mode & 0o777, 0o700);
+		}
+		await manager.reset();
+		assert.equal(existsSync(job.logPath!), false);
+		assert.equal(existsSync(dirname(job.logPath!)), false);
+	} finally {
+		process.umask(oldMask);
+		await manager.reset();
+	}
+});
+
+test("job list is opt-in, kill is closed-world, and strict nulls are normalized before validation", () => {
+	const { manager } = tools();
+	const options = { manager, session: () => "s", shell: () => ({}) };
+	const definitions = createJobTools(options);
+	assert.equal(definitions.find((tool) => tool.name === "job_list")!.defaultActive, false);
+	assert.equal(definitions.find((tool) => tool.name === "job_kill")!.annotations?.openWorldHint, false);
+	const bash = createBashTool(options);
+	assert.deepEqual(bash.prepareArguments!({ command: "true", timeout: null, wait: null }), { command: "true" });
+});
 
 test("tail ring keeps the newest bytes and drops the partial first line once trimmed", () => {
 	const ring = new TailRing(16);
@@ -61,7 +116,7 @@ test("tail ring keeps the newest bytes and drops the partial first line once tri
 
 test("a quick command returns like the built-in bash: output, exit code, no job", async () => {
 	const { manager, run } = tools();
-	const ok = await run("bash", { command: "echo hello", wait: null, timeout: null });
+	const ok = await run("bash", { command: "echo hello", timeout: null });
 	assert.equal(ok.content[0]!.text, "hello\n");
 	assert.equal(ok.structuredContent!.exit_code, 0);
 	assert.equal(ok.structuredContent!.job_id, undefined);
@@ -72,7 +127,6 @@ test("a quick command returns like the built-in bash: output, exit code, no job"
 	assert.equal(failed.structuredContent!.exit_code, 3);
 	assert.equal(manager.size, 0, "foreground commands are never listed");
 	await assert.rejects(run("bash", { command: "true", timeout: -1 }), /Invalid timeout/u);
-	await assert.rejects(run("bash", { command: "true", wait: Number.NaN }), /Invalid wait/u);
 });
 
 test("PI_* session environment still reaches commands", async () => {
@@ -85,12 +139,9 @@ test("a slow command moves to the background, keeps logging, and is unread when 
 	const { manager, run } = tools();
 	const changes: string[] = [];
 	manager.onChange((job, change) => change === "state" && changes.push(`${job.id}:${job.state}`));
-	const result = await run("bash", { command: "echo start; sleep 0.6; echo done", wait: 0.2 });
+	const result = await run("bash", { command: "echo start; sleep 0.6; echo done" });
 	const text = result.content[0]!.text;
-	assert.match(
-		text,
-		/^start\n\n\n\[Still running in background as job j1 \(pid \d+\) after 0.2s\. Log: .+j1\.log\./u,
-	);
+	assert.match(text, /^start\n\n\n\[Still running in background as job j1 \(pid \d+\) after 10s\. Log: .+j1\.log\./u);
 	assert.equal(result.structuredContent!.running, true);
 	assert.equal(result.structuredContent!.job_id, "j1");
 	assert.equal(result.structuredContent!.exit_code, undefined);
@@ -113,7 +164,7 @@ test("a slow command moves to the background, keeps logging, and is unread when 
 
 test("job_output reads tails, line ranges, and grep matches; unknown ids are structured errors", async () => {
 	const { manager, run } = tools();
-	await run("bash", { command: "for i in $(seq 1 50); do echo line $i; done; sleep 0.3", wait: 0.05 });
+	await run("bash", { command: "for i in $(seq 1 50); do echo line $i; done; sleep 0.3" });
 	const job = manager.get("j1")!;
 	await job.exited();
 	const tail = await run("job_output", { id: "j1", tail_lines: 3 });
@@ -144,7 +195,6 @@ test("long logs: job_output reads only the file end", async () => {
 	const { manager, run } = tools();
 	await run("bash", {
 		command: "sleep 0.2; for i in $(seq 1 20000); do echo line $i padding padding padding; done",
-		wait: 0,
 	});
 	const job = manager.get("j1")!;
 	await job.exited();
@@ -158,7 +208,7 @@ test("long logs: job_output reads only the file end", async () => {
 
 test("job_kill stops the whole process group; killed jobs are neither unread nor notified", async () => {
 	const { manager, run } = tools();
-	const result = await run("bash", { command: "sleep 30 & echo $!; wait", wait: 0.3 });
+	const result = await run("bash", { command: "sleep 30 & echo $!; wait" });
 	const child = Number(result.content[0]!.text.split("\n")[0]);
 	assert.ok(alive(child));
 	const killed = await run("job_kill", { id: "j1" });
@@ -173,30 +223,66 @@ test("job_kill stops the whole process group; killed jobs are neither unread nor
 });
 
 test("timeout keeps applying after the job moves to the background", async () => {
-	const { manager, run } = tools();
-	await run("bash", { command: "sleep 10", wait: 0.1, timeout: 0.5 });
+	const { manager, run, setForegroundDelay } = tools();
+	await run("bash", { command: "sleep 10", timeout: 0.5 });
 	const job = manager.get("j1")!;
 	await job.exited();
 	assert.equal(job.state, "timed-out");
 	assert.equal(job.unread, true);
 	assert.deepEqual(manager.counts(), { running: 0, unreadOk: 0, unreadFailed: 1 });
+	setForegroundDelay(5000);
 	await assert.rejects(
-		run("bash", { command: "sleep 10", timeout: 0.2, wait: 5 }),
-		/Command timed out after 0.2 seconds/u,
+		run("bash", { command: "echo before-timeout; echo stderr-before-timeout >&2; sleep 10", timeout: 0.2 }),
+		(error: Error) => {
+			assert.match(error.message, /before-timeout\n/);
+			assert.match(error.message, /stderr-before-timeout/);
+			assert.match(error.message, /Command timed out after 0.2 seconds/);
+			assert.doesNotMatch(error.message, /timeout:/);
+			return true;
+		},
 	);
 });
 
-test("Esc during the wait kills the command; after backgrounding it has no effect", async () => {
-	const { manager, run } = tools();
+test("foreground timeouts retain truncation notices and the complete output file", async () => {
+	const { manager, run, setForegroundDelay } = tools();
+	setForegroundDelay(5000);
+	try {
+		await assert.rejects(
+			run("bash", {
+				command: "for i in {1..2205}; do printf 'line-%s\\n' \"$i\"; done; sleep 10",
+				timeout: 0.5,
+			}),
+			(error: Error) => {
+				assert.match(error.message, /line-2205/);
+				assert.match(error.message, /Command timed out after 0.5 seconds/);
+				const path = /Full output: ([^\]\n]+)/.exec(error.message)?.[1];
+				assert.ok(path, "the built-in truncation notice survives the timeout");
+				try {
+					assert.match(readFileSync(path, "utf8"), /^line-1\n/);
+				} finally {
+					rmSync(path, { force: true });
+				}
+				return true;
+			},
+		);
+	} finally {
+		await manager.reset();
+	}
+});
+
+test("Esc during the foreground period kills the command; after backgrounding it has no effect", async () => {
+	const { manager, run, setForegroundDelay } = tools();
+	setForegroundDelay(5000);
 	const abort = new AbortController();
 	setTimeout(() => abort.abort(), 150);
 	const started = Date.now();
-	await assert.rejects(run("bash", { command: "echo $$; sleep 10", wait: 5 }, abort.signal), /Command aborted/u);
+	await assert.rejects(run("bash", { command: "echo $$; sleep 10" }, abort.signal), /Command aborted/u);
 	assert.ok(Date.now() - started < 2000);
 	assert.equal(manager.size, 0);
 
+	setForegroundDelay(50);
 	const later = new AbortController();
-	await run("bash", { command: "sleep 0.5", wait: 0.05 }, later.signal);
+	await run("bash", { command: "sleep 0.5" }, later.signal);
 	later.abort();
 	const job = manager.get("j1")!;
 	await job.exited();
@@ -205,11 +291,13 @@ test("Esc during the wait kills the command; after backgrounding it has no effec
 
 /** A fake pi runtime around the extension: tools, handlers, messages, statuses. */
 function runtime(mode: "tui" | "print" = "print") {
+	accelerateForeground(jobManager());
 	const handlers = new Map<string, Function>();
 	const registered = new Map<string, AnyTool>();
 	const messages: { message: { customType: string; content: string }; options: unknown }[] = [];
 	const statuses: (string | undefined)[] = [];
 	backgroundBash({
+		getSettings: () => ({}),
 		registerTool: (tool: AnyTool) => registered.set(tool.name, tool),
 		registerMessageRenderer() {},
 		registerCommand() {},
@@ -245,7 +333,7 @@ test("extension: finish notifications, footer status, reload keeps jobs, quit ki
 	pi.start();
 	const manager = jobManager();
 	try {
-		await pi.run("bash", { command: "echo hi; sleep 0.3; echo bye", wait: 0.05 });
+		await pi.run("bash", { command: "echo hi; sleep 0.3; echo bye" });
 		assert.deepEqual(pi.statuses, ["● 1 running"]);
 		const job = manager.get("j1")!;
 		await job.exited();
@@ -260,13 +348,13 @@ test("extension: finish notifications, footer status, reload keeps jobs, quit ki
 		assert.deepEqual(pi.statuses, ["● 1 running", "○1"], "unread success circle");
 
 		// Killed jobs: no notification.
-		await pi.run("bash", { command: "sleep 30", wait: 0 });
+		await pi.run("bash", { command: "sleep 30" });
 		await pi.run("job_kill", { id: "j2" });
 		await manager.get("j2")!.exited();
 		assert.equal(pi.messages.length, 1);
 
 		// A stop from the jobs manager (the user) is reported, so the agent does not assume it still runs.
-		await pi.run("bash", { command: "sleep 30", wait: 0 });
+		await pi.run("bash", { command: "sleep 30" });
 		const stopped = manager.get("j3")!;
 		stopped.kill("user");
 		await stopped.exited();
@@ -278,7 +366,7 @@ test("extension: finish notifications, footer status, reload keeps jobs, quit ki
 		assert.equal(stopped.unread, false, "the user knows: no footer circle");
 
 		// Reload keeps a running job; the new runtime rebinds and reports its exit.
-		await pi.run("bash", { command: "sleep 0.4", wait: 0 });
+		await pi.run("bash", { command: "sleep 0.4" });
 		const kept = manager.get("j4")!;
 		pi.shutdown("reload");
 		assert.equal(kept.state, "running");
@@ -288,14 +376,14 @@ test("extension: finish notifications, footer status, reload keeps jobs, quit ki
 		assert.equal(pi.messages.length, 2, "the old runtime no longer listens");
 		assert.equal(next.messages.length, 1, "the new runtime notifies");
 
-		await next.run("bash", { command: "sleep 30", wait: 0 });
+		await next.run("bash", { command: "sleep 30" });
 		const doomed = manager.get("j5")!;
-		next.shutdown("quit");
+		await next.shutdown("quit");
 		await doomed.exited();
 		assert.equal(doomed.state, "killed");
 		assert.equal(manager.size, 0, "a new session starts with no jobs");
 	} finally {
-		manager.reset();
+		await manager.reset();
 	}
 });
 

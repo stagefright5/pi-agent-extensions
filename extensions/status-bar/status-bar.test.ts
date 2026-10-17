@@ -5,7 +5,7 @@ import test from "node:test";
 import { stripVTControlCharacters as plain } from "node:util";
 import { visibleWidth, type TuiMouseEvent } from "@earendil-works/pi-tui";
 import statusBar from "./index.ts";
-import { registerStatusAction, statusLineChannel } from "./status-line.ts";
+import { registerStatusAction, registerModelStatus, statusLineChannel } from "./status-line.ts";
 
 type Footer = {
 	render(width: number): string[];
@@ -99,7 +99,7 @@ const click = (x: number, type: TuiMouseEvent["type"] = "click"): TuiMouseEvent 
 });
 
 test("fast icon follows effort exactly once, before context and cost", () => {
-	// Accept the old status text as well as the new glyph; the stable key carries state.
+	// Older producers publish either spelling without registering presentation metadata.
 	for (const value of ["fast", "⚡︎"]) {
 		const { render } = fixture(value);
 		const line = render();
@@ -107,6 +107,23 @@ test("fast icon follows effort exactly once, before context and cost", () => {
 		assert.equal(line.split("⚡︎").length - 1, 1);
 		assert.match(line, /plan review/);
 		assert.doesNotMatch(line, /\bfast\b/);
+	}
+});
+
+test("model statuses use the accent color, including legacy fast producers", () => {
+	const theme = { fg: (token: string, text: string) => (token === "accent" ? `\x1b[36m${text}\x1b[39m` : text) };
+	const f = fixture("fast", theme);
+	const unregister = registerModelStatus("sample-model-status");
+	try {
+		f.statuses.set("sample-model-status", "turbo");
+		const line = f.render();
+		assert.ok(line.includes(theme.fg("accent", "⚡︎")));
+		assert.ok(line.includes(theme.fg("accent", "turbo")));
+		assert.match(plain(line), /high · ⚡︎ · turbo · 71.5%/);
+		assert.equal(plain(line).split("turbo").length - 1, 1);
+	} finally {
+		unregister();
+		f.dispose();
 	}
 });
 

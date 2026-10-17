@@ -27,9 +27,9 @@ The picker has two modes:
 - All is the default. It includes future tools. Disable individual tools to exclude them.
 - Selected explains only the enabled tool names. Switching from All copies the enabled names into a list. Switching back to All enables every tool.
 
-The picker saves each change to `~/.pi/agent/settings.json`, or to your configured agent directory. It preserves other settings and your explanation model. Closing the picker reloads extensions if you changed a choice, so existing rows use the new settings too.
+The picker atomically saves each change to the owner-only `getAgentDir()/tool-explain.json`, never rewriting Pi's shared settings. Effective merged `toolExplain` settings (or legacy `codemodeExplain.model`) remain defaults; the separate file overrides saved selections. Settings actions begin at `session_start`, not during extension loading. Closing the picker reloads extensions if you changed a choice, so existing rows use the new settings too.
 
-Unselected tools keep their original rendering and make no summary requests. Select no tools to disable explanations. Saved tool names remain in the picker even when those tools are not registered.
+Unselected tools keep their original rendering and make no summary requests. The native `edit` renderer is supported: its diff stays available when expanded. Other renderers that own their shell (`renderShell: "self"`) retain their renderer unchanged; they are not forced into the default box. Select no tools to disable explanations. Saved tool names remain in the picker even when those tools are not registered.
 
 You can also edit settings and run `/reload`. This example explains every tool except `read` and `job_status`:
 
@@ -49,10 +49,12 @@ To explain only specific tools, set `"tools": ["codemode", "bash", "edit"]`. Nam
 Collapsed rows hide arguments and text output:
 
 ```text
-✓ bash executed: Run the extension tests and TypeScript checks
+✓ bash tool completed: Run the extension tests and TypeScript checks
 
 Took 2.3s
 ```
+
+While arguments stream, the header reads `Calling <tool_name> tool…`; during execution it reads `Running <tool_name> tool…`. Completed and failed calls read `<tool_name> tool completed` and `<tool_name> tool failed`. The tool name uses bold tool-title styling, separate from the muted status text.
 
 Press `Ctrl+O` or click to expand a row. The summary appears above the tool's original arguments and output, including edit diffs. Tools without custom renderers show JSON arguments and the full text result.
 
@@ -62,13 +64,13 @@ Failures remain visible while collapsed. The extension shows the tool's first er
 
 Codemode rows also show the number of nested calls, their status, and elapsed or total time. The header changes as the script runs:
 
-| Phase                                  | Header                                                  |
-| -------------------------------------- | ------------------------------------------------------- |
-| The model writes the script            | `⠋ Writing codemode tool call…`                         |
-| The script runs                        | `◐ Executing code…`, then `◐ Executing code: <summary>` |
-| The script finishes before the summary | `✓ Codemode executed: ●∙∙`                              |
-| The script succeeds                    | `✓ Codemode executed: <summary>`                        |
-| The script fails                       | `✗ Codemode failed: <summary>`                          |
+| Phase                                  | Header                                                                |
+| -------------------------------------- | --------------------------------------------------------------------- |
+| The model writes the script            | `⠋ Calling codemode tool…`                                            |
+| The script runs                        | `◐ Running codemode tool…`, then `◐ Running codemode tool: <summary>` |
+| The script finishes before the summary | `✓ codemode tool completed: ●∙∙`                                      |
+| The script succeeds                    | `✓ codemode tool completed: <summary>`                                |
+| The script fails                       | `✗ codemode tool failed: <summary>`                                   |
 
 Summaries use the theme's accent color beside a muted label. Long summaries wrap rather than truncate. Expand a row to see the highlighted script, nested calls, and output.
 
@@ -86,11 +88,13 @@ By default, the extension uses the cheapest available text model from your sessi
 }
 ```
 
-If the configured model is unavailable or a request fails, Pi shows one warning per session. Affected rows have no summary.
+Use `/reload` after manually editing model/settings files. Configuration is loaded once per session; tool calls do not reread settings files. If the configured model is unavailable or a request fails, Pi shows one warning per session. With neither a configured summary model nor a current model, it silently skips summaries. Affected rows have no summary.
 
 ## Requests and saved summaries
 
-Each distinct selected top-level call makes one small model request with up to 12,000 characters of input and no reasoning. Codemode sends the script. Other tools send their name, description, and arguments, but not their results. Arguments may contain sensitive data. The summary model receives that data. Pi's footer does not include these requests in the session cost.
+Each distinct selected top-level call makes one small model request with up to 12,000 characters of input and no reasoning. Codemode sends the script. Other tools send their name, description, and arguments, but not their results. Arguments may contain sensitive data. The summary model receives that data. Usage is recorded in durable `extension-model-usage` session entries and included by Compact Status Bar without delaying tools. Pi's built-in `/session` totals do not include these custom entries: 1.3.0 exposes no native usage-append action for asynchronous UI work.
+
+Reported usage is retained even when a summary is cancelled. During session teardown, requests are aborted and given up to one second to return usage before the old runtime is closed; late results never write into a replacement session. Providers that omit usage or ignore cancellation past that grace period can still cause under-reporting, so these totals are not a billing ledger.
 
 Repeated calls reuse summaries by tool name and arguments. The extension saves summaries as `tool-explain` custom session entries, so resumed sessions reuse them too. These entries do not enter the conversation context.
 

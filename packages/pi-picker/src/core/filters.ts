@@ -36,11 +36,16 @@ export class FilterState<T> {
 	private readonly cache = new Map<string, Uint8Array>();
 	private cacheVersion = -1;
 
+	readonly groups: readonly FilterGroup<T>[];
+	private readonly index: SearchIndex<T>;
+
 	constructor(
-		readonly groups: readonly FilterGroup<T>[],
-		private readonly index: SearchIndex<T>,
+		groups: readonly FilterGroup<T>[],
+		index: SearchIndex<T>,
 		initial: Readonly<Record<string, readonly string[]>> = {},
 	) {
+		this.groups = groups;
+		this.index = index;
 		for (const [group, options] of Object.entries(initial))
 			for (const option of options) this.toggle(group, option);
 	}

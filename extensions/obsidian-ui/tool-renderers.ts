@@ -95,14 +95,28 @@ export function resultNotices(result: ToolResult): string[] {
 }
 
 class CallCard implements Component {
+	private readonly name: string;
+	private readonly args: unknown;
+	private readonly theme: Theme;
+	private readonly context: RenderContext;
+	private readonly state: RowState;
+	private readonly expandedBody?: Component;
+
 	constructor(
-		private readonly name: string,
-		private readonly args: unknown,
-		private readonly theme: Theme,
-		private readonly context: RenderContext,
-		private readonly state: RowState,
-		private readonly expandedBody?: Component,
-	) {}
+		name: string,
+		args: unknown,
+		theme: Theme,
+		context: RenderContext,
+		state: RowState,
+		expandedBody?: Component,
+	) {
+		this.name = name;
+		this.args = args;
+		this.theme = theme;
+		this.context = context;
+		this.state = state;
+		this.expandedBody = expandedBody;
+	}
 	invalidate(): void {
 		this.expandedBody?.invalidate();
 	}
@@ -136,12 +150,12 @@ class CallCard implements Component {
 class ResultPreview implements Component {
 	private readonly body: Text;
 	private readonly notices: Text;
-	constructor(
-		text: string,
-		notices: string[],
-		private readonly theme: Theme,
-		private readonly expanded: boolean,
-	) {
+	private readonly theme: Theme;
+	private readonly expanded: boolean;
+
+	constructor(text: string, notices: string[], theme: Theme, expanded: boolean) {
+		this.theme = theme;
+		this.expanded = expanded;
 		this.body = new Text(
 			text
 				.split("\n")

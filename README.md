@@ -2,7 +2,7 @@
 
 Independently publishable packages for [pi](https://github.com/earendil-works/pi-mono/tree/main/packages/coding-agent), maintained at [`stagefright5/pi-agent-extensions`](https://github.com/stagefright5/pi-agent-extensions). The workspace uses Vite+ for development commands and pnpm for package management.
 
-The workspace develops and typechecks against pi 1.3.0. Bang Don't Ghost additionally requires the version-locked 1.2.0 runtime patch described in its README. Packages use pi's TypeScript extension format without a compilation step. Local development loads source directly; packing and publishing generate distribution metadata and assets.
+The workspace develops and typechecks against pi 1.3.0. Packages use pi's TypeScript extension format without a compilation step. Local development loads source directly; packing and publishing generate distribution metadata and assets.
 
 > [!WARNING]
 > Pi extensions execute with your user account's full system permissions. Review the source before installing or updating any extension or skill.
@@ -15,7 +15,6 @@ The workspace develops and typechecks against pi 1.3.0. Bang Don't Ghost additio
 | Workspace                                                                    | npm package                               | Purpose                                                                                                                                | Primary interface                                        |
 | ---------------------------------------------------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
 | [Artifact Design](./extensions/artifact-design/README.md)                    | `@stagefright5/pi-artifact-design`        | Design self-contained HTML artifacts with a local Vite dev server, theme/CSP harness, and single-file build                            | `/skill:artifact-design`                                 |
-| [Bang Don't Ghost](./extensions/bang-dont-ghost/README.md)                   | `@stagefright5/pi-bang-dont-ghost`        | Automatically continue pi after a user-entered single-bang shell command                                                               | Automatic                                                |
 | [Background Bash](./extensions/bg-bash/README.md)                            | `@stagefright5/pi-bg-bash`                | Run pi's bash tool commands in the background once they outlast a short wait, with job tools, finish notifications, and a jobs manager | `bash` override, `job_*` tools, `/jobs`, `Alt+J`         |
 | [Jenkins CLI Operations](./extensions/jenkins-cli-operations/README.md)      | `@stagefright5/pi-jenkins-cli-operations` | Guarded Jenkins operations for pi using the official Jenkins CLI                                                                       | `/skill:jenkins-cli-operations`                          |
 | [Obsidian UI](./extensions/obsidian-ui/README.md)                            | `@stagefright5/pi-obsidian-ui`            | A copy-friendly graphite and ice theme with compact tool presentation for pi                                                           | Automatic tool styling; `obsidian-ice` theme             |
@@ -27,6 +26,7 @@ The workspace develops and typechecks against pi 1.3.0. Bang Don't Ghost additio
 | [Compact Status Bar](./extensions/status-bar/README.md)                      | `@stagefright5/pi-status-bar`             | A compact single-line status bar for pi                                                                                                | Automatic in TUI mode                                    |
 | [Tool Explain](./extensions/tool-explain/README.md)                          | `@stagefright5/pi-tool-explain`           | Show AI summaries for tool calls and save tool choices in Pi settings                                                                  | Automatic, `/tool-explain`                               |
 | [Tool Output Browser](./extensions/tool-output-browser/README.md)            | `@stagefright5/pi-tool-output-browser`    | Browse complete stored tool results without expanding every pi transcript row                                                          | `/tool-output`                                           |
+| [Pi Extension Utilities](./packages/pi-extension-utils/README.md)            | `@stagefright5/pi-extension-utils`        | Shared status-line, private storage, and usage contracts for pi extensions                                                             | Library: status-line and storage contracts               |
 | [Pi Picker](./packages/pi-picker/README.md)                                  | `@stagefright5/pi-picker`                 | Fast multi-word fuzzy search, highlighted lists, and picker overlays for pi extensions                                                 | Library: `createPicker`, `Searcher`, `renderInlinePanel` |
 
 <!-- package-tools:catalogue:end -->
@@ -41,7 +41,6 @@ After a package is published, install only the extension or skill you want:
 
 ```bash
 pi install npm:@stagefright5/pi-artifact-design
-pi install npm:@stagefright5/pi-bang-dont-ghost
 pi install npm:@stagefright5/pi-bg-bash
 pi install npm:@stagefright5/pi-jenkins-cli-operations
 pi install npm:@stagefright5/pi-obsidian-ui
@@ -149,7 +148,7 @@ vp run packages:stage  # Check indexes and regenerate all distribution directori
 
 Source manifests retain names, versions, descriptions, module type, package-specific keywords, dependencies, local Pi resources, and development scripts. `packageTools.title` and `packageTools.interface` supply catalogue labels. License and repository defaults come from the root manifest; `pi-package` and extension/skill keywords are derived from each package's Pi resources. Publication access and the branch used in README repository links come from the Changesets configuration.
 
-The shared publication policy includes root JavaScript/TypeScript source, `README.md`, `CHANGELOG.md` when present, and `SKILL.md` when present. Skill packages additionally include `references/`, `scripts/`, and `template/`. Tests, dependencies, build output, and hidden files (except template `.gitignore` files) are excluded. The Bang Don't Ghost patcher remains source-only. Package-local `packageTools.include` and `packageTools.exclude` arrays accept explicit package-relative file/directory paths for exceptions; exclusions still apply to includes. Symlinks and paths outside the package are rejected.
+The shared publication policy includes root JavaScript/TypeScript source, `README.md`, `CHANGELOG.md` when present, and `SKILL.md` when present. Skill packages additionally include `references/`, `scripts/`, and `template/`. Tests, dependencies, build output, and hidden files (except template `.gitignore` files) are excluded. Package-local `packageTools.include` and `packageTools.exclude` arrays accept explicit package-relative file/directory paths for exceptions; exclusions still apply to includes. Symlinks and paths outside the package are rejected.
 
 Each package's `publishConfig.directory` points to its generated directory. `linkDirectory: false` keeps workspace dependency links pointed at source. A `prepack` hook refreshes that package's output for direct pnpm packing/publishing; use the root release command for Changesets. Published manifests omit development scripts, development dependencies and generator metadata. Source dependency requirements and release versions remain explicit; unresolved local/catalog runtime dependency references fail staging rather than leaking into npm.
 
@@ -174,7 +173,6 @@ Commit the generated version and changelog changes before publishing. The releas
 
 The packages run locally or connect to services you configure. Some read or write user data:
 
-- Bang Don't Ghost starts a normal model-provider request after each eligible single-`!` command; Pi already includes that command and its output in model context.
 - Jenkins CLI Operations connects to the configured Jenkins controller and stores non-secret connection metadata under the platform configuration directory. Credentials remain in the selected auth provider.
 - Plan Mode stores plans and revision history under `~/.pi/plans/`; its optional summaries use the active model provider.
 - Prompt History Search reads saved Pi sessions across projects into an in-memory index and local persisted index.

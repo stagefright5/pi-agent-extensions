@@ -71,10 +71,12 @@ class DocumentBody implements Component {
 	private readonly markdown: Markdown;
 	private cache?: { width: number; lines: string[] };
 
-	constructor(
-		private readonly options: DocumentOptions,
-		private readonly getTheme: () => Theme,
-	) {
+	private readonly options: DocumentOptions;
+	private readonly getTheme: () => Theme;
+
+	constructor(options: DocumentOptions, getTheme: () => Theme) {
+		this.options = options;
+		this.getTheme = getTheme;
 		this.markdown = new Markdown(options.content, 0, 0, getMarkdownTheme());
 	}
 
@@ -131,12 +133,21 @@ export class PlanDocumentView implements Component {
 	private copySequence = 0;
 	private status = "";
 
+	private readonly options: DocumentOptions;
+	private readonly host: DocumentHost;
+	private readonly done: (action: ReviewAction) => void;
+	private readonly onDispose: () => void;
+
 	constructor(
-		private readonly options: DocumentOptions,
-		private readonly host: DocumentHost,
-		private readonly done: (action: ReviewAction) => void,
-		private readonly onDispose: () => void = () => {},
+		options: DocumentOptions,
+		host: DocumentHost,
+		done: (action: ReviewAction) => void,
+		onDispose: () => void = () => {},
 	) {
+		this.options = options;
+		this.host = host;
+		this.done = done;
+		this.onDispose = onDispose;
 		this.body = new DocumentBody(options, () => host.theme());
 		this.scroll = new ScrollView(this.body, { overscroll: "contain", scrollbar: "hidden" });
 	}

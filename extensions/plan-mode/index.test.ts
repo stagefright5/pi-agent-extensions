@@ -17,6 +17,7 @@ import { stripTerminalSequences, TuiMainScreen, type Component, type Terminal } 
 import { SerialTaskQueue, PlanRepository } from "./plan-store.ts";
 import { withLoader, requestRevision } from "./plan-ui.ts";
 import { planProgress } from "./index.ts";
+import { restorePlanState } from "./state.ts";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -28,6 +29,8 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
 async function fixture() {
 	const root = await mkdtemp(join(tmpdir(), "pi-plan-contract-"));
 	const previousHome = process.env.HOME;
+	const previousAgentDir = process.env.PI_CODING_AGENT_DIR;
+	process.env.PI_CODING_AGENT_DIR = join(root, "agent");
 	const previousGit = process.env.GIT_CONFIG_GLOBAL;
 	process.env.HOME = root;
 	process.env.GIT_CONFIG_GLOBAL = "/dev/null";
@@ -53,6 +56,11 @@ async function fixture() {
 	const working: boolean[] = [];
 	runner.onError((error) => errors.push(error));
 	loaded.runtime.getThinkingLevel = () => "off";
+	let activeTools = ["read", "bash"];
+	loaded.runtime.getActiveTools = () => [...activeTools];
+	loaded.runtime.setActiveTools = (names) => {
+		activeTools = [...names];
+	};
 	loaded.runtime.appendEntry = (type, data) => {
 		manager.appendCustomEntry(type, data);
 	};
@@ -118,13 +126,31 @@ async function fixture() {
 	await runner.emit({ type: "session_start", reason: "startup" });
 	const tool = runner.getToolDefinition("plan_output");
 	assert.ok(tool);
-	const state = () =>
-		manager.getBranch().findLast((entry) => entry.type === "custom" && entry.customType === "plan-mode-interactive")
-			?.data;
-	const execute = (plan = "# Plan\n\nDo the work", signal?: AbortSignal) =>
-		tool.execute("test", { title: "Test plan", plan }, signal, undefined, runner.createToolContext("test", signal));
+	const state = () => restorePlanState(manager.getBranch());
+	let callId = 0;
+	const execute = async (plan = "# Plan\n\nDo the work", signal?: AbortSignal) => {
+		const id = `test-${++callId}`;
+		const result = await tool.execute(
+			id,
+			{ title: "Test plan", plan },
+			signal,
+			undefined,
+			runner.createToolContext(id, signal),
+		);
+		manager.appendMessage({
+			role: "toolResult",
+			toolCallId: id,
+			toolName: "plan_output",
+			content: result.content,
+			details: result.details,
+			isError: false,
+			timestamp: Date.now(),
+		});
+		return result;
+	};
 	return {
 		root,
+		activeTools: () => activeTools,
 		runner,
 		manager,
 		tool,
@@ -151,6 +177,8 @@ async function fixture() {
 		async close() {
 			await runner.emit({ type: "session_shutdown", reason: "quit" });
 			loaded.runtime.invalidate();
+			if (previousAgentDir === undefined) delete process.env.PI_CODING_AGENT_DIR;
+			else process.env.PI_CODING_AGENT_DIR = previousAgentDir;
 			if (previousHome === undefined) delete process.env.HOME;
 			else process.env.HOME = previousHome;
 			if (previousGit === undefined) delete process.env.GIT_CONFIG_GLOBAL;
@@ -159,6 +187,94 @@ async function fixture() {
 		},
 	};
 }
+
+test("opening and navigating a legacy branch is read-only; new messages migrate once", async () => {
+	const f = await fixture();
+	try {
+		f.manager.appendCustomEntry("plan-mode-interactive", {
+			active: true,
+			iterations: ["legacy plan"],
+			planDir: "/legacy/plans",
+			qaMessages: [{ role: "user", content: "old question" }],
+		});
+		f.manager.appendMessage({ role: "user", content: "old question", timestamp: 1 });
+		const before = f.manager.getEntries().length;
+		await f.runner.emit({ type: "session_start", reason: "resume" });
+		await f.runner.emit({ type: "session_tree", oldLeafId: null, newLeafId: f.manager.getLeafId() });
+		assert.equal(f.manager.getEntries().length, before);
+		assert.deepEqual(f.state().qaMessages, [{ role: "user", content: "old question" }]);
+		const message = { role: "user" as const, content: "new question", timestamp: 2 };
+		await f.runner.emit({ type: "message_start", message });
+		assert.equal(f.manager.getEntries().length, before + 1);
+		f.manager.appendMessage(message);
+		assert.deepEqual(
+			f.state().qaMessages.map((m) => m.content),
+			["old question", "new question"],
+		);
+		assert.equal(f.state().planDir, "/legacy/plans");
+		const after = f.manager.getEntries().length;
+		await f.runner.emit({ type: "message_start", message });
+		await f.runner.emit({ type: "session_tree", oldLeafId: null, newLeafId: f.manager.getLeafId() });
+		assert.equal(f.manager.getEntries().length, after);
+		assert.deepEqual(f.errors, []);
+	} finally {
+		await f.close();
+	}
+});
+
+test("plan tool activation follows mode and preserves unrelated active tools", async () => {
+	const f = await fixture();
+	try {
+		assert.equal(f.tool.defaultActive, false);
+		assert.deepEqual(f.activeTools(), ["read", "bash"]);
+		await assert.rejects(f.execute(), /Activate plan mode/);
+		const blocked = await f.runner.emitToolCall({
+			type: "tool_call",
+			toolCallId: "blocked",
+			toolName: "plan_output",
+			input: { title: "x", plan: "x" },
+		});
+		assert.equal(blocked?.block, true);
+		await f.start();
+		assert.deepEqual(f.activeTools(), ["read", "bash", "plan_output"]);
+		await f.start();
+		assert.deepEqual(f.activeTools(), ["read", "bash"]);
+	} finally {
+		await f.close();
+	}
+});
+
+test("Q&A messages do not append growing snapshots; plans restore from successful results", async () => {
+	const f = await fixture();
+	try {
+		await f.start();
+		await f.execute("large plan ".repeat(10000));
+		const before = f.manager
+			.getBranch()
+			.filter((entry) => entry.type === "custom" && entry.customType === "plan-mode-interactive").length;
+		for (let i = 0; i < 25; i++) {
+			const message = { role: "user" as const, content: "question " + i, timestamp: Date.now() };
+			f.manager.appendMessage(message);
+			await f.runner.emit({ type: "message_end", message });
+		}
+		const states = f.manager
+			.getBranch()
+			.filter((entry) => entry.type === "custom" && entry.customType === "plan-mode-interactive");
+		assert.equal(states.length, before);
+		for (const entry of states) {
+			assert.equal(entry.data.version, 2);
+			assert.equal(entry.data.iterations, undefined);
+			assert.equal(entry.data.qaMessages, undefined);
+			assert.ok(JSON.stringify(entry.data).length < 1000);
+		}
+		assert.equal(f.state().iterations.length, 1);
+		assert.equal(f.state().qaMessages.length, 25);
+		await f.runner.emit({ type: "session_start", reason: "reload" });
+		assert.equal(f.state().iterations[0], "large plan ".repeat(10000));
+	} finally {
+		await f.close();
+	}
+});
 
 test("plan_output is sequential/model-only; simultaneous calls commit ordered complete iterations", async () => {
 	const f = await fixture();
@@ -252,7 +368,13 @@ test("review approval sends the approved plan once; closing only displays it", a
 		f.current.handleInput("\x1b");
 		await tick();
 		assert.equal(f.userMessages.length, 0);
-		assert.equal(f.customMessages.length, 1);
+		assert.equal(f.customMessages.length, 0, "display-only plans never enter model context");
+		assert.equal(
+			f.manager
+				.getBranch()
+				.filter((entry) => entry.type === "custom" && entry.customType === "plan-mode-rendered-plan").length,
+			1,
+		);
 		const reopened = f.runner.getCommand("plan-review").handler("", f.runner.createCommandContext());
 		await tick();
 		f.current.handleInput("a");
@@ -426,6 +548,66 @@ test("revision feedback preserves review state and authorizes exactly a requeste
 		assert.equal(blocked?.terminate, true);
 	} finally {
 		await f.close();
+	}
+});
+
+test("summary usage survives workflow cancellation and drains before session teardown", async () => {
+	for (const reason of ["toggle", "tree", "shutdown"]) {
+		const f = await fixture();
+		try {
+			f.manager.appendCustomEntry("plan-mode-interactive", {
+				active: true,
+				iterations: ["old plan", "new plan"],
+				planDir: "/legacy/plans",
+				qaMessages: [],
+			});
+			await f.runner.emit({ type: "session_start", reason: "resume" });
+			let finish!: (value: unknown) => void;
+			let requestSignal: AbortSignal | undefined;
+			const context = {
+				...f.runner.createContext(),
+				model: { provider: "test", id: "summary" },
+				modelRegistry: {
+					streamSimple(_model: unknown, _context: unknown, options: { signal: AbortSignal }) {
+						requestSignal = options.signal;
+						return {
+							result: () =>
+								new Promise((resolve) => {
+									finish = resolve;
+								}),
+						};
+					},
+				},
+			};
+			const shortcut = [...f.runner.getShortcuts({}).values()].find(
+				(s) => s.description === "Show plan change summary",
+			);
+			assert.ok(shortcut);
+			const summary = shortcut.handler(context as never);
+			await tick();
+			assert.ok(requestSignal);
+			let shutdown: Promise<unknown> | undefined;
+			if (reason === "toggle") await f.start();
+			else if (reason === "tree")
+				await f.runner.emit({ type: "session_tree", oldLeafId: null, newLeafId: f.manager.getLeafId() });
+			else shutdown = f.runner.emit({ type: "session_shutdown", reason: "reload" });
+			await tick();
+			assert.equal(requestSignal.aborted, true);
+			const usage = { cost: { total: 0.25 } };
+			finish({ stopReason: "aborted", content: [], usage });
+			await summary;
+			await shutdown;
+			await tick();
+			const entries = f.manager
+				.getEntries()
+				.filter((entry) => entry.type === "custom" && entry.customType === "extension-model-usage");
+			assert.equal(entries.length, 1, reason);
+			assert.deepEqual(entries[0].type === "custom" && entries[0].data, { source: "plan-mode-summary", usage });
+			assert.equal(f.current, undefined, "no late summary view is opened");
+			assert.deepEqual(f.errors, []);
+		} finally {
+			await f.close();
+		}
 	}
 });
 
