@@ -1,15 +1,22 @@
-import type { ExtensionAPI, ExtensionContext, KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import {
-	Input,
+	copyToClipboard,
+	type ExtensionAPI,
+	type ExtensionContext,
+	type KeybindingsManager,
+	type Theme,
+} from "@earendil-works/pi-coding-agent";
+import {
 	Key,
 	matchesKey,
 	truncateToWidth,
-	visibleWidth,
 	wrapTextWithAnsi,
 	type Component,
 	type Focusable,
 	type TUI,
+	type TuiMouseEvent,
+	type TuiMouseEventResult,
 } from "@earendil-works/pi-tui";
+import { createPicker, type FilterGroup, type Picker } from "@stagefright5/pi-picker";
 
 import { browserFrame } from "./browser-layout.ts";
 
@@ -159,9 +166,12 @@ function formatTimestamp(timestamp: number): string {
 	});
 }
 
+/** Tool names offered as filter chips (most frequent first). */
+const MAX_TOOL_FILTERS = 6;
+
 export class ToolOutputBrowser implements Component, Focusable {
-	private readonly input = new Input();
-	private filtered: ToolOutputRecord[];
+	private readonly picker: Picker<ToolOutputRecord>;
+	private filtered: ToolOutputRecord[] = [];
 	private selectedIndex = 0;
 	private mode: "list" | "detail" = "list";
 	private detailView: DetailView = "output";
@@ -172,13 +182,70 @@ export class ToolOutputBrowser implements Component, Focusable {
 	constructor(
 		private readonly tui: TUI,
 		private readonly getTheme: () => Theme,
-		private readonly keybindings: KeybindingsManager,
-		private readonly records: ToolOutputRecord[],
+		keybindings: KeybindingsManager,
+		records: ToolOutputRecord[],
 		initialQuery: string,
 		private readonly done: () => void,
+		copy: (text: string) => Promise<void> = copyToClipboard,
 	) {
-		this.input.setValue(initialQuery.trim());
-		this.filtered = this.filterRecords();
+		const counts = new Map<string, number>();
+		for (const record of records) counts.set(record.toolName, (counts.get(record.toolName) ?? 0) + 1);
+		const tools = [...counts.entries()]
+			.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+			.slice(0, MAX_TOOL_FILTERS)
+			.map(([name]) => name);
+		const filters: FilterGroup<ToolOutputRecord>[] = [
+			{
+				id: "tool",
+				label: "Tool",
+				options: tools.map((name) => ({ id: name, label: name, test: (record) => record.toolName === name })),
+			},
+			{
+				id: "status",
+				label: "Status",
+				options: [{ id: "errors", label: "errors only", test: (record) => record.isError }],
+			},
+		];
+		this.picker = createPicker<ToolOutputRecord>({
+			tui,
+			theme: getTheme,
+			keybindings,
+			title: "Tool output",
+			items: records,
+			text: (record) => record.searchText,
+			// Name column stays readable; arguments fill the description column.
+			row: (record) => ({
+				primary: `${record.isError ? "✗" : "✓"} #${record.sequence} ${record.toolName}`,
+				secondary: argumentsPreview(record),
+			}),
+			layout: "column",
+			preview: (record) =>
+				`${formatTimestamp(record.timestamp)} · ${record.output.split("\n").length} lines${record.isError ? " · error" : ""}\n\n${record.output || "(no text output)"}`,
+			filters,
+			multiSelect: true,
+			initialQuery: initialQuery.trim(),
+			emptyMessage: "No matching tool outputs",
+			height: () => this.overlayHeight(),
+			actions: [
+				{
+					id: "open",
+					label: "open",
+					key: "tui.select.confirm",
+					primary: true,
+					run: (items) => this.openDetail(items),
+				},
+				{
+					id: "copy",
+					label: "copy",
+					key: "ctrl+y",
+					run: async (items, context) => {
+						await copy(items.map((record) => record.output).join("\n\n"));
+						context.notify(items.length === 1 ? "Copied output" : `Copied ${items.length} outputs`);
+					},
+				},
+			],
+			onClose: () => this.done(),
+		});
 	}
 
 	private get theme(): Theme {
@@ -191,11 +258,11 @@ export class ToolOutputBrowser implements Component, Focusable {
 
 	set focused(value: boolean) {
 		this._focused = value;
-		this.input.focused = value && this.mode === "list";
+		this.picker.focused = value && this.mode === "list";
 	}
 
 	invalidate(): void {
-		this.input.invalidate();
+		this.picker.invalidate();
 		this.cachedDetail = undefined;
 	}
 
@@ -205,66 +272,38 @@ export class ToolOutputBrowser implements Component, Focusable {
 			return;
 		}
 
-		if (this.mode === "detail") {
-			this.handleDetailInput(data);
-		} else {
-			this.handleListInput(data);
-		}
+		if (this.mode === "detail") this.handleDetailInput(data);
+		else this.picker.handleInput(data);
+	}
+
+	handleMouse(event: TuiMouseEvent): TuiMouseEventResult | undefined {
+		return this.mode === "list" ? this.picker.handleMouse(event) : undefined;
 	}
 
 	render(width: number): string[] {
 		if (width <= 0) return [];
-		return (this.mode === "detail" ? this.renderDetail(width) : this.renderList(width)).map((line) =>
-			truncateToWidth(line, width, "…"),
-		);
+		if (this.mode === "list") return this.picker.render(width);
+		return this.renderDetail(width).map((line) => truncateToWidth(line, width, "…"));
 	}
 
-	private handleListInput(data: string): void {
-		if (this.keybindings.matches(data, "tui.select.cancel")) {
-			this.done();
-			return;
-		}
-		if (this.keybindings.matches(data, "tui.select.up")) {
-			this.moveSelection(-1);
-			return;
-		}
-		if (this.keybindings.matches(data, "tui.select.down")) {
-			this.moveSelection(1);
-			return;
-		}
-		if (this.keybindings.matches(data, "tui.select.pageUp")) {
-			this.moveSelection(-this.listPageSize());
-			return;
-		}
-		if (this.keybindings.matches(data, "tui.select.pageDown")) {
-			this.moveSelection(this.listPageSize());
-			return;
-		}
-		if (this.keybindings.matches(data, "tui.select.confirm")) {
-			if (this.filtered[this.selectedIndex]) {
-				this.mode = "detail";
-				this.detailView = "output";
-				this.scrollOffset = 0;
-				this.input.focused = false;
-				this.cachedDetail = undefined;
-				this.tui.requestRender();
-			}
-			return;
-		}
-
-		const before = this.input.getValue();
-		this.input.handleInput(data);
-		if (this.input.getValue() !== before) {
-			this.filtered = this.filterRecords();
-			this.selectedIndex = 0;
-		}
+	/** Open the detail view; with several marked results, n/p steps through just those. */
+	private openDetail(items: readonly ToolOutputRecord[]): void {
+		const selected = this.picker.selectedItem;
+		this.filtered = items.length > 1 ? [...items] : this.picker.results;
+		const start = items.length > 1 ? 0 : this.filtered.indexOf(selected ?? items[0]!);
+		this.selectedIndex = Math.max(0, start);
+		this.mode = "detail";
+		this.detailView = "output";
+		this.scrollOffset = 0;
+		this.picker.focused = false;
+		this.cachedDetail = undefined;
 		this.tui.requestRender();
 	}
 
 	private handleDetailInput(data: string): void {
 		if (matchesKey(data, Key.escape) || matchesKey(data, Key.left)) {
 			this.mode = "list";
-			this.input.focused = this._focused;
+			this.picker.focused = this._focused;
 			this.tui.requestRender();
 			return;
 		}
@@ -311,68 +350,12 @@ export class ToolOutputBrowser implements Component, Focusable {
 		}
 	}
 
-	private renderList(width: number): string[] {
-		const innerWidth = Math.max(1, width);
-		const pageSize = this.listPageSize();
-		const lines: string[] = [];
-		const { row, rule } = browserFrame(width, this.theme);
-
-		lines.push(rule());
-		lines.push(
-			row(
-				` ${this.theme.fg("accent", this.theme.bold("tool output"))} ${this.theme.fg("dim", `(${this.filtered.length}/${this.records.length})`)}`,
-			),
-		);
-
-		const prefix = this.theme.fg("dim", " filter  ");
-		const inputWidth = Math.max(1, innerWidth - visibleWidth(prefix));
-		lines.push(row(prefix + (this.input.render(inputWidth)[0] ?? "")));
-		lines.push(rule());
-
-		if (this.filtered.length === 0) {
-			lines.push(row(` ${this.theme.fg("warning", "No matching tool outputs")}`));
-		} else {
-			const start = Math.max(
-				0,
-				Math.min(this.selectedIndex - Math.floor(pageSize / 2), this.filtered.length - pageSize),
-			);
-			const end = Math.min(start + pageSize, this.filtered.length);
-			for (let index = start; index < end; index++) {
-				const record = this.filtered[index]!;
-				const selected = index === this.selectedIndex;
-				const marker = selected ? this.theme.fg("accent", " ·") : "  ";
-				const status = record.isError ? this.theme.fg("error", "✗") : this.theme.fg("success", "✓");
-				const name = this.theme.fg(selected ? "accent" : "toolTitle", record.toolName);
-				const preview = argumentsPreview(record);
-				const metadata = this.theme.fg(
-					"dim",
-					`${formatTimestamp(record.timestamp)} · ${record.output.split("\n").length} lines`,
-				);
-				lines.push(
-					row(
-						`${marker} ${status} #${record.sequence} ${name}${preview ? `  ${preview}` : ""}  ${metadata}`,
-						selected,
-					),
-				);
-			}
-		}
-
-		lines.push(rule());
-		lines.push(
-			row(
-				` ${this.theme.fg("dim", width < 80 ? "↑↓ select · enter open · esc close" : "type to filter · ↑↓/PgUp/PgDn navigate · enter open · esc close")}`,
-			),
-		);
-		lines.push(rule());
-		return lines;
-	}
-
 	private renderDetail(width: number): string[] {
 		const contentWidth = Math.max(1, width - 1);
 		const record = this.filtered[this.selectedIndex];
 		if (!record) {
 			this.mode = "list";
-			return this.renderList(width);
+			return this.picker.render(width);
 		}
 
 		const lines: string[] = [];
@@ -442,16 +425,6 @@ export class ToolOutputBrowser implements Component, Focusable {
 		const lines = wrapTextWithAnsi(text, width);
 		this.cachedDetail = { recordId: record.entryId, view: this.detailView, width, lines };
 		return lines;
-	}
-
-	private filterRecords(): ToolOutputRecord[] {
-		const terms = normalizeSingleLine(this.input.getValue()).toLowerCase().split(" ").filter(Boolean);
-		if (terms.length === 0) return [...this.records];
-		return this.records.filter((record) => terms.every((term) => record.searchText.includes(term)));
-	}
-
-	private listPageSize(): number {
-		return Math.max(1, this.overlayHeight() - 7);
 	}
 
 	private detailPageSize(): number {

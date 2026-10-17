@@ -13,12 +13,14 @@ Open the browser in TUI mode:
 - Run `/tool-output` to browse tool outputs on the active session branch.
 - Run `/tool-output [initial filter]` to open with an optional filter.
 
-In the picker:
+In the picker (built on the shared [Pi Picker](../../packages/pi-picker/README.md)):
 
-- Type to filter by tool name, arguments, output, or result details.
-- Press `Up` / `Down` and `Page Up` / `Page Down` to navigate.
-- Press `Enter` to open the selected result.
-- Press `Escape` or `Ctrl+C` to close.
+- Type to search tool name, arguments, output, and result details; results are ranked (word starts and consecutive letters first, multi-word in any order) and matches are highlighted.
+- Press `Up` / `Down` and `Page Up` / `Page Down` to navigate. The preview pane shows the selected output, opened at the first match; scroll it with `Shift+Up` / `Shift+Down`.
+- Press `Ctrl+F` then a number to filter by tool (the six most frequent) or errors only.
+- Press `Tab` to mark results, and `Ctrl+Y` to copy the selected or marked outputs.
+- Press `Enter` (or double-click) to open the selected result; with marked results, `n` / `p` step through just those.
+- Press `Escape` to clear marks, then close; `Ctrl+C` closes immediately.
 
 In an opened result:
 
