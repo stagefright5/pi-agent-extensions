@@ -80,7 +80,7 @@ test("mode and contextual hints share the footer; undo/redo replaces input hints
 	editor.setText("draft");
 	let rows = editor.render(80).map(plain);
 	assert.equal(rows[0], " ".repeat(80), "the top padding row stays blank");
-	assert.equal(rows.at(-1), " ".repeat(51) + "/ commands  ! shell  @ files ", "input hints by default");
+	assert.equal(rows.at(-1), " ".repeat(41) + "/ commands  $ skills  ! shell  @ files ", "input hints by default");
 	editor.insertTextAtCursor(" change");
 	editor.handleInput("\x1a");
 	rows = editor.render(80).map(plain);
@@ -90,7 +90,7 @@ test("mode and contextual hints share the footer; undo/redo replaces input hints
 	editor.setText("!!git status");
 	rows = editor.render(80).map(plain);
 	assert.equal(rows[0], " ".repeat(80));
-	assert.match(rows.at(-1)!, /^ shell · no context +\/ commands {2}! shell {2}@ files $/u);
+	assert.match(rows.at(-1)!, /^ shell · no context +\/ commands {2}\$ skills {2}! shell {2}@ files $/u);
 	assert.equal(rows[1]!.indexOf("!"), rows.at(-1)!.indexOf("s"), "label aligns with the draft text");
 });
 
@@ -162,7 +162,11 @@ test("autocomplete rows are not mistaken for the bottom border", async () => {
 	const menuHeight = expected.length - helpIndex;
 	assert.deepEqual(actual.slice(0, menuHeight), expected.slice(helpIndex));
 	assert.equal(plain(actual[menuHeight]!), " ".repeat(80));
-	assert.match(plain(actual.at(-1)!), /^ +\/ commands {2}! shell {2}@ files$/u, "no redo yet: input hints");
+	assert.match(
+		plain(actual.at(-1)!),
+		/^ +\/ commands {2}\$ skills {2}! shell {2}@ files$/u,
+		"no redo yet: input hints",
+	);
 	for (const item of [editor, native]) item.handleInput("\x1b");
 });
 

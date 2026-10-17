@@ -84,6 +84,7 @@ export function renderFooter(
 /** Discoverability hints shown on the right of the footer strip unless undo/redo replaces them. */
 export const INPUT_HINTS: readonly FooterHint[] = [
 	{ key: "/", action: "commands" },
+	{ key: "$", action: "skills" },
 	{ key: "!", action: "shell" },
 	{ key: "@", action: "files" },
 ];

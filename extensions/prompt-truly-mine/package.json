@@ -30,6 +30,6 @@
   },
   "packageTools": {
     "title": "Prompt Truly Mine",
-    "interface": "inline `/`, `Ctrl+Z`, redo shortcuts"
+    "interface": "`$` references, inline `/`, `Ctrl+Z`, redo shortcuts"
   }
 }

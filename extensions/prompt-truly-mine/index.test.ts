@@ -175,34 +175,43 @@ test("real input runner preserves images and streaming delivery during inline pr
 test("context references keep the request first, retain images, list resources once, and warn for unreadable ones", async (t) => {
 	const f = await fixture(t, "rpc");
 	const images = [{ type: "image" as const, mimeType: "image/png", data: "image-content" }];
-	const result = await f.runner.emitInput("Use /review /review /skill:testing", images, "rpc");
+	const result = await f.runner.emitInput("Use $review $review $testing", images, "rpc");
 	assert.equal(result.action, "transform");
 	if (result.action !== "transform") return;
 	assert.deepEqual(result.images, images);
-	assert.ok(result.text.startsWith("Use /review /review /skill:testing\n\n"));
-	assert.equal((result.text.match(/Prompt template `\/review`/g) ?? []).length, 1);
-	assert.match(result.text, /Skill `testing`: \S+/u);
+	assert.ok(result.text.startsWith("Use $review $review $testing\n\n"));
+	assert.equal((result.text.match(/Prompt template `\$review`/g) ?? []).length, 1);
+	assert.match(result.text, /Skill `\$testing`: \S+/u);
 	assert.doesNotMatch(result.text, /Test every boundary/u, "skill bodies are read by the agent, not inlined");
 	assert.equal((await f.runner.emitInput(result.text, images, "extension")).action, "continue");
 	await rm(f.commands[1]!.sourceInfo.path);
-	const partial = await f.runner.emitInput("Use /review /skill:testing", images, "rpc");
+	const partial = await f.runner.emitInput("Use $review $testing", images, "rpc");
 	assert.equal(partial.action, "transform");
 	assert.match(f.warnings[0]!, /Could not load \/review/);
 });
 
-test("a leading /skill: or /template is resubmitted without native expansion so the request stays first", async (t) => {
-	const f = await fixture(t, "rpc");
-	const images = [{ type: "image" as const, mimeType: "image/png", data: "image-content" }];
-	for (const behavior of [undefined, "followUp"] as const) {
-		const result = await f.runner.emitInput("/skill:testing check the parser", images, "rpc", behavior);
+test("$name works at the start; retired /skill: and leading /template are blocked with a hint", async (t) => {
+	const f = await fixture(t);
+	await f.runner.emit({ type: "session_start", reason: "startup" });
+	const leading = await f.runner.emitInput("$testing check the parser", undefined, "interactive");
+	assert.equal(leading.action, "transform", "no resend needed: Pi never expands $name");
+	if (leading.action === "transform")
+		assert.match(leading.text, /^\$testing check the parser\n\n<!-- pi-extension:inline-context:v2 -->/u);
+	for (const [text, hint] of [
+		["/skill:testing check the parser", /Skills attach with \$name now\. Try \$testing/u],
+		["/review the diff", /Prompt templates attach with \$name now\. Try \$review/u],
+	] as const) {
+		f.ui.setEditorText("");
+		const result = await f.runner.emitInput(text, undefined, "interactive");
 		assert.equal(result.action, "handled");
-		const [content, options] = f.sent.at(-1)!;
-		assert.deepEqual(options, { ...(behavior ? { deliverAs: behavior } : {}), expandPromptTemplates: false });
-		const [first, ...rest] = content as [{ type: "text"; text: string }, ...unknown[]];
-		assert.ok(first.text.startsWith("/skill:testing check the parser\n\n<!-- pi-extension:inline-context:v2 -->"));
-		assert.deepEqual(rest, images);
-		assert.equal((await f.runner.emitInput(first.text, images, "extension")).action, "continue");
+		assert.match(f.warnings.at(-1)!, hint);
+		assert.equal(f.ui.getEditorText(), text, "the draft stays for editing");
 	}
+	assert.deepEqual(f.sent, []);
+	assert.equal(
+		(await f.runner.emitInput("Mid-prompt /review stays plain text", undefined, "interactive")).action,
+		"continue",
+	);
 });
 
 test("editor installation and restoration retain pasted payloads and are idempotent", async (t) => {
@@ -232,37 +241,49 @@ test("shutdown does not replace an editor installed by another extension", async
 	assert.equal(f.ui.getEditorComponent(), replacement);
 });
 
-test("leading resource selection inserts without submitting and remains undoable", async (t) => {
+test("$ selection inserts without submitting, remains undoable, and / menus drop skills and templates", async (t) => {
 	const f = await fixture(t);
 	await f.runner.emit({ type: "session_start", reason: "startup" });
 	const provider: AutocompleteProvider = {
 		async getSuggestions() {
-			return { prefix: "/", items: [{ value: "review", label: "review" }] };
+			return {
+				prefix: "/",
+				items: [
+					{ value: "review", label: "review" },
+					{ value: "skill:testing", label: "skill:testing" },
+					{ value: "settings", label: "settings" },
+				],
+			};
 		},
-		applyCompletion() {
-			throw new Error("Composable selection must use the wrapper");
+		applyCompletion(lines, cursorLine, cursorCol) {
+			return { lines, cursorLine, cursorCol };
 		},
 	};
-	f.editor.setAutocompleteProvider?.(f.wrappers[0]!(provider));
+	const wrapped = f.wrappers[0]!(provider);
+	const options = { signal: new AbortController().signal, force: false };
+	const slash = await wrapped.getSuggestions(["/"], 0, 1, options);
+	assert.deepEqual(
+		slash?.items.map((item) => item.value),
+		["settings"],
+		"/ is commands only",
+	);
+	f.editor.setAutocompleteProvider?.(wrapped);
 	const submitted: string[] = [];
 	f.editor.onSubmit = (text) => {
 		submitted.push(text);
 	};
-	f.editor.handleInput?.("/");
+	f.editor.handleInput?.("$");
 	await new Promise((resolve) => setTimeout(resolve, 30));
+	assert.ok(f.editor.isShowingAutocomplete?.(), "$ opens reference completion");
 	f.editor.handleInput?.("\r");
-	assert.equal(f.editor.getText(), "/review ");
+	assert.equal(f.editor.getText(), "$testing ");
 	assert.deepEqual(submitted, []);
-	assert.deepEqual(f.slashSubmissions, []);
 	f.editor.handleInput?.("\x1a");
-	assert.equal(f.editor.getText(), "/");
+	assert.equal(f.editor.getText(), "$");
 	f.editor.handleInput?.("\x19");
-	f.editor.handleInput?.("task");
+	for (const char of "task") f.editor.handleInput?.(char);
 	f.editor.handleInput?.("\r");
-	assert.deepEqual(submitted, ["/review task"]);
-	assert.equal(f.slashSubmissions.length, 1);
-	f.editor.handleInput?.("\x1a");
-	assert.equal(f.editor.getText(), "");
+	assert.deepEqual(submitted, ["$testing task"]);
 });
 
 test("slash submissions persist once before shutdown without becoming conversation messages", async (t) => {
@@ -283,11 +304,8 @@ test("slash submissions persist once before shutdown without becoming conversati
 			await f.runner.emitInput(text, undefined, "interactive");
 		}
 		assert.equal(f.slashSubmissions.length, commands.length);
-		// Only the skill/template prompts reach the model (request first); commands never do.
-		assert.deepEqual(
-			f.sent.map(([content]) => String(content).split("\n")[0]),
-			["/review task", "/skill:testing"],
-		);
+		// Retired /template and /skill: forms are blocked with a hint; commands never reach the model.
+		assert.deepEqual(f.sent, []);
 		for (const text of [...commands].reverse()) {
 			f.editor.handleInput?.("\x1b[A");
 			assert.equal(f.editor.getText(), text);
@@ -393,11 +411,12 @@ test("inline completion preserves native forced paths and initial menus", async 
 	};
 	const provider = f.wrappers[0]!(native);
 	const options = { signal: new AbortController().signal, force: false };
-	const inline = await provider.getSuggestions(["Use /rev"], 0, 8, options);
-	assert.equal(inline?.items[0]?.value, "review");
+	const inline = await provider.getSuggestions(["Use $rev"], 0, 8, options);
+	assert.equal(inline?.items[0]?.value, "$review");
+	assert.equal((await provider.getSuggestions(["Use /as"], 0, 7, options))?.items[0]?.value, "/ask");
 	assert.equal(nativeCalls, 0);
-	await provider.getSuggestions(["Use /rev"], 0, 8, { ...options, force: true });
+	await provider.getSuggestions(["Use $rev"], 0, 8, { ...options, force: true });
 	await provider.getSuggestions(["/rev"], 0, 4, options);
 	assert.equal(nativeCalls, 2);
-	assert.deepEqual(provider.triggerCharacters, ["#"]);
+	assert.deepEqual(provider.triggerCharacters, ["#", "$"]);
 });

@@ -1,5 +1,5 @@
 import type { CustomEditor } from "@earendil-works/pi-coding-agent";
-import { encodeComposableCompletionPrefix, findSlashCompletionContext } from "./inline-context.ts";
+import { encodeComposableCompletionPrefix, findCompletionContext } from "./inline-context.ts";
 import type { VisualRow } from "./editor-selection.ts";
 
 interface PasteData {
@@ -288,7 +288,7 @@ export function requestInlineContextAutocomplete(editor: CustomEditor): boolean 
 	try {
 		if (editor.isShowingAutocomplete() || typeof field(editor, "requestAutocomplete") !== "function") return false;
 		const cursor = editor.getCursor();
-		const context = findSlashCompletionContext(editor.getLines(), cursor.line, cursor.col);
+		const context = findCompletionContext(editor.getLines(), cursor.line, cursor.col);
 		if (!context || context.isInitialCommand) return false;
 		call(editor, "requestAutocomplete", [{ force: false, explicitTab: false }]);
 		return true;

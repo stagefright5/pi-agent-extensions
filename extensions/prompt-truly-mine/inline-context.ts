@@ -30,11 +30,22 @@ export type ContextCompletionItem = {
 	description: string;
 };
 
+export type CompletionLeader = "/" | "$";
+
 export type SlashCompletionContext = {
 	prefix: string;
 	query: string;
 	tokenStart: number;
 	isInitialCommand: boolean;
+};
+
+export type CompletionContext = SlashCompletionContext & { leader: CompletionLeader };
+
+/** `$name` references: skills by bare name, prompt templates by name. Skills win clashes. */
+export type ReferenceIndex = {
+	byName: Map<string, ComposableCommand>;
+	/** Names that are both a skill and a prompt template. */
+	shadowed: Set<string>;
 };
 
 export type LoadedContextResource = ComposableCommand & {
@@ -48,8 +59,12 @@ export type CompletionResult = {
 	cursorCol: number;
 };
 
-// Consume the whole token so /review/file is not mistaken for the /review tag.
-const RESOURCE_TOKEN_PATTERN = /(^|[\s([{])\/([^\s]+)/g;
+// Consume the whole token so /ask/file is not mistaken for the /ask command.
+const COMMAND_TOKEN_PATTERN = /(^|[\s([{])\/([^\s]+)/g;
+// `$name` references; `$` inside a word (prices, `a$b`) never starts one.
+const REFERENCE_TOKEN_PATTERN = /(^|[\s([{])\$([^\s$]+)/g;
+
+export const REFERENCE_LEADER = "$";
 
 export function findSlashCompletionContext(
 	lines: string[],
@@ -74,13 +89,55 @@ export function findSlashCompletionContext(
 	};
 }
 
+/** A `$name` reference being typed anywhere, or an inline `/command`. */
+export function findCompletionContext(
+	lines: string[],
+	cursorLine: number,
+	cursorCol: number,
+): CompletionContext | null {
+	const textBeforeCursor = (lines[cursorLine] ?? "").slice(0, cursorCol);
+	const reference = textBeforeCursor.match(/(?:^|[\s([{])\$([^\s$]*)$/u);
+	if (reference) {
+		const query = reference[1] ?? "";
+		const prefix = `$${query}`;
+		return {
+			leader: "$",
+			prefix,
+			query,
+			tokenStart: textBeforeCursor.length - prefix.length,
+			isInitialCommand: false,
+		};
+	}
+	const slash = findSlashCompletionContext(lines, cursorLine, cursorCol);
+	return slash ? { ...slash, leader: "/" } : null;
+}
+
+export function referenceName(command: ComposableCommand): string {
+	return command.source === "skill" ? command.name.replace(/^skill:/u, "") : command.name;
+}
+
+export function buildReferenceIndex(commands: readonly ComposableCommand[]): ReferenceIndex {
+	const byName = new Map<string, ComposableCommand>();
+	const shadowed = new Set<string>();
+	// Skills first so they win; a later template with the same name only marks the clash.
+	const ordered = [...commands].sort((a, b) => Number(a.source !== "skill") - Number(b.source !== "skill"));
+	for (const command of ordered) {
+		const name = referenceName(command);
+		const existing = byName.get(name);
+		if (!existing) byName.set(name, command);
+		else if (existing.source !== command.source) shadowed.add(name);
+	}
+	return { byName, shadowed };
+}
+
+/** The encoded prefix keeps Pi from treating an inline `/` or `$` completion as a leading command. */
 export function encodeComposableCompletionPrefix(prefix: string): string {
-	return prefix.startsWith("/") ? `${INLINE_COMPLETION_PREFIX_MARKER}${prefix.slice(1)}` : prefix;
+	return `${INLINE_COMPLETION_PREFIX_MARKER}${prefix}`;
 }
 
 export function decodeComposableCompletionPrefix(prefix: string): string | null {
 	if (!prefix.startsWith(INLINE_COMPLETION_PREFIX_MARKER)) return null;
-	return `/${prefix.slice(INLINE_COMPLETION_PREFIX_MARKER.length)}`;
+	return prefix.slice(INLINE_COMPLETION_PREFIX_MARKER.length);
 }
 
 export function applyComposableCompletion(
@@ -98,7 +155,8 @@ export function applyComposableCompletion(
 	const currentLine = lines[cursorLine] ?? "";
 	const beforePrefix = currentLine.slice(0, Math.max(0, cursorCol - prefix.length));
 	const afterCursor = currentLine.slice(cursorCol);
-	const value = itemValue.startsWith("/") ? itemValue : `/${itemValue}`;
+	const leader = prefix[0] ?? "/";
+	const value = itemValue.startsWith(leader) ? itemValue : `${leader}${itemValue}`;
 	const suffix = afterCursor.length === 0 || !/^\s/.test(afterCursor) ? " " : "";
 	const nextLines = [...lines];
 	nextLines[cursorLine] = `${beforePrefix}${value}${suffix}${afterCursor}`;
@@ -131,25 +189,36 @@ function fuzzyScore(value: string, query: string): number | null {
 	return 1000 + gapScore;
 }
 
-export function buildContextCompletionItems(
+function ranked<T>(entries: readonly T[], name: (entry: T) => string, query: string): T[] {
+	return entries
+		.map((entry, index) => ({ entry, index, score: fuzzyScore(name(entry), query) }))
+		.filter((candidate): candidate is { entry: T; index: number; score: number } => candidate.score !== null)
+		.sort((a, b) => a.score - b.score || a.index - b.index)
+		.map(({ entry }) => entry);
+}
+
+/** Inline `/` completion: extension commands only (skills and templates use `$`). */
+export function buildCommandCompletionItems(
 	commands: readonly InlineCommand[],
 	query: string,
 ): ContextCompletionItem[] {
-	const unique = new Map<string, { command: InlineCommand; index: number; score: number }>();
-	commands.forEach((command, index) => {
-		const score = fuzzyScore(command.name, query);
-		if (score === null) return;
-		const key = `${command.source}\0${command.name}`;
-		if (!unique.has(key)) unique.set(key, { command, index, score });
-	});
+	const extensions = [...new Map(commands.filter((c) => c.source === "extension").map((c) => [c.name, c])).values()];
+	return ranked(extensions, (command) => command.name, query).map((command) => ({
+		value: `/${command.name}`,
+		label: command.name,
+		description: `[extension]${command.description ? ` ${command.description}` : ""}`,
+	}));
+}
 
-	return [...unique.values()]
-		.sort((a, b) => a.score - b.score || a.index - b.index)
-		.map(({ command }) => ({
-			value: command.name,
-			label: command.name,
-			description: `[${command.source}]${command.description ? ` ${command.description}` : ""}`,
-		}));
+/** `$` completion: skills and prompt templates by reference name; clashes note that the skill wins. */
+export function buildReferenceCompletionItems(index: ReferenceIndex, query: string): ContextCompletionItem[] {
+	return ranked([...index.byName.entries()], ([name]) => name, query).map(([name, command]) => ({
+		value: `$${name}`,
+		label: name,
+		description:
+			`[${command.source}]${command.description ? ` ${command.description}` : ""}` +
+			(index.shadowed.has(name) ? " · also a prompt template; the skill is used" : ""),
+	}));
 }
 
 export function promoteInlineExtensionCommand(
@@ -162,7 +231,7 @@ export function promoteInlineExtensionCommand(
 			.map((command) => [command.name, command]),
 	);
 
-	for (const match of text.matchAll(RESOURCE_TOKEN_PATTERN)) {
+	for (const match of text.matchAll(COMMAND_TOKEN_PATTERN)) {
 		const token = match[2];
 		if (!token) continue;
 		const invocation = byInvocation.has(token) ? token : token.replace(/[),.;!?\]}]+$/, "");
@@ -178,31 +247,56 @@ export function promoteInlineExtensionCommand(
 	return null;
 }
 
-export function extractReferencedCommands(text: string, commands: readonly ComposableCommand[]): ComposableCommand[] {
-	const byInvocation = new Map(commands.map((command) => [command.name, command]));
+/**
+ * `$name` references to known skills and prompt templates, deduplicated, in first-use order.
+ * Unknown names (`$HOME`, `$1`, prices) stay literal text. `shadowed` lists referenced names that
+ * are both a skill and a template (the skill is used).
+ */
+export function extractReferences(
+	text: string,
+	index: ReferenceIndex,
+): { resources: ComposableCommand[]; shadowed: string[] } {
 	const selected = new Map<string, ComposableCommand>();
-
-	for (const match of text.matchAll(RESOURCE_TOKEN_PATTERN)) {
+	const shadowed = new Set<string>();
+	for (const match of text.matchAll(REFERENCE_TOKEN_PATTERN)) {
 		const token = match[2];
 		if (!token) continue;
-		const invocation = byInvocation.has(token) ? token : token.replace(/[),.;!?\]}]+$/, "");
-		const command = byInvocation.get(invocation);
+		const name = index.byName.has(token) ? token : token.replace(/[),.;:!?\]}'"`]+$/u, "");
+		const command = index.byName.get(name);
 		if (!command) continue;
+		if (index.shadowed.has(name)) shadowed.add(name);
 		const key = `${command.source}\0${command.name}\0${command.path}`;
 		if (!selected.has(key)) selected.set(key, command);
 	}
+	return { resources: [...selected.values()], shadowed: [...shadowed] };
+}
 
-	return [...selected.values()];
+/**
+ * The old `/skill:name` and leading `/template` forms, which this extension blocks in favor of
+ * `$name`. Returns the reference name to suggest, or null for anything else.
+ */
+export function findRetiredSlashReference(
+	text: string,
+	commands: readonly ComposableCommand[],
+): { source: ComposableCommandSource; name: string } | null {
+	const match = text.trimStart().match(/^\/(\S+)/u);
+	if (!match) return null;
+	const token = match[1]!;
+	if (token.startsWith("skill:")) {
+		const skill = commands.find((command) => command.source === "skill" && command.name === token);
+		return skill ? { source: "skill", name: referenceName(skill) } : null;
+	}
+	const template = commands.find((command) => command.source === "prompt" && command.name === token);
+	return template ? { source: "prompt", name: template.name } : null;
 }
 
 export const INLINE_CONTEXT_REFERENCES_MARKER = "pi-extension:inline-context:v2";
 
 function describeReference(resource: LoadedContextResource): string {
 	if (resource.source === "skill") {
-		const name = resource.name.replace(/^skill:/, "");
-		return `- Skill \`${name}\`: ${resource.path} (relative paths inside it resolve against ${resource.baseDir})`;
+		return `- Skill \`$${referenceName(resource)}\`: ${resource.path} (relative paths inside it resolve against ${resource.baseDir})`;
 	}
-	return `- Prompt template \`/${resource.name}\`: ${resource.path} (its $ARGUMENTS, $@, and $1, $2, \u2026 placeholders refer to the request above)`;
+	return `- Prompt template \`$${resource.name}\`: ${resource.path} (its $ARGUMENTS, $@, and $1, $2, \u2026 placeholders refer to the request above)`;
 }
 
 /**

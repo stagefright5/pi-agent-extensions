@@ -85,7 +85,11 @@ test("suggestions grow above the bottom-anchored cursor; keyboard and mouse coor
 		const rows = editor.render(80);
 		assert.equal(fromBottom(rows), fromBottom(closed));
 		assert.match(plain(rows[0]!), /item0/);
-		assert.match(plain(rows.at(-1)!), /^ +\/ commands {2}! shell {2}@ files $/u, "bottom row holds only hints");
+		assert.match(
+			plain(rows.at(-1)!),
+			/^ +\/ commands {2}\$ skills {2}! shell {2}@ files $/u,
+			"bottom row holds only hints",
+		);
 		for (const width of [4, 10, 80, 120]) {
 			for (const row of editor.render(width)) assert.ok(visibleWidth(row) <= width);
 		}
@@ -230,7 +234,7 @@ test("themed composer: half-row padded bars, mode rail, footer strip, placeholde
 	);
 	assert.match(text(rows[1]!), /^\u258e Ask Pi anything +$/u);
 	assert.ok(rows[1]!.includes(CURSOR_MARKER), "the placeholder keeps the hardware cursor marker");
-	assert.match(text(rows[3]!), /^\u258e +\/ commands {2}! shell {2}@ files $/u);
+	assert.match(text(rows[3]!), /^\u258e +\/ commands {2}\$ skills {2}! shell {2}@ files $/u);
 	assert.ok(rows[1]!.includes(palette.fg("accent", "\u258e")));
 	editor.setText("!ls");
 	rows = editor.render(80);

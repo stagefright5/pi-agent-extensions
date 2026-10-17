@@ -2,9 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
 	applyComposableCompletion,
-	buildContextCompletionItems,
+	buildCommandCompletionItems,
+	buildReferenceCompletionItems,
+	buildReferenceIndex,
 	encodeComposableCompletionPrefix,
-	extractReferencedCommands,
+	extractReferences,
+	findCompletionContext,
+	findRetiredSlashReference,
 	findSlashCompletionContext,
 	formatContextReferences,
 	hasContextReferences,
@@ -69,53 +73,84 @@ test("distinguishes the initial slash menu from inline context completion", () =
 	assert.equal(findSlashCompletionContext(["Open https://example.com/"], 0, 25), null);
 });
 
-test("applies an encoded completion without submitting or damaging surrounding text", () => {
-	const prefix = encodeComposableCompletionPrefix("/ang");
-	assert.deepEqual(applyComposableCompletion(["Use /ang"], 0, 8, "skill:angular-developer", prefix), {
-		lines: ["Use /skill:angular-developer "],
-		cursorLine: 0,
-		cursorCol: 29,
+test("$ opens reference completion anywhere; / keeps inline command completion", () => {
+	assert.deepEqual(findCompletionContext(["$ang"], 0, 4), {
+		leader: "$",
+		prefix: "$ang",
+		query: "ang",
+		tokenStart: 0,
+		isInitialCommand: false,
 	});
-
-	assert.deepEqual(
-		applyComposableCompletion(["Use /rev later"], 0, 8, "review", encodeComposableCompletionPrefix("/rev")),
-		{
-			lines: ["Use /review later"],
-			cursorLine: 0,
-			cursorCol: 11,
-		},
-	);
+	assert.equal(findCompletionContext(["Fix it with ($rev"], 0, 17)?.prefix, "$rev");
+	assert.equal(findCompletionContext(["costs US$5"], 0, 10), null, "$ inside a word is literal");
+	assert.equal(findCompletionContext(["Ask /as"], 0, 7)?.leader, "/");
+	assert.equal(findCompletionContext(["/ski"], 0, 4)?.isInitialCommand, true);
 });
 
-test("fuzzy-filters and labels extension, prompt, and skill completion items", () => {
-	assert.deepEqual(buildContextCompletionItems(inlineCommands, "web"), [
-		{
-			value: "websearch",
-			label: "websearch",
-			description: "[extension] Open web search curator",
-		},
+test("applies an encoded completion without submitting or damaging surrounding text", () => {
+	assert.deepEqual(
+		applyComposableCompletion(["Use $ang"], 0, 8, "$angular-developer", encodeComposableCompletionPrefix("$ang")),
+		{ lines: ["Use $angular-developer "], cursorLine: 0, cursorCol: 23 },
+	);
+	assert.deepEqual(
+		applyComposableCompletion(["Use $rev later"], 0, 8, "$review", encodeComposableCompletionPrefix("$rev")),
+		{ lines: ["Use $review later"], cursorLine: 0, cursorCol: 11 },
+	);
+	assert.deepEqual(applyComposableCompletion(["hi /as"], 0, 6, "/ask", encodeComposableCompletionPrefix("/as")), {
+		lines: ["hi /ask "],
+		cursorLine: 0,
+		cursorCol: 8,
+	});
+});
+
+test("inline / offers extension commands only; $ offers skills and templates by bare name", () => {
+	assert.deepEqual(buildCommandCompletionItems(inlineCommands, "web"), [
+		{ value: "/websearch", label: "websearch", description: "[extension] Open web search curator" },
 	]);
-	assert.deepEqual(buildContextCompletionItems(inlineCommands, "ang"), [
+	assert.deepEqual(buildCommandCompletionItems(inlineCommands, "ang"), [], "skills are not / items");
+	const index = buildReferenceIndex(commands);
+	assert.deepEqual(buildReferenceCompletionItems(index, "ang"), [
 		{
-			value: "skill:angular-developer",
-			label: "skill:angular-developer",
+			value: "$angular-developer",
+			label: "angular-developer",
 			description: "[skill] Angular architecture and implementation",
 		},
 	]);
-	assert.deepEqual(buildContextCompletionItems(inlineCommands, "ask"), [
-		{
-			value: "ask",
-			label: "ask",
-			description: "[extension] Ask before deciding",
-		},
+	assert.deepEqual(buildReferenceCompletionItems(index, "review"), [
+		{ value: "$review", label: "review", description: "[prompt] Review before deciding" },
 	]);
-	assert.deepEqual(buildContextCompletionItems([...inlineCommands, commands[0]!], "review"), [
-		{
-			value: "review",
-			label: "review",
-			description: "[prompt] Review before deciding",
-		},
-	]);
+	assert.deepEqual(buildReferenceCompletionItems(index, "ask"), [], "extension commands are not $ items");
+});
+
+test("skill and template name clashes: the skill wins and the clash is reported", () => {
+	const clash: ComposableCommand[] = [
+		{ name: "review", source: "prompt", path: "/p/review.md" },
+		{ name: "skill:review", source: "skill", path: "/s/review/SKILL.md", description: "Review skill" },
+	];
+	const index = buildReferenceIndex(clash);
+	assert.equal(index.byName.get("review")?.source, "skill");
+	assert.deepEqual([...index.shadowed], ["review"]);
+	assert.match(
+		buildReferenceCompletionItems(index, "review")[0]!.description,
+		/also a prompt template; the skill is used/u,
+	);
+	const found = extractReferences("Please $review this", index);
+	assert.deepEqual(
+		found.resources.map((command) => command.path),
+		["/s/review/SKILL.md"],
+	);
+	assert.deepEqual(found.shadowed, ["review"]);
+});
+
+test("retired /skill:name and leading /template forms are detected for blocking", () => {
+	assert.deepEqual(findRetiredSlashReference("/skill:angular-developer do it", commands), {
+		source: "skill",
+		name: "angular-developer",
+	});
+	assert.deepEqual(findRetiredSlashReference("  /review the diff", commands), { source: "prompt", name: "review" });
+	assert.equal(findRetiredSlashReference("/skill:unknown x", commands), null);
+	assert.equal(findRetiredSlashReference("please /review this", commands), null, "only a leading /template");
+	assert.equal(findRetiredSlashReference("/settings", commands), null);
 });
 
 test("promotes the first inline extension command and preserves the complete draft as arguments", () => {
@@ -130,29 +165,33 @@ test("promotes the first inline extension command and preserves the complete dra
 	assert.equal(promoteInlineExtensionCommand("Use /review and https://example.com/ask", inlineCommands), null);
 });
 
-test("slash paths are not commands or resource tags", () => {
-	for (const text of [
-		"Open /ask/file.ts",
-		"Inspect /review/src",
-		"Read /skill:angular-developer/SKILL.md",
-		"Use /ask/",
-	]) {
+test("slash paths are not commands, and $ only references known names", () => {
+	const index = buildReferenceIndex(commands);
+	for (const text of ["Open /ask/file.ts", "Use /ask/"]) {
 		assert.equal(promoteInlineExtensionCommand(text, inlineCommands), null);
-		assert.deepEqual(extractReferencedCommands(text, commands), []);
+	}
+	for (const text of [
+		"echo $HOME",
+		"costs $5 or US$review",
+		"$1 and ${ARGUMENTS}",
+		"/review and /skill:angular-developer",
+		"$review/src",
+	]) {
+		assert.deepEqual(extractReferences(text, index).resources, [], text);
 	}
 });
 
-test("extracts known references across punctuation boundaries and deduplicates bodies", () => {
-	const text = "Build this with (/skill:terminal-browser), then /review; /review and /skill:angular-developer.";
+test("extracts $ references across punctuation boundaries and deduplicates", () => {
+	const index = buildReferenceIndex(commands);
+	const text = "Build this with ($terminal-browser), then $review; $review and $angular-developer.";
 	assert.deepEqual(
-		extractReferencedCommands(text, commands).map((command) => command.name),
+		extractReferences(text, index).resources.map((command) => command.name),
 		["skill:terminal-browser", "review", "skill:angular-developer"],
 	);
-	assert.deepEqual(extractReferencedCommands("Open /unknown and https://example.com/review", commands), []);
 });
 
 test("keeps the request first and verbatim, then lists referenced resources as files to read", () => {
-	const original = `Implement "login form" with /skill:angular-developer /review`;
+	const original = `Implement "login form" with $angular-developer $review`;
 	const resources: LoadedContextResource[] = [
 		{
 			...commands[1]!,
@@ -172,11 +211,11 @@ test("keeps the request first and verbatim, then lists referenced resources as f
 	assert.match(formatted, /Read each file before acting on the request/u);
 	assert.match(
 		formatted,
-		/- Skill `angular-developer`: \S+SKILL\.md \(relative paths inside it resolve against \/home\/me\/\.agents\/skills\/angular-developer\)/u,
+		/- Skill `\$angular-developer`: \S+SKILL\.md \(relative paths inside it resolve against \/home\/me\/\.agents\/skills\/angular-developer\)/u,
 	);
 	assert.match(
 		formatted,
-		/- Prompt template `\/review`: \S+ \(its \$ARGUMENTS, \$@, and \$1, \$2, … placeholders refer to the request above\)/u,
+		/- Prompt template `\$review`: \S+ \(its \$ARGUMENTS, \$@, and \$1, \$2, … placeholders refer to the request above\)/u,
 	);
 	assert.doesNotMatch(formatted, /Use standalone components|Review this complete request/u, "bodies are not inlined");
 	assert.ok(formatted.endsWith("</context-references>"));

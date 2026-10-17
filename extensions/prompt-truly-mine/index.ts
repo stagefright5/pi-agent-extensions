@@ -40,14 +40,18 @@ import {
 } from "@earendil-works/pi-tui";
 import {
 	applyComposableCompletion,
-	buildContextCompletionItems,
+	buildCommandCompletionItems,
+	buildReferenceCompletionItems,
+	buildReferenceIndex,
 	decodeComposableCompletionPrefix,
 	encodeComposableCompletionPrefix,
-	extractReferencedCommands,
-	findSlashCompletionContext,
+	extractReferences,
+	findCompletionContext,
+	findRetiredSlashReference,
 	formatContextReferences,
 	hasContextReferences,
 	promoteInlineExtensionCommand,
+	REFERENCE_LEADER,
 	type ComposableCommand,
 	type InlineCommand,
 	type LoadedContextResource,
@@ -173,9 +177,9 @@ function getComposableCommands(pi: ExtensionAPI): ComposableCommand[] {
 	);
 }
 
-/** The typed text behind a completion prefix: `/mo` → `mo`, `@src/x` → `src/x`. */
+/** The typed text behind a completion prefix: `/mo` → `mo`, `@src/x` → `src/x`, `$ang` → `ang`. */
 export function completionQuery(prefix: string): string {
-	return (decodeComposableCompletionPrefix(prefix) ?? prefix).replace(/^[/@]/u, "");
+	return (decodeComposableCompletionPrefix(prefix) ?? prefix).replace(/^[/@$]/u, "");
 }
 
 type Suggestions = Awaited<ReturnType<AutocompleteProvider["getSuggestions"]>>;
@@ -199,19 +203,34 @@ function createInlineContextAutocompleteProvider(
 	current: AutocompleteProvider,
 	getCommands: () => InlineCommand[],
 ): AutocompleteProvider {
+	const composable = () =>
+		getCommands().filter((command): command is ComposableCommand => command.source !== "extension");
 	return {
-		...(current.triggerCharacters ? { triggerCharacters: current.triggerCharacters } : {}),
+		// `$` opens skill/template completion anywhere in the draft.
+		triggerCharacters: [...new Set([...(current.triggerCharacters ?? []), REFERENCE_LEADER])],
 
 		async getSuggestions(lines, cursorLine, cursorCol, options) {
 			// Explicit Tab retains Pi's normal forced file/path completion.
 			if (options.force) return current.getSuggestions(lines, cursorLine, cursorCol, options);
 
-			const context = findSlashCompletionContext(lines, cursorLine, cursorCol);
+			const context = findCompletionContext(lines, cursorLine, cursorCol);
+			if (context?.leader === "$") {
+				const items = buildReferenceCompletionItems(buildReferenceIndex(composable()), context.query);
+				if (items.length === 0) return null;
+				return rankSuggestions({ items, prefix: encodeComposableCompletionPrefix(context.prefix) });
+			}
 			if (!context || context.isInitialCommand) {
-				return rankSuggestions(await current.getSuggestions(lines, cursorLine, cursorCol, options));
+				const suggestions = await current.getSuggestions(lines, cursorLine, cursorCol, options);
+				// `/` is for commands only: skills and prompt templates attach with `$name`.
+				if (context?.isInitialCommand && suggestions) {
+					const retired = new Set(composable().map((command) => command.name));
+					const items = suggestions.items.filter((item) => !retired.has(item.value));
+					return items.length ? rankSuggestions({ ...suggestions, items }) : null;
+				}
+				return rankSuggestions(suggestions);
 			}
 
-			const items = buildContextCompletionItems(getCommands(), context.query);
+			const items = buildCommandCompletionItems(getCommands(), context.query);
 			if (items.length === 0) return null;
 			return rankSuggestions({
 				items,
@@ -764,16 +783,29 @@ export default function promptTrulyMineExtension(pi: ExtensionAPI): void {
 		if (promotedExtension) return resend(promotedExtension.text, true);
 
 		const availableCommands = getComposableCommands(pi);
-		const referencedCommands = extractReferencedCommands(event.text, availableCommands);
+		// The old `/skill:name` and leading `/template` forms are retired in favor of `$name`.
+		const retired = event.source === "extension" ? null : findRetiredSlashReference(event.text, availableCommands);
+		if (retired && ctx.hasUI) {
+			const kind = retired.source === "skill" ? "Skills" : "Prompt templates";
+			if (!ctx.ui.getEditorText().trim()) ctx.ui.setEditorText(event.text);
+			ctx.ui.notify(`${kind} attach with $name now. Try $${retired.name}`, "warning");
+			return { action: "handled" as const };
+		}
+
+		const { resources: referencedCommands, shadowed } = extractReferences(
+			event.text,
+			buildReferenceIndex(availableCommands),
+		);
+		if (shadowed.length && ctx.hasUI) {
+			const names = shadowed.map((name) => `$${name}`).join(", ");
+			ctx.ui.notify(`${names} matches both a skill and a prompt template; attached the skill`, "warning");
+		}
 		if (referencedCommands.length === 0) return { action: "continue" as const };
 
 		const resources = await loadContextResources(referencedCommands, ctx);
 		if (resources.length === 0) return { action: "continue" as const };
 
 		const text = formatContextReferences(event.text, resources);
-		// Pi would expand a leading /skill:name or /template after input handlers run and put its
-		// content first. Resubmit without expansion so the request stays first in every position.
-		if (event.text.trimStart().startsWith("/")) return resend(text, false);
 		return { action: "transform" as const, text };
 	});
 

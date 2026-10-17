@@ -2,29 +2,27 @@
 
 Most of this extension was written with the pi agent CLI.
 
-Adds inline extension-command autocomplete and skill and prompt-template references to pi's prompt editor. Undo and redo restore both text and cursor position.
+Adds `$` skill and prompt-template references and inline extension-command autocomplete to pi's prompt editor. Undo and redo restore both text and cursor position.
 
 [Back to the extension workspace](../../README.md)
 
-## Inline context autocomplete
+## `$` skill and prompt-template references
 
-At the beginning of the first editor line, `/` keeps pi's normal autocomplete menu with commands, prompt templates, and enabled skill commands.
+Skills and prompt templates attach with `$`, like Codex. Type `$` anywhere in the draft, including at the start, to open a menu of loaded skills (by bare name, such as `$angular-developer`) and file-based prompt templates (such as `$review`), labelled `[skill]` or `[prompt]`. Results are fuzzy-filtered and highlighted.
 
-Typing `/` after existing prompt text or on a later line opens a filtered menu containing:
-
-- extension commands, such as `/ask` or `/websearch`
-- loaded skills, such as `/skill:angular-developer`
-- file-based prompt templates, such as `/review`
-
-The inline menu excludes built-in commands. It fuzzy-filters results by invokable name and labels them as `[extension]`, `[skill]`, or `[prompt]`.
-
-Use `Enter` or `Tab` to insert the selected item without submitting the draft. You can then add more tags or continue writing:
+Use `Enter` or `Tab` to insert the selected reference without submitting the draft, then keep writing or add more:
 
 ```text
-Implement this with /skill:angular-developer /review
+Implement this with $angular-developer $review
 ```
 
-Selecting a skill or prompt template from the normal start-of-prompt menu also inserts it without submitting. Leading extension commands retain pi's normal behavior.
+Only names of loaded skills and templates count as references; anything else after `$` (`$HOME`, `$1`, `US$5`, `$review/src`) stays literal text. If a skill and a prompt template share a name, `$name` attaches the skill: the menu entry says so, and submitting warns about the clash.
+
+`/` is for commands only. The start-of-prompt `/` menu no longer lists skills or prompt templates, and the old forms are retired: submitting `/skill:name …`, or a draft that starts with `/template`, is blocked, keeps the draft, and shows a hint such as “Skills attach with $name now. Try $angular-developer”. A `/review` in the middle of a prompt is ordinary text.
+
+## Inline extension commands
+
+Typing `/` after existing prompt text or on a later line opens a filtered menu of extension commands, such as `/ask` or `/websearch`. Built-in commands are excluded.
 
 Selecting an extension command inline inserts it without submitting the draft. When you submit, Prompt Truly Mine moves the first referenced extension command to the beginning. It passes the complete original draft as the command's arguments, including the inline command verb:
 
@@ -39,24 +37,22 @@ Pi then dispatches the real extension command. Extension-generated user messages
 
 ## Context references
 
-When a draft is submitted, the extension finds every registered skill and prompt-template tag, at the start or anywhere in the text. The model receives **your request first, byte-for-byte unchanged**, followed by a short list of the referenced files to read:
+When a draft is submitted, the extension finds every `$` reference, at the start or anywhere in the text. The model receives **your request first, byte-for-byte unchanged**, followed by a short list of the referenced files to read:
 
 ```text
-Implement this with /skill:angular-developer /review
+Implement this with $angular-developer $review
 
 <!-- pi-extension:inline-context:v2 -->
 <context-references>
 The request above references these resources. Read each file before acting on the request, then apply it to the request above.
-- Skill `angular-developer`: ~/.agents/skills/angular-developer/SKILL.md (relative paths inside it resolve against ~/.agents/skills/angular-developer)
-- Prompt template `/review`: ~/.pi/agent/prompts/review.md (its $ARGUMENTS, $@, and $1, $2, … placeholders refer to the request above)
+- Skill `$angular-developer`: ~/.agents/skills/angular-developer/SKILL.md (relative paths inside it resolve against ~/.agents/skills/angular-developer)
+- Prompt template `$review`: ~/.pi/agent/prompts/review.md (its $ARGUMENTS, $@, and $1, $2, … placeholders refer to the request above)
 </context-references>
 ```
 
-The agent then loads each file with its own `read` tool, after it has seen the request. This also works for skills hidden from the system prompt with `disable-model-invocation: true`, because the note carries the path. Prompt-template placeholders are resolved by the agent from the request; the extension does not substitute them.
+The agent then loads each file with its own `read` tool, after it has seen the request. This also works for skills hidden from the system prompt with `disable-model-invocation: true`, because the note carries the path. Prompt-template placeholders are resolved by the agent from the request; the extension does not substitute them. Pi never expands `$name` itself, so a reference at the start of the draft is handled exactly like one in the middle.
 
-A draft that **starts** with `/skill:name` or `/template` is handled the same way. Pi would otherwise expand a leading skill or template before the request, so the extension resubmits the rewritten message with Pi's expansion turned off (images and steer/follow-up delivery are preserved).
-
-Repeated tags are listed once. Unknown tags and slash paths such as `/review/src` or `/ask/file.ts` remain ordinary text; a path prefix never invokes a command or references a resource. If a registered resource is unreadable, the extension warns, lists the other valid resources, and preserves the draft. Messages already carrying the marker (including the older prepended-bundle format) are never rewritten twice.
+Repeated references are listed once. Unknown names and paths such as `$review/src` or `/ask/file.ts` remain ordinary text; a path never invokes a command or references a resource. If a registered resource is unreadable, the extension warns, lists the other valid resources, and preserves the draft. Messages already carrying the marker (including the older prepended-bundle format) are never rewritten twice.
 
 ## Copy-friendly composer
 
@@ -96,7 +92,7 @@ The composer chrome, aligned to the draft inset:
 
 ## Slash-command history
 
-Submitted slash inputs, including built-in commands and command arguments, are added to the editor's Up/Down recall before Pi dispatches them. Up/Down history survives `/reload`, `/new`, and session switches within the same Pi process. When Prompt History Search is also loaded, every session start, including a freshly launched Pi, also fills Up/Down with saved prompts and commands from all projects (newest first, up to Pi's 100-entry limit). History from the current Pi run comes first, and each prompt appears once. Seeding reads only the saved index, never scanning sessions at startup; until that index exists (after the first `Alt+R` or first submitted prompt), fresh processes start with in-process history only. Choosing a completion without submitting does not add a history entry. Native consecutive-duplicate suppression prevents commands that Pi already records from appearing twice.
+Submitted slash commands, including built-in commands and command arguments, are added to the editor's Up/Down recall before Pi dispatches them. Up/Down history survives `/reload`, `/new`, and session switches within the same Pi process. When Prompt History Search is also loaded, every session start, including a freshly launched Pi, also fills Up/Down with saved prompts and commands from all projects (newest first, up to Pi's 100-entry limit). History from the current Pi run comes first, and each prompt appears once. Seeding reads only the saved index, never scanning sessions at startup; until that index exists (after the first `Alt+R` or first submitted prompt), fresh processes start with in-process history only. Choosing a completion without submitting does not add a history entry. Native consecutive-duplicate suppression prevents commands that Pi already records from appearing twice.
 
 When [Global Prompt History Search](../prompt-history-search/README.md) is also loaded, submissions are saved in its local 30-day index for `Alt+R` and `/prompt-history`. The extensions communicate through the `prompt-truly-mine:slash-submit` event; neither package imports or requires the other. History capture does not create conversation messages or invoke the model. Command arguments are stored verbatim (apart from outer whitespace), so do not put secrets in commands you do not want retained. Old commands that were never recorded cannot be recovered.
 
