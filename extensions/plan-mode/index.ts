@@ -50,6 +50,16 @@ const outputDetailsSchema = Type.Object({
 	planDir: Type.String(),
 });
 
+/** "writing plan · 142 lines · 4.1k chars · Validation" from a partially streamed plan. */
+export function planProgress(plan: unknown): string {
+	const text = typeof plan === "string" ? plan : "";
+	if (!text) return "writing plan…";
+	const lines = text.split("\n").length;
+	const chars = text.length >= 1000 ? `${(text.length / 1000).toFixed(1)}k` : String(text.length);
+	const section = [...text.matchAll(/^#{1,6}\s+(.+)$/gmu)].at(-1)?.[1]?.trim();
+	return `writing plan · ${lines} ${lines === 1 ? "line" : "lines"} · ${chars} chars${section ? ` · ${section}` : ""}`;
+}
+
 export default function planModeExtension(pi: ExtensionAPI): void {
 	let active = false;
 	let planDir: string | null = null;
@@ -429,20 +439,18 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 				};
 			});
 		},
-		renderCall(args, theme) {
-			return new Text(
+		renderCall(args, theme, context) {
+			const plain = (text: string, width: number) =>
+				// Truncate plain text before styling it: truncateToWidth ends with a full reset, which
+				// would also clear the tool box background for the rest of the row.
+				stripTerminalSequences(truncateToWidth(text.replace(/\s+/gu, " ").trim(), width, "…"));
+			const head =
 				theme.fg("toolTitle", theme.bold("plan_output ")) +
-					// Truncate the plain title before styling it: truncateToWidth ends with a full reset,
-					// which would also clear the tool box background for the rest of the row.
-					theme.fg(
-						"muted",
-						stripTerminalSequences(
-							truncateToWidth((args.title || "Untitled").replace(/\s+/gu, " "), 60, "…"),
-						),
-					),
-				0,
-				0,
-			);
+				theme.fg("muted", plain(args.title || "Untitled", 60));
+			// The model streams the whole plan as one tool argument, which can take a minute. Show it
+			// growing so the row never looks stuck.
+			const progress = context?.argsComplete === false ? planProgress(args.plan) : undefined;
+			return new Text(progress ? head + "\n" + theme.fg("dim", plain(progress, 100)) : head, 0, 0);
 		},
 		renderResult(result, options, theme, context) {
 			const text = getMessageText(result.content);

@@ -260,7 +260,7 @@ test("real pi renderers: fullscreen dispatch reaches handleMouse; regular mode s
 	}
 });
 
-test("review card: lighter header and footer bands, inset document, primary action chip, clickable legend", () => {
+test("review card: one panel colour, ruled header and footer, inset document, primary chip, clickable legend", () => {
 	const s = setup("# Heading\n\nBody text");
 	const lines = s.view.render(80);
 	const text = lines.map(stripTerminalSequences);
@@ -270,11 +270,14 @@ test("review card: lighter header and footer bands, inset document, primary acti
 	};
 	assert.match(text[0]!, /^ {3}Plan 世界 +$/u);
 	assert.match(text[1]!, /^ {3}path not another row/u);
-	assert.equal(text[2]!.trim(), "");
+	assert.match(text[2]!, /^ {3}─+ {3}$/u);
 	assert.match(text[3]!, /^ {3}Heading/u);
-	// Bands and the document sheet use different backgrounds; every row is filled to the edge.
-	assert.ok(bg(lines[0]!) && bg(lines[3]!) && bg(lines[0]!) !== bg(lines[3]!));
-	assert.equal(bg(lines[0]!), bg(lines.at(-1)!));
+	assert.match(text.at(-2)!, /^ {3}─+ {3}$/u);
+	// One background for every row, filled to the edge, and never the composer's surface colour.
+	const panel = bg(lines[0]!);
+	assert.ok(panel);
+	for (const line of lines) assert.equal(bg(line), panel);
+	assert.notEqual(panel, dark.getBgAnsi("userMessageBg"));
 	for (const line of lines) assert.equal(visibleWidth(line), 80);
 	const footer = text.at(-1)!;
 	assert.match(footer, /^ {4}a approve {4}⇧S all changes +c copy {3}esc close {3}$/u);

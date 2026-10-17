@@ -16,6 +16,7 @@ import {
 import { stripTerminalSequences, TuiMainScreen, type Component, type Terminal } from "@earendil-works/pi-tui";
 import { SerialTaskQueue, PlanRepository } from "./plan-store.ts";
 import { withLoader, requestRevision } from "./plan-ui.ts";
+import { planProgress } from "./index.ts";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -471,6 +472,28 @@ test("a long plan title is cut with an ellipsis without clearing the tool box ba
 		assert.match(stripTerminalSequences(row), /revised with a footer ?… *$/u);
 		// A full reset would also end the background the tool box paints behind this row.
 		assert.ok(!row.includes("\u001b[0m"), JSON.stringify(row));
+	} finally {
+		await f.close();
+	}
+});
+
+test("while the plan streams in, the call row shows it growing; once complete, only the title", async () => {
+	assert.equal(planProgress(undefined), "writing plan…");
+	assert.equal(
+		planProgress("# Plan\n\n## Outcome\nText\n\n## Validation\nRun"),
+		"writing plan · 7 lines · 42 chars · Validation",
+	);
+	assert.match(planProgress("x".repeat(4150)), /4\.2k chars$/u);
+	const f = await fixture();
+	try {
+		const theme = f.runner.getUIContext().theme;
+		const args = { title: "Background Bash", plan: "# Plan\n\n## Phases\n1. One" };
+		const streaming = f.tool.renderCall(args, theme, { argsComplete: false } as never).render(100);
+		assert.equal(streaming.length, 2);
+		assert.match(stripTerminalSequences(streaming[1]!), /^writing plan · 4 lines · .* · Phases/u);
+		for (const line of streaming) assert.ok(!line.includes("\u001b[0m"));
+		const done = f.tool.renderCall(args, theme, { argsComplete: true } as never).render(100);
+		assert.equal(done.length, 1);
 	} finally {
 		await f.close();
 	}

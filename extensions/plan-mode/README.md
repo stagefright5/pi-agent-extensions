@@ -48,11 +48,13 @@ After presenting a plan, the agent answers ordinary questions in regular assista
 
 ## Review shortcuts
 
-The review, diff, summary, and Q&A views share one card, drawn in the same colours as the [Pi Picker](../../packages/pi-picker/README.md) overlays:
+The review, diff, summary, and Q&A views share one card, drawn in the same panel colour as the [Pi Picker](../../packages/pi-picker/README.md) overlays. It is darker than the composer, so the card stays apart from the composer bar below it:
 
-- A lighter header band shows what you are viewing, the plan title, the iteration, and how far you have scrolled. The plan file path sits below it.
-- The document sits on a darker sheet, inset from both edges. A thin bar in the right margin shows where you are in a long plan.
-- A lighter footer band lists the actions. Approve is highlighted; copy and close sit on the right. On narrow screens the secondary actions are hidden from the legend but their keys still work.
+- The header shows what you are viewing, the plan title, the iteration, and how far you have scrolled. The plan file path sits below it, then a thin rule.
+- The document is inset from both edges. A thin bar in the right margin shows where you are in a long plan.
+- Below another rule, the footer lists the actions. Approve is highlighted; copy and close sit on the right. On narrow screens the secondary actions are hidden from the legend but their keys still work.
+
+While the agent writes a plan, its `plan_output` row shows the plan growing (lines, characters, and the section being written). A long plan can take a minute to arrive; the review opens as soon as it is saved.
 
 Inside the plan review overlay:
 
