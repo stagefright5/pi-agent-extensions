@@ -9,6 +9,6 @@
     "allowImportingTsExtensions": true,
     "types": ["node"]
   },
-  "include": ["extensions/**/*.ts"],
-  "exclude": ["extensions/**/*.test.ts", "**/node_modules/**"]
+  "include": ["extensions/**/*.ts", "packages/**/*.ts"],
+  "exclude": ["extensions/**/*.test.ts", "packages/**/*.test.ts", "**/node_modules/**"]
 }

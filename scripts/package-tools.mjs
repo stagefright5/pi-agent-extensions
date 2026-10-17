@@ -35,28 +35,42 @@ export function loadWorkspace(root = ROOT) {
   assert.ok(manifest.license && manifest.repository?.url && branch, "Missing shared publication defaults");
   assert.ok(["public", "restricted"].includes(access), "Missing Changesets publication access");
   const repositoryUrl = manifest.repository.url.replace(/^git\+/, "").replace(/\.git$/, "");
-  const packages = readdirSync(join(root, "extensions"), { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && existsSync(join(root, "extensions", entry.name, "package.json")))
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map(({ name: slug }) => {
-      const directory = `extensions/${slug}`;
-      const dir = join(root, directory);
-      const source = json(join(dir, "package.json"));
-      const metadata = source.packageTools;
-      assert.ok(
-        source.name && source.version && source.description && source.type,
-        `Incomplete manifest: ${directory}`,
-      );
-      assert.ok(metadata?.title && metadata?.interface, `Missing packageTools catalogue metadata: ${directory}`);
-      assert.ok(source.pi?.extensions?.length || source.pi?.skills?.length, `Missing Pi resources: ${directory}`);
-      assert.equal(
-        source.publishConfig?.directory,
-        `../../.tmp/publish/${slug}`,
-        `Incorrect staging path: ${directory}`,
-      );
-      assert.equal(source.publishConfig.linkDirectory, false, `Workspace links must use source: ${directory}`);
-      return { slug, directory, dir, source, metadata };
-    });
+  // `extensions/*` hold Pi resources; `packages/*` hold libraries that extensions bundle at stage time.
+  const packages = ["extensions", "packages"].flatMap((group) =>
+    !existsSync(join(root, group))
+      ? []
+      : readdirSync(join(root, group), { withFileTypes: true })
+          .filter((entry) => entry.isDirectory() && existsSync(join(root, group, entry.name, "package.json")))
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map(({ name: slug }) => {
+            const directory = `${group}/${slug}`;
+            const dir = join(root, directory);
+            const source = json(join(dir, "package.json"));
+            const metadata = source.packageTools;
+            const kind = group === "packages" ? "library" : "pi";
+            assert.ok(
+              source.name && source.version && source.description && source.type,
+              `Incomplete manifest: ${directory}`,
+            );
+            assert.ok(metadata?.title && metadata?.interface, `Missing packageTools catalogue metadata: ${directory}`);
+            if (kind === "pi") {
+              assert.ok(
+                source.pi?.extensions?.length || source.pi?.skills?.length,
+                `Missing Pi resources: ${directory}`,
+              );
+            } else {
+              assert.ok(!source.pi, `Libraries must not declare Pi resources: ${directory}`);
+              assert.ok(typeof source.exports?.["."] === "string", `Libraries need a root export: ${directory}`);
+            }
+            assert.equal(
+              source.publishConfig?.directory,
+              `../../.tmp/publish/${slug}`,
+              `Incorrect staging path: ${directory}`,
+            );
+            assert.equal(source.publishConfig.linkDirectory, false, `Workspace links must use source: ${directory}`);
+            return { slug, directory, dir, source, metadata, kind };
+          }),
+  );
   assert.ok(packages.length, "No workspace packages found");
   assert.equal(new Set(packages.map((pkg) => pkg.source.name)).size, packages.length, "Duplicate package names");
   return { root, manifest, repositoryUrl, branch, access, packages };
@@ -83,7 +97,7 @@ export function renderCatalogue(packages) {
 export function renderPiManifest(packages) {
   const pi = {};
   for (const { directory, source } of packages) {
-    for (const [kind, paths] of Object.entries(source.pi)) {
+    for (const [kind, paths] of Object.entries(source.pi ?? {})) {
       assert.ok(Array.isArray(paths), `Unsupported Pi resource field: ${kind}`);
       pi[kind] ??= [];
       for (const path of paths) {
@@ -99,7 +113,10 @@ export function renderPiManifest(packages) {
 }
 
 function installation(pkg, workspace) {
-  let block = `## Installation\n\nInstall the standalone package:\n\n\`\`\`bash\npi install npm:${pkg.source.name}\n\`\`\``;
+  let block =
+    pkg.kind === "library"
+      ? `## Installation\n\nInstall the library in a Pi extension package:\n\n\`\`\`bash\nnpm install ${pkg.source.name}\n\`\`\``
+      : `## Installation\n\nInstall the standalone package:\n\n\`\`\`bash\npi install npm:${pkg.source.name}\n\`\`\``;
   if (workspace) {
     block += `\n\nFor source development and tests, see the [source README](${sourceUrl(workspace, `${pkg.directory}/README.md`)}) and [workspace development guide](${sourceUrl(workspace, "README.md")}#local-development).`;
   }
@@ -119,7 +136,10 @@ export function syncWorkspace(workspace, { check = false } = {}) {
   next = replaceBlock(
     next,
     "install",
-    `\`\`\`bash\n${packages.map(({ source }) => `pi install npm:${source.name}`).join("\n")}\n\`\`\``,
+    `\`\`\`bash\n${packages
+      .filter((pkg) => pkg.kind !== "library")
+      .map(({ source }) => `pi install npm:${source.name}`)
+      .join("\n")}\n\`\`\``,
   );
   if (next !== readme) updates.push([readmePath, next]);
   for (const pkg of packages) {
@@ -182,7 +202,7 @@ export function publicationFiles(pkg) {
     (name) => /\.(?:ts|js|mjs|cjs)$/.test(name) || ["README.md", "CHANGELOG.md", "SKILL.md"].includes(name),
   );
   // Skill runtime assets follow these conventions. Extension-only development scripts do not ship.
-  if (pkg.source.pi.skills?.length) {
+  if (pkg.source.pi?.skills?.length) {
     for (const name of ["references", "scripts", "template"]) {
       if (existsSync(join(pkg.dir, name))) roots.push(name);
     }
@@ -220,9 +240,9 @@ export function publicationFiles(pkg) {
 export function publicationManifest(workspace, pkg, files) {
   const source = pkg.source;
   const keywords = new Set([
-    "pi-package",
-    ...(source.pi.extensions?.length ? ["pi-extension"] : []),
-    ...(source.pi.skills?.length ? ["pi-skill"] : []),
+    ...(pkg.kind === "library" ? ["pi-library"] : ["pi-package"]),
+    ...(source.pi?.extensions?.length ? ["pi-extension"] : []),
+    ...(source.pi?.skills?.length ? ["pi-skill"] : []),
     ...(source.keywords ?? []),
   ]);
   const manifest = {
@@ -266,13 +286,50 @@ export function publicationManifest(workspace, pkg, files) {
   return manifest;
 }
 
+const SOURCE_FILE = /\.(?:ts|mts|js|mjs|cjs)$/;
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+/** Static and dynamic import specifiers exactly equal to `name`. */
+const importPattern = (name, flags = "g") =>
+  new RegExp(`((?:\\bfrom|\\bimport)\\s*\\(?\\s*)(["'])${escapeRegExp(name)}\\2`, flags);
+const imports = (text, name) => importPattern(name, "").test(text);
+
+/**
+ * Workspace libraries an extension imports are bundled into `vendor/<slug>/` of the staged package
+ * and the staged imports are rewritten to that copy, so installs never resolve the library from npm.
+ * Source files are never modified.
+ */
+function vendorLibraries(workspace, pkg, destination, files) {
+  if (pkg.kind === "library") return [];
+  const libraries = workspace.packages.filter((candidate) => candidate.kind === "library");
+  const sources = files.filter((file) => SOURCE_FILE.test(file));
+  const added = [];
+  for (const library of libraries) {
+    const users = sources.filter((file) => imports(readFileSync(join(destination, file), "utf8"), library.source.name));
+    if (!users.length) continue;
+    const root = `vendor/${library.slug}`;
+    for (const file of publicationFiles(library)) {
+      if (!SOURCE_FILE.test(file)) continue;
+      const target = join(destination, root, file);
+      mkdirSync(dirname(target), { recursive: true });
+      copyFileSync(join(library.dir, file), target);
+      added.push(`${root}/${file}`);
+    }
+    const entry = posix.normalize(`${root}/${library.source.exports["."]}`);
+    assert.ok(added.includes(entry), `Missing vendored entry point for ${library.source.name}: ${entry}`);
+    for (const file of users) {
+      const path = join(destination, file);
+      let specifier = posix.relative(posix.dirname(file), entry);
+      if (!specifier.startsWith(".")) specifier = `./${specifier}`;
+      const rewritten = readFileSync(path, "utf8").replace(importPattern(library.source.name), `$1$2${specifier}$2`);
+      assert.ok(!imports(rewritten, library.source.name), `Unrewritten ${library.source.name} import: ${file}`);
+      writeFileSync(path, rewritten);
+    }
+  }
+  return added;
+}
+
 export function stagePackage(workspace, pkg) {
   const files = publicationFiles(pkg);
-  const manifest = publicationManifest(workspace, pkg, files);
-  for (const paths of Object.values(manifest.pi)) {
-    for (const path of paths)
-      assert.ok(files.includes(path.replace(/^\.\//, "")), `Missing published Pi resource: ${path}`);
-  }
   const destination = join(workspace.root, ".tmp", "publish", pkg.slug);
   // This directory is owned exclusively by this generator. Remove stale outputs on every build.
   rmSync(destination, { recursive: true, force: true });
@@ -282,6 +339,18 @@ export function stagePackage(workspace, pkg) {
     mkdirSync(dirname(target), { recursive: true });
     if (file === "README.md") writeFileSync(target, publishedReadme(workspace, pkg));
     else copyFileSync(join(pkg.dir, file), target);
+  }
+  const vendored = vendorLibraries(workspace, pkg, destination, files);
+  const manifest = publicationManifest(workspace, pkg, [...files, ...vendored]);
+  for (const paths of Object.values(manifest.pi ?? {})) {
+    for (const path of paths)
+      assert.ok(files.includes(path.replace(/^\.\//, "")), `Missing published Pi resource: ${path}`);
+  }
+  for (const name of Object.keys({ ...manifest.dependencies, ...manifest.peerDependencies })) {
+    assert.ok(
+      !workspace.packages.some((candidate) => candidate.kind === "library" && candidate.source.name === name),
+      `Bundled libraries must not be runtime dependencies: ${name}`,
+    );
   }
   copyFileSync(join(workspace.root, "LICENSE"), join(destination, "LICENSE"));
   writeFileSync(join(destination, "package.json"), serialize(manifest));

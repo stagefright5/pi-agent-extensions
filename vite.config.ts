@@ -17,7 +17,7 @@ export default defineConfig({
     sortPackageJson: false,
     overrides: [
       {
-        files: ["extensions/**/*.ts"],
+        files: ["extensions/**/*.ts", "packages/**/*.ts"],
         options: {
           useTabs: true,
           tabWidth: 4,

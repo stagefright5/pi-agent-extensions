@@ -43,6 +43,7 @@ function fixture(t) {
     "pnpm-workspace.yaml",
     "scripts",
     "extensions",
+    "packages",
   ]) {
     cpSync(join(ROOT, path), join(root, path), {
       recursive: true,
@@ -62,7 +63,7 @@ test("checked-in indexes are current and sync is idempotent", () => {
   const pi = renderPiManifest(workspace.packages);
   assert.equal(
     pi.extensions.length,
-    workspace.packages.reduce((count, pkg) => count + (pkg.source.pi.extensions?.length ?? 0), 0),
+    workspace.packages.reduce((count, pkg) => count + (pkg.source.pi?.extensions?.length ?? 0), 0),
   );
   assert.deepEqual(pi.themes, ["./extensions/obsidian-ui/themes/obsidian-ice.json"]);
   assert.deepEqual(pi.skills, [
@@ -119,13 +120,19 @@ test("all staged packages carry shared defaults, unchanged release identity, and
     assert.equal(existsSync(join(pkg.dir, "LICENSE")), false);
     assert.deepEqual(manifest.repository, { ...workspace.manifest.repository, directory: pkg.directory });
     assert.deepEqual(manifest.pi, pkg.source.pi);
+    const library = pkg.kind === "library";
     assert.deepEqual(manifest.peerDependencies, pkg.source.peerDependencies);
     assert.deepEqual(manifest.publishConfig, { access: "public" });
     assert.equal(manifest.scripts, undefined);
     assert.equal(manifest.devDependencies, undefined);
     assert.equal(manifest.packageTools, undefined);
-    assert.ok(manifest.keywords.includes("pi-package"));
-    assert.ok(manifest.keywords.includes(pkg.source.pi.skills ? "pi-skill" : "pi-extension"));
+    if (library) {
+      assert.ok(manifest.keywords.includes("pi-library"));
+      assert.deepEqual(manifest.exports, pkg.source.exports);
+    } else {
+      assert.ok(manifest.keywords.includes("pi-package"));
+      assert.ok(manifest.keywords.includes(pkg.source.pi.skills ? "pi-skill" : "pi-extension"));
+    }
     assert.equal(pkg.source.scripts.prepack, "node ../../scripts/package-tools.mjs stage-package");
     for (const file of manifest.files) {
       assert.ok(existsSync(join(destination, file)), `${pkg.slug}: missing ${file}`);
@@ -140,7 +147,7 @@ test("all staged packages carry shared defaults, unchanged release identity, and
       }
     }
     const readme = read(join(destination, "README.md"));
-    assert.ok(readme.includes(`pi install npm:${pkg.source.name}`));
+    assert.ok(readme.includes(library ? `npm install ${pkg.source.name}` : `pi install npm:${pkg.source.name}`));
     assert.doesNotMatch(readme, /\]\(\.\.\/\.\.\/README.md\)|For source development, load this directory/);
   }
   const artifact = join(workspace.root, ".tmp/publish/artifact-design");
@@ -213,9 +220,13 @@ test("published README rewrites repository links, preserves usage and leaves cod
   assert.ok(published.includes("[external](https://example.org) [anchor](#usage)"));
   assert.ok(published.includes("[example](./leave-this-alone.md)"));
   assert.ok(published.includes("For source development, keep this example verbatim."));
+  // Usage prose is unchanged apart from relative links, which become repository URLs.
   assert.equal(
     published.split("## Usage")[1].split("<!-- package-tools:install:start -->")[0],
-    before.split("## Usage")[1].split("<!-- package-tools:install:start -->")[0],
+    before
+      .split("## Usage")[1]
+      .split("<!-- package-tools:install:start -->")[0]
+      .replaceAll("](../../", `](${workspace.repositoryUrl}/blob/main/`),
   );
   assert.equal(read(path), before);
 });
@@ -239,7 +250,12 @@ test("pnpm packs every source package through prepack and publishConfig.director
     execFileSync("pnpm", ["--dir", pkg.dir, "pack", "--out", tarball], { encoding: "utf8", stdio: "pipe" });
     const manifest = JSON.parse(execFileSync("tar", ["-xOf", tarball, "package/package.json"], { encoding: "utf8" }));
     const files = execFileSync("tar", ["-tzf", tarball], { encoding: "utf8" }).trim().split("\n");
-    const expected = ["package.json", ...publicationManifest(workspace, pkg, publicationFiles(pkg)).files]
+    // Staging policy plus any vendored workspace libraries (covered by the bundling test).
+    const vendored = manifest.files.filter((file) => file.startsWith("vendor/"));
+    const expected = [
+      "package.json",
+      ...publicationManifest(workspace, pkg, [...publicationFiles(pkg), ...vendored]).files,
+    ]
       .map((file) => `package/${file}`)
       .sort();
     assert.deepEqual(files.sort(), expected, `${pkg.slug}: tarball differs from staging policy`);
@@ -253,4 +269,53 @@ test("pnpm packs every source package through prepack and publishConfig.director
       read(join(workspace.root, "LICENSE")),
     );
   }
+});
+
+test("extensions that import a workspace library bundle a private copy and load without it", (t) => {
+  const workspace = fixture(t);
+  const library = workspace.packages.find((pkg) => pkg.kind === "library");
+  assert.ok(library, "workspace has a library package");
+  const users = workspace.packages.filter(
+    (pkg) => pkg.kind === "pi" && Object.keys(pkg.source.devDependencies ?? {}).includes(library.source.name),
+  );
+  if (users.length === 0) {
+    t.skip("no extension imports a workspace library yet");
+    return;
+  }
+  for (const pkg of users) {
+    const sourceBefore = read(join(pkg.dir, "index.ts"));
+    const destination = stagePackage(workspace, pkg);
+    const manifest = json(join(destination, "package.json"));
+    assert.equal(read(join(pkg.dir, "index.ts")), sourceBefore, "source is never rewritten");
+    assert.ok(manifest.files.includes(`vendor/${library.slug}/src/index.ts`));
+    assert.equal(manifest.dependencies?.[library.source.name], undefined);
+    assert.equal(manifest.devDependencies, undefined);
+    assert.doesNotMatch(read(join(destination, "package.json")), /workspace:|catalog:/);
+    for (const file of manifest.files.filter((path) => path.endsWith(".ts"))) {
+      assert.doesNotMatch(read(join(destination, file)), new RegExp(`["']${library.source.name}["']`), file);
+    }
+  }
+  // Load a staged extension with only pi's own packages resolvable: the library comes from vendor/.
+  const pkg = users.find((candidate) => candidate.slug === "prompt-history-search") ?? users[0];
+  const destination = join(workspace.root, ".tmp", "publish", pkg.slug);
+  mkdirSync(join(destination, "node_modules", "@earendil-works"), { recursive: true });
+  for (const name of ["pi-coding-agent", "pi-tui"]) {
+    symlinkSync(
+      join(ROOT, pkg.directory, "node_modules", "@earendil-works", name),
+      join(destination, "node_modules", "@earendil-works", name),
+    );
+  }
+  assert.equal(existsSync(join(destination, "node_modules", "@stagefright5")), false);
+  const output = execFileSync(
+    process.execPath,
+    [
+      "--experimental-transform-types",
+      "--no-warnings",
+      "--input-type=module",
+      "-e",
+      `const module = await import(${JSON.stringify(join(destination, "index.ts"))}); console.log(typeof module.default);`,
+    ],
+    { encoding: "utf8" },
+  );
+  assert.equal(output.trim(), "function");
 });

@@ -111,6 +111,9 @@ importers:
       '@earendil-works/pi-tui':
         specifier: 'catalog:'
         version: 1.2.0
+      '@stagefright5/pi-picker':
+        specifier: workspace:*
+        version: link:../../packages/pi-picker
     publishDirectory: ../../.tmp/publish/prompt-history-search
 
   extensions/prompt-truly-mine:
@@ -121,6 +124,9 @@ importers:
       '@earendil-works/pi-tui':
         specifier: 1.2.0
         version: 1.2.0
+      '@stagefright5/pi-picker':
+        specifier: workspace:*
+        version: link:../../packages/pi-picker
     publishDirectory: ../../.tmp/publish/prompt-truly-mine
 
   extensions/provider-url-logger:
@@ -148,7 +154,20 @@ importers:
       '@earendil-works/pi-tui':
         specifier: 1.2.0
         version: 1.2.0
+      '@stagefright5/pi-picker':
+        specifier: workspace:*
+        version: link:../../packages/pi-picker
     publishDirectory: ../../.tmp/publish/tool-output-browser
+
+  packages/pi-picker:
+    devDependencies:
+      '@earendil-works/pi-coding-agent':
+        specifier: 'catalog:'
+        version: 1.2.0(@aws-sdk/credential-provider-node@3.972.86)(@smithy/signature-v4@5.7.4)(ws@8.21.3)
+      '@earendil-works/pi-tui':
+        specifier: 'catalog:'
+        version: 1.2.0
+    publishDirectory: ../../.tmp/publish/pi-picker
 
 packages:
 
