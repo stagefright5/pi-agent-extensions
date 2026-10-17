@@ -57,8 +57,8 @@ function pair(initial = getThemeByName("dark")) {
 					expectedComposer.map((line) => open + line + close),
 				);
 			} else {
-				// [top pad, ...draft, surface→footer, footer, footer pad] vs native [top, ...draft, bottom].
-				assert.equal(composer.length, expectedComposer.length + 2);
+				// [top pad, ...draft, surface→footer, footer] vs native [top, ...draft, bottom].
+				assert.equal(composer.length, expectedComposer.length + 1);
 				const [top, ...rest] = composer;
 				const nativeTop = expectedComposer[0]!;
 				if (plain(nativeTop).trim())
@@ -67,15 +67,14 @@ function pair(initial = getThemeByName("dark")) {
 				const draft = rest.slice(0, expectedComposer.length - 2);
 				draft.forEach((line, index) => {
 					const native = expectedComposer[index + 1]!;
-					if (index === 0 && surfaced.getText() === "" && plain(line).includes("Ask Pi")) {
+					if (index === 0 && surfaced.getText() === "" && plain(line).includes("/ commands")) {
 						assert.equal(visibleWidth(line), visibleWidth(native), "placeholder keeps the row width");
 						return;
 					}
 					assert.equal(line, open + native + close, `draft row ${index} must stay byte-for-byte native`);
 				});
-				const [joint, strip, pad] = rest.slice(-3);
+				const [joint, strip] = rest.slice(-2);
 				assert.match(plain(joint!), /^\u2580+$/u);
-				assert.match(plain(pad!), /^\u2580+$/u);
 				assert.ok(strip!.startsWith(footer) && strip!.endsWith(close), "footer keeps its strip");
 				assert.equal(plain(strip!).trimEnd(), plain(expectedComposer.at(-1)!).trimEnd());
 				for (const line of composer) assert.equal(visibleWidth(line), width);
@@ -159,7 +158,7 @@ test("surface preserves shell hints, paste, undo/redo and overflow across redraw
 	}
 	const rows = editors.check(80).map(plain);
 	assert.match(rows[0]!, /^\u2584{80}$/u);
-	assert.match(rows.at(-2)!, /^shell +⌃Z undo {2}⌃Y redo$/u);
+	assert.match(rows.at(-1)!, /^shell +⌃Z undo {2}⌃Y redo$/u);
 	for (const editor of [editors.reference, editors.surfaced]) editor.handleInput("\x19");
 	editors.check(80);
 	assert.match(editors.surfaced.getExpandedText(), /pasted 世界/);

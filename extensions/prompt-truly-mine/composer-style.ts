@@ -67,21 +67,38 @@ export function renderFooter(
 	mode: string | undefined,
 	hints: readonly FooterHint[],
 	palette: LabelPalette,
+	status?: StatusLine,
+	center?: string,
 ): string {
 	const fits = mode !== undefined && inset * 2 + visibleWidth(mode) <= width;
 	const left = " ".repeat(Math.min(inset, width)) + (fits ? palette.fg("bashMode", mode) : "");
 	const leftWidth = Math.min(inset, width) + (fits ? visibleWidth(mode) : 0);
+	if (status) {
+		// The lent status line fills the strip; hints (or a scroll indicator) ride in its gap.
+		const gap = fits ? 2 : 0;
+		const room = width - leftWidth - gap - inset;
+		const middle = center ?? styleHints(hints, palette);
+		const line = room > 0 ? status(room, middle || undefined) : "";
+		return left + " ".repeat(gap) + line + " ".repeat(Math.max(0, width - leftWidth - gap - visibleWidth(line)));
+	}
 	const shown = [...hints];
 	const plain = () => shown.map((hint) => `${hint.key} ${hint.action}`).join("  ");
 	while (shown.length && leftWidth + 2 + visibleWidth(plain()) + inset > width) shown.pop();
 	if (!shown.length) return left + " ".repeat(Math.max(0, width - leftWidth));
-	const right = shown.map((hint) => palette.fg("muted", hint.key) + " " + palette.fg("dim", hint.action)).join("  ");
+	const right = styleHints(shown, palette);
 	return (
 		left + " ".repeat(Math.max(0, width - leftWidth - visibleWidth(plain()) - inset)) + right + " ".repeat(inset)
 	);
 }
 
-/** Discoverability hints shown on the right of the footer strip unless undo/redo replaces them. */
+/** Render a status line exactly `width` cells wide, with an optional centred segment. */
+export type StatusLine = (width: number, center?: string) => string;
+
+function styleHints(hints: readonly FooterHint[], palette: LabelPalette): string {
+	return hints.map((hint) => palette.fg("muted", hint.key) + " " + palette.fg("dim", hint.action)).join("  ");
+}
+
+/** Discoverability hints, shown right-aligned in the empty draft row. */
 export const INPUT_HINTS: readonly FooterHint[] = [
 	{ key: "/", action: "commands" },
 	{ key: "$", action: "skills" },
@@ -89,13 +106,22 @@ export const INPUT_HINTS: readonly FooterHint[] = [
 	{ key: "@", action: "files" },
 ];
 
-/** Empty-draft placeholder after the cursor. */
-export function renderPlaceholder(width: number, inset: number, cursor: string, palette: LabelPalette): string {
-	const prompt = "Ask Pi anything";
+/** Empty-draft row: the cursor, then input hints right-aligned (dropped from the end when narrow). */
+export function renderPlaceholder(
+	width: number,
+	inset: number,
+	cursor: string,
+	palette: LabelPalette,
+	hints: readonly FooterHint[] = INPUT_HINTS,
+): string {
 	const room = width - inset * 2 - 1;
 	const lead = " ".repeat(inset);
-	if (room < visibleWidth(prompt)) return lead + cursor + " ".repeat(Math.max(0, room + inset));
-	return lead + cursor + palette.fg("dim", prompt) + " ".repeat(room - visibleWidth(prompt)) + lead;
+	const shown = [...hints];
+	const plain = () => shown.map((hint) => `${hint.key} ${hint.action}`).join("  ");
+	// Keep a clear gap after the cursor so the hints never read as typed text.
+	while (shown.length && visibleWidth(plain()) + 4 > room) shown.pop();
+	const text = shown.length ? styleHints(shown, palette) : "";
+	return lead + cursor + " ".repeat(Math.max(0, room - visibleWidth(plain()))) + text + lead;
 }
 
 /** A background color as the matching foreground color, for half-block glyphs. */

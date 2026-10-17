@@ -58,12 +58,13 @@ import {
 } from "./inline-context.ts";
 
 import { readableScrollChrome } from "./editor-chrome.ts";
+import { statusLineChannel, type StatusLineHost } from "./status-line.ts";
 import { SearchIndex, Searcher } from "@stagefright5/pi-picker";
 import {
 	composerPalette,
 	halfRow,
-	INPUT_HINTS,
 	paintRow,
+	INPUT_HINTS,
 	renderFooter,
 	renderMenuPanel,
 	renderPlaceholder,
@@ -277,8 +278,10 @@ async function loadContextResources(
 	return loaded;
 }
 
-export class UndoRedoEditor extends CustomEditor {
+export class UndoRedoEditor extends CustomEditor implements StatusLineHost {
 	private undoHistory: Snapshot[] = [];
+	/** Whether the latest render drew the lent status line in the footer strip. */
+	private hostedStatus = false;
 	private redoHistory: Snapshot[] = [];
 	private lastEditWasTyping = false;
 	private compactViewport = false;
@@ -460,12 +463,24 @@ export class UndoRedoEditor extends CustomEditor {
 		return result;
 	}
 
+	/** The status bar's footer steps aside only while this composer is focused and drawing its line. */
+	hostsStatusLine(): boolean {
+		return this.focused && this.hostedStatus;
+	}
+
 	override render(width: number): string[] {
 		this.menuHeight = 0;
 		this.composerHeight = 0;
+		this.hostedStatus = false;
 		if (width <= 0) return [];
 		const padding = Math.min(this.getPaddingX(), Math.max(0, Math.floor((width - 1) / 2)));
 		this.compactViewport = width - padding * 2 - (padding ? 0 : 1) < 2;
+		// Host the status bar's line in the footer strip (set before the native render draws it).
+		const channel = statusLineChannel();
+		this.hostedStatus = Boolean(
+			this.focused && !this.compactViewport && channel.render && this.getSurfaceTheme?.(),
+		);
+		if (this.hostedStatus) channel.host = this;
 		// pi-tui 1.2.0 can recurse indefinitely while wrapping a wide grapheme
 		// into one text column. Keep a bounded cursor row until there is room.
 		const cursor = this.getCursor();
@@ -517,6 +532,7 @@ export class UndoRedoEditor extends CustomEditor {
 				padding,
 				(this.focused ? CURSOR_MARKER : "") + renderFakeCursor(" "),
 				palette,
+				INPUT_HINTS,
 			);
 		}
 		// A thin rail in the left inset of the draft rows carries the mode by color; the text never moves.
@@ -530,7 +546,6 @@ export class UndoRedoEditor extends CustomEditor {
 			// The rail stays on draft rows: a split half-row cell cannot also carry the rail cleanly.
 			halfRow(width, "\u2580", palette.surface, palette.footer),
 			paintRow(bottom, width, palette.text, palette.footer),
-			halfRow(width, "\u2580", palette.footer),
 		];
 		const view = nativeMenu.length ? getAutocompleteView(this, nativeMenu.length) : undefined;
 		const menu = view
@@ -576,25 +591,36 @@ export class UndoRedoEditor extends CustomEditor {
 	}
 
 	protected override renderBottomBorder(width: number, hiddenLineCount: number): string {
-		if (hiddenLineCount > 0) {
+		const status = this.hostedStatus ? statusLineChannel().render : undefined;
+		if (hiddenLineCount > 0 && !status) {
 			return readableScrollChrome(super.renderBottomBorder(width, hiddenLineCount), this.labelColor);
 		}
 		const text = this.getText();
 		const mode = text.startsWith("!!") ? "shell · no context" : text.startsWith("!") ? "shell" : undefined;
-		// Discoverability hints by default; right after an undo, undo/redo takes their place.
+		// Input hints live in the empty draft; right after an undo, undo/redo shows here.
 		const hints: readonly FooterHint[] =
 			this.redoHistory.length > 0
 				? [
 						...(this.undoHistory.length > 0 ? [{ key: "⌃Z", action: "undo" }] : []),
 						{ key: "⌃Y", action: "redo" },
 					]
-				: INPUT_HINTS;
+				: [];
 		const theme = this.getSurfaceTheme?.();
 		const palette = theme
 			? composerPalette(theme)
 			: { fg: (_token: string, value: string) => this.labelColor(value), bold: (value: string) => value };
 		const inset = Math.min(this.getPaddingX(), Math.max(0, Math.floor((width - 1) / 2)));
-		return renderFooter(width, inset, mode, hints, palette);
+		// A hosted status line keeps the overflow indicator readable in its centre gap.
+		const indicator =
+			hiddenLineCount > 0
+				? palette.fg(
+						"muted",
+						stripTerminalSequences(super.renderBottomBorder(width, hiddenLineCount))
+							.replace(/─/gu, "")
+							.trim(),
+					)
+				: undefined;
+		return renderFooter(width, inset, mode, hints, palette, status, indicator);
 	}
 
 	/**
@@ -848,6 +874,8 @@ export default function promptTrulyMineExtension(pi: ExtensionAPI): void {
 		if (ctx.mode !== "tui") return;
 		const history = installedEditor ? getEditorHistory(installedEditor) : undefined;
 		if (history) Reflect.set(globalThis, RETAINED_HISTORY, history);
+		const channel = statusLineChannel();
+		if (installedEditor && channel.host === installedEditor) channel.host = undefined;
 		installedEditor = undefined;
 		if (installedEditorFactory && ctx.ui.getEditorComponent() === installedEditorFactory) {
 			const draft = ctx.ui.getEditorText();

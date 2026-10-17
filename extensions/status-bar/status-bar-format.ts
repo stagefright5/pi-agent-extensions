@@ -33,8 +33,12 @@ export type StatusLayout = {
 	separator: string;
 };
 
-/** Prefer full fields; sacrifice path/provider detail before context or extension statuses. */
-export function layoutStatusBar(data: StatusLayout, width: number): string {
+/**
+ * Prefer full fields; sacrifice path/provider detail before context or extension statuses.
+ * An optional `center` segment (such as editor hints) sits in the gap, centred, only when it fits
+ * with room to spare at the full layout; it is the first thing dropped.
+ */
+export function layoutStatusBar(data: StatusLayout, width: number, center = ""): string {
 	if (width <= 0) return "";
 	const join = (parts: readonly string[]) => parts.filter(Boolean).join(data.separator);
 	for (const [location, model] of [
@@ -45,6 +49,11 @@ export function layoutStatusBar(data: StatusLayout, width: number): string {
 		const left = join([location!, ...data.statuses]);
 		const right = join([model!, data.context, data.cost]);
 		const gap = width - visibleWidth(left) - visibleWidth(right);
+		const centerWidth = visibleWidth(center);
+		if (centerWidth && gap >= centerWidth + 6) {
+			const before = Math.floor((gap - centerWidth) / 2);
+			return left + " ".repeat(before) + center + " ".repeat(gap - centerWidth - before) + right;
+		}
 		if (gap >= 3) return left + " ".repeat(gap) + right;
 	}
 

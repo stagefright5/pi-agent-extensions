@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import statusBar from "./index.ts";
+import { statusLineChannel } from "./status-line.ts";
 
 function fixture(fast?: string) {
 	let start: (_event: unknown, ctx: unknown) => void;
@@ -38,7 +39,12 @@ function fixture(fast?: string) {
 		},
 	};
 	start!(undefined, ctx);
-	return { render: (width = 160) => footer!.render(width)[0]!, statuses };
+	return {
+		render: (width = 160) => footer!.render(width)[0]!,
+		rows: (width = 160) => footer!.render(width),
+		dispose: () => (footer as { dispose?: () => void }).dispose?.(),
+		statuses,
+	};
 }
 
 test("fast icon follows effort exactly once, before context and cost", () => {
@@ -66,5 +72,25 @@ test("fast marker stays attached to effort at compact widths without overflow", 
 		const line = render(width);
 		assert.ok(visibleWidth(line) <= width);
 		if (line.includes("⚡︎")) assert.match(line, /high · ⚡︎/);
+	}
+});
+
+test("lends its line to a focused host editor and steps aside; falls back the moment it stops", () => {
+	const { rows, dispose } = fixture();
+	const channel = statusLineChannel();
+	let hosting = true;
+	channel.host = { hostsStatusLine: () => hosting };
+	try {
+		assert.deepEqual(rows(), [], "the editor draws the line; the footer row disappears");
+		const lent = channel.render!(120, "⌃Z undo  ⌃Y redo");
+		assert.equal(visibleWidth(lent), 120);
+		assert.match(lent, /^\/project · main · plan review +⌃Z undo {2}⌃Y redo +openai\/GPT-6 Astra/u);
+		assert.doesNotMatch(channel.render!(70, "⌃Z undo  ⌃Y redo"), /undo/, "the centre is dropped first");
+		hosting = false;
+		assert.equal(rows().length, 1, "picker or overlay focused: the status bar shows again");
+		dispose();
+		assert.equal(channel.render, undefined, "disposing the footer withdraws the line");
+	} finally {
+		channel.host = undefined;
 	}
 });

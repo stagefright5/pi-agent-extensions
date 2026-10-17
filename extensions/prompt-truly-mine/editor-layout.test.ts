@@ -5,6 +5,7 @@ import { CURSOR_MARKER, renderFakeCursor, visibleWidth, type TUI, type TuiMouseE
 import { UndoRedoEditor } from "./index.ts";
 import { getNativeAutocompleteHeight } from "./editor-compat.ts";
 import { composerPalette } from "./composer-style.ts";
+import { statusLineChannel } from "./status-line.ts";
 
 const host = new URL(".", import.meta.resolve("@earendil-works/pi-coding-agent"));
 const { KeybindingsManager } = await import(new URL("core/keybindings.js", host).href);
@@ -85,11 +86,7 @@ test("suggestions grow above the bottom-anchored cursor; keyboard and mouse coor
 		const rows = editor.render(80);
 		assert.equal(fromBottom(rows), fromBottom(closed));
 		assert.match(plain(rows[0]!), /item0/);
-		assert.match(
-			plain(rows.at(-1)!),
-			/^ +\/ commands {2}\$ skills {2}! shell {2}@ files $/u,
-			"bottom row holds only hints",
-		);
+		assert.equal(plain(rows.at(-1)!).trim(), "", "the footer holds no input hints while drafting");
 		for (const width of [4, 10, 80, 120]) {
 			for (const row of editor.render(width)) assert.ok(visibleWidth(row) <= width);
 		}
@@ -196,7 +193,7 @@ test("exiting Pi erases the cursor with the surface color instead of a terminal-
 	assert.equal(Object.hasOwn(new MainScreen(), "beforeTerminalStop"), false);
 });
 
-test("themed composer: half-row padded bars, mode rail, footer strip, placeholder, and a display-only legend", async () => {
+test("themed composer: half-row padded bar, mode rail, footer strip, hint placeholder, and a display-only legend", async () => {
 	const { getThemeByName } = await import(new URL("modes/interactive/theme/theme.js", host).href);
 	const palette = getThemeByName("dark");
 	const editor = new UndoRedoEditor(
@@ -215,10 +212,10 @@ test("themed composer: half-row padded bars, mode rail, footer strip, placeholde
 		plain(row).replaceAll(CURSOR_MARKER, "").replaceAll(fakeStart, "").replaceAll(fakeEnd, "");
 	const surfaceFg = palette.getBgAnsi("userMessageBg").replace("[48;", "[38;");
 	let rows = editor.render(80);
-	// ▄ half pad · draft · ▀ surface over footer · footer labels · ▀ footer half pad
+	// ▄ half pad · draft · ▀ surface over footer · footer labels (the screen's last row)
 	assert.deepEqual(
 		rows.map((row) => text(row)[1]),
-		["\u2584", " ", "\u2580", " ", "\u2580"],
+		["\u2584", " ", "\u2580", " "],
 	);
 	assert.ok(rows.every((row) => visibleWidth(row) === 80));
 	assert.ok(rows[0]!.startsWith(surfaceFg), "top half pad is drawn in the surface color");
@@ -229,20 +226,24 @@ test("themed composer: half-row padded bars, mode rail, footer strip, placeholde
 	);
 	assert.deepEqual(
 		rows.map((row) => text(row)[0]),
-		["\u2584", "\u258e", "\u2580", " ", "\u2580"],
+		["\u2584", "\u258e", "\u2580", " "],
 		"the rail marks only the draft rows, so the half-row split stays clean",
 	);
-	assert.match(text(rows[1]!), /^\u258e Ask Pi anything +$/u);
+	assert.match(
+		text(rows[1]!),
+		/^\u258e {2,}\/ commands {2}\$ skills {2}! shell {2}@ files $/u,
+		"hints, no prompt text",
+	);
 	assert.ok(rows[1]!.includes(CURSOR_MARKER), "the placeholder keeps the hardware cursor marker");
-	assert.match(text(rows[3]!), /^ +\/ commands {2}\$ skills {2}! shell {2}@ files $/u);
+	assert.equal(text(rows[3]!).trim(), "", "nothing to say in the footer yet");
 	assert.ok(rows[1]!.includes(palette.fg("accent", "\u258e")));
 	editor.setText("!ls");
 	rows = editor.render(80);
 	assert.ok(rows[1]!.includes(palette.fg("bashMode", "\u258e")), "shell mode recolors the rail");
-	assert.match(text(rows[3]!), /^ shell +\/ commands/u);
+	assert.match(text(rows[3]!), /^ shell +$/u);
 	assert.equal(editor.getText(), "!ls", "chrome never enters the draft");
 	// Clicks on the extra padding/footer rows land on the native bottom border, not past it.
-	for (const y of [2, 3, 4]) editor.handleMouse(click(5, y, rows.length));
+	for (const y of [2, 3]) editor.handleMouse(click(5, y, rows.length));
 	assert.equal(editor.getText(), "!ls");
 	// Autocomplete: the legend row swallows clicks instead of reaching native hit testing.
 	editor.setText("");
@@ -262,4 +263,57 @@ test("themed composer: half-row padded bars, mode rail, footer strip, placeholde
 	assert.match(plain(rows[1]!), /1\/1/u);
 	assert.deepEqual(editor.handleMouse(click(40, 1, rows.length)), { handled: true });
 	assert.equal(editor.getText(), "/");
+});
+
+test("a lent status line fills the footer only while the focused composer draws it", async (t) => {
+	const { getThemeByName } = await import(new URL("modes/interactive/theme/theme.js", host).href);
+	const palette = getThemeByName("dark");
+	const editor = new UndoRedoEditor(
+		tui,
+		theme,
+		new KeybindingsManager(),
+		() => false,
+		undefined,
+		identity,
+		() => palette,
+	);
+	editor.setPaddingX(1);
+	const channel = statusLineChannel();
+	const centers: Array<string | undefined> = [];
+	channel.render = (width, center) => {
+		centers.push(center === undefined ? undefined : plain(center));
+		const left = "~/repo · main";
+		const right = "Claude · high · 7%/1000k · $1.000";
+		const middle = center ? plain(center) : "";
+		const gap = width - left.length - right.length - middle.length;
+		return left + " ".repeat(Math.max(1, gap >> 1)) + middle + " ".repeat(Math.max(1, gap - (gap >> 1))) + right;
+	};
+	t.after(() => {
+		channel.render = undefined;
+		channel.host = undefined;
+	});
+	const footer = () => plain(editor.render(80).at(-1)!);
+
+	editor.focused = false;
+	assert.equal(footer().trim(), "", "unfocused: the status bar keeps its own row");
+	assert.equal(editor.hostsStatusLine(), false);
+
+	editor.focused = true;
+	assert.match(footer(), /^ ~\/repo · main +Claude · high · 7%\/1000k · \$1\.000 $/u);
+	assert.equal(editor.hostsStatusLine(), true);
+	assert.equal(channel.host, editor);
+	assert.equal(centers.at(-1), undefined, "no hints while drafting");
+	for (const width of [20, 80, 160]) assert.equal(visibleWidth(editor.render(width).at(-1)!), width);
+
+	editor.setText("!ls");
+	assert.match(footer(), /^ shell {2}~\/repo/u, "the mode label leads the footer");
+	editor.insertTextAtCursor(" -la");
+	editor.handleInput("\x1a");
+	footer();
+	assert.equal(centers.at(-1), "⌃Z undo  ⌃Y redo", "undo/redo rides in the status gap");
+
+	editor.setText(Array.from({ length: 50 }, (_, i) => `line ${i}`).join("\n"));
+	editor.handleInput("\x1b[5~");
+	footer();
+	assert.match(centers.at(-1) ?? "", /↓ \d+ more/u, "overflow stays readable in the gap");
 });

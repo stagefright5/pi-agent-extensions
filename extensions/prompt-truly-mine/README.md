@@ -64,7 +64,7 @@ Horizontal spacing uses Pi's native `editorPaddingX` setting, in terminal charac
 
 In fullscreen mode, the composer owns mouse selection over its own rows, so the inset is never selected or copied:
 
-- Dragging highlights only draft cells and copies the source text, without the inset, soft-wrap line breaks, mode rail, footer labels, placeholder, or cursor.
+- Dragging highlights only draft cells and copies the source text, without the inset, soft-wrap line breaks, mode rail, footer labels, input hints, or cursor.
 - Double-click selects a word; triple-click selects a logical line.
 - A single click still positions the cursor.
 - Copy follows Pi's `fullscreenCopyOnSelect` setting; with it off, use the copy key (`Ctrl+C` by default) while a selection is visible.
@@ -76,17 +76,17 @@ Regular (non-fullscreen) mode leaves selection to the terminal emulator, which c
 The composer chrome, aligned to the draft inset:
 
 ```text
-▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄   half-row padding
-▎ Ask Pi anything                                              draft bar
-▎▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀   half + half
-▎                               / commands  ! shell  @ files   footer bar (darker)
-▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀   half-row padding
+▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄   half-row padding
+▎                           / commands  $ skills  ! shell  @ files   draft bar (empty draft)
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀   half + half
+ ~/Work/alpha · main          anthropic/Claude Opus 5.5 · high · $4.2   footer bar (darker, last row)
 ```
 
-- **Half-row padding:** `▄`/`▀` half-block rows give the draft bar and the footer bar half a row of padding above and below, so the draft and the footer labels sit vertically centred. Rows that carry native text (scroll or working indicators) stay full rows. In regular (non-fullscreen) mode, a terminal drag across those rows can copy the block glyphs; fullscreen selection never does.
+- **Half-row padding:** a `▄` half-block row above the draft and a `▀` row that joins the draft bar to the footer give the draft half a row of padding on each side, so it sits vertically centred. The footer is the last row on screen, with no padding below. Rows that carry native text (scroll or working indicators) stay full rows. In regular (non-fullscreen) mode, a terminal drag across those rows can copy the block glyphs; fullscreen selection never does.
 - **Mode rail:** the one-cell left inset shows `▎` in the theme's `accent` color, or `bashMode` for `!`/`!!` commands, on each draft row. It stops at the draft so the half-row edge into the footer stays clean (one cell cannot hold the rail and two half colours). It needs `editorPaddingX` ≥ 1 and is never part of the draft.
-- **Placeholder:** an empty draft shows dim `Ask Pi anything`; it disappears on the first keystroke.
-- **Footer bar:** `shell` or `shell · no context` on the left; `/ commands  ! shell  @ files` on the right, replaced by `⌃Z undo  ⌃Y redo` right after an undo until you edit again. Hints drop from the end on narrow terminals.
+- **Input hints:** an empty draft shows `/ commands  $ skills  ! shell  @ files` right-aligned in the draft row (dropped from the end on narrow terminals); they disappear on the first keystroke. There is no placeholder prompt text.
+- **Footer bar:** `shell` or `shell · no context` on the left. Right after an undo, `⌃Z undo  ⌃Y redo` appears until you edit again.
+- **Status line:** with [Compact Status Bar](../status-bar/README.md) loaded, its line (directory, branch, extension statuses, model, context, cost) is drawn inside the footer bar, after the mode label, and Pi's separate footer row disappears. Undo/redo hints and the `↓ N more` overflow indicator sit in the line's middle gap and are dropped first when narrow. While a picker, selector, or overlay has focus, the status bar returns to its own row. The two extensions share only a global key (`Symbol.for("@stagefright5/pi-status-line/v1")`); neither imports the other.
 - Native scroll indicators replace the top or bottom row where content is hidden. Theme changes apply at render time, including with Obsidian Ice.
 - On exit, Pi erases the cursor by writing a plain space; the extension redraws that one cell in the composer color so the printed transcript has no black hole.
 
@@ -113,7 +113,7 @@ Behavior:
 - History records programmatic text replacement, inserted text, and autocomplete selections, including asynchronous single-match Tab completion and mouse selection. Mouse cursor movement also breaks typing groups.
 - The editor retains up to 200 undo and 200 redo snapshots.
 - The editor clears history after submission, including remapped submit keys and backslash-Enter, so you cannot accidentally restore a sent message into the empty editor.
-- Undo and redo hints appear at the bottom right of the composer once an undo makes redo available.
+- Undo and redo hints appear in the composer footer once an undo makes redo available.
 
 ## Context size and trust
 

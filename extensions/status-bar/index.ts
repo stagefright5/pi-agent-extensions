@@ -10,6 +10,7 @@ import { homedir } from "node:os";
 import { basename, isAbsolute, relative, resolve, sep } from "node:path";
 import { layoutStatusBar } from "./status-bar-format.ts";
 import { createSessionCostReader } from "./session-cost.ts";
+import { statusLineChannel } from "./status-line.ts";
 
 function formatCwd(cwd: string): string {
 	const home = homedir();
@@ -42,58 +43,68 @@ export default function statusBarExtension(pi: ExtensionAPI): void {
 		ctx.ui.setFooter((tui, _theme, footerData) => {
 			const getCost = createSessionCostReader();
 			const unsubscribeFromBranchChanges = footerData.onBranchChange(() => tui.requestRender());
+			const channel = statusLineChannel();
+
+			const renderLine = (width: number, center?: string): string => {
+				const theme = ctx.ui.theme;
+				const cwd = formatCwd(ctx.sessionManager.getCwd());
+				const separator = theme.fg("borderMuted", " · ");
+				const branch = footerData.getGitBranch();
+				const branchLabel = branch ? separator + theme.fg("accent", sanitizeStatusText(branch)) : "";
+				const location = theme.fg("muted", sanitizeStatusText(cwd)) + branchLabel;
+				const shortLocation = theme.fg("muted", sanitizeStatusText(basename(cwd) || cwd)) + branchLabel;
+
+				const usage = ctx.getContextUsage();
+				const contextWindow = formatContextWindow(usage?.contextWindow ?? ctx.model?.contextWindow ?? 0);
+				const contextText =
+					usage?.percent == null ? `?/${contextWindow}` : `${usage.percent.toFixed(1)}%/${contextWindow}`;
+				const styledContext =
+					usage?.percent != null && usage.percent > 90
+						? theme.fg("error", contextText)
+						: usage?.percent != null && usage.percent > 70
+							? theme.fg("warning", contextText)
+							: theme.fg("dim", contextText);
+
+				const extensionStatuses = footerData.getExtensionStatuses();
+				const fast = extensionStatuses.get("fast") ? theme.fg("accent", "⚡︎") : "";
+				const statuses = Array.from(extensionStatuses.entries())
+					.filter(([id]) => id !== "fast")
+					.sort(([left], [right]) => left.localeCompare(right))
+					.map(([, text]) => sanitizeStatusText(text))
+					.filter(Boolean);
+				const thinking = ctx.model?.reasoning ? (ctx.thinkingLevel ?? pi.getThinkingLevel()) : "off";
+				const modelName = ctx.model ? sanitizeStatusText(ctx.model.name) : "";
+				const effort = theme.fg("dim", thinking) + (fast ? separator + fast : "");
+				const model = ctx.model
+					? theme.fg("dim", `${ctx.model.provider}/`) + theme.fg("muted", modelName) + separator + effort
+					: "";
+				return layoutStatusBar(
+					{
+						location,
+						shortLocation,
+						model,
+						shortModel: modelName ? theme.fg("muted", modelName) + separator + effort : "",
+						context: styledContext,
+						cost: theme.fg("dim", `$${getCost(ctx.sessionManager).toFixed(3)}`),
+						statuses,
+						separator,
+					},
+					width,
+					center,
+				);
+			};
+			channel.render = renderLine;
 
 			return {
-				dispose: unsubscribeFromBranchChanges,
+				dispose() {
+					unsubscribeFromBranchChanges();
+					if (channel.render === renderLine) channel.render = undefined;
+				},
 				invalidate() {},
 				render(width: number): string[] {
-					const theme = ctx.ui.theme;
-					const cwd = formatCwd(ctx.sessionManager.getCwd());
-					const separator = theme.fg("borderMuted", " · ");
-					const branch = footerData.getGitBranch();
-					const branchLabel = branch ? separator + theme.fg("accent", sanitizeStatusText(branch)) : "";
-					const location = theme.fg("muted", sanitizeStatusText(cwd)) + branchLabel;
-					const shortLocation = theme.fg("muted", sanitizeStatusText(basename(cwd) || cwd)) + branchLabel;
-
-					const usage = ctx.getContextUsage();
-					const contextWindow = formatContextWindow(usage?.contextWindow ?? ctx.model?.contextWindow ?? 0);
-					const contextText =
-						usage?.percent == null ? `?/${contextWindow}` : `${usage.percent.toFixed(1)}%/${contextWindow}`;
-					const styledContext =
-						usage?.percent != null && usage.percent > 90
-							? theme.fg("error", contextText)
-							: usage?.percent != null && usage.percent > 70
-								? theme.fg("warning", contextText)
-								: theme.fg("dim", contextText);
-
-					const extensionStatuses = footerData.getExtensionStatuses();
-					const fast = extensionStatuses.get("fast") ? theme.fg("accent", "⚡︎") : "";
-					const statuses = Array.from(extensionStatuses.entries())
-						.filter(([id]) => id !== "fast")
-						.sort(([left], [right]) => left.localeCompare(right))
-						.map(([, text]) => sanitizeStatusText(text))
-						.filter(Boolean);
-					const thinking = ctx.model?.reasoning ? (ctx.thinkingLevel ?? pi.getThinkingLevel()) : "off";
-					const modelName = ctx.model ? sanitizeStatusText(ctx.model.name) : "";
-					const effort = theme.fg("dim", thinking) + (fast ? separator + fast : "");
-					const model = ctx.model
-						? theme.fg("dim", `${ctx.model.provider}/`) + theme.fg("muted", modelName) + separator + effort
-						: "";
-					return [
-						layoutStatusBar(
-							{
-								location,
-								shortLocation,
-								model,
-								shortModel: modelName ? theme.fg("muted", modelName) + separator + effort : "",
-								context: styledContext,
-								cost: theme.fg("dim", `$${getCost(ctx.sessionManager).toFixed(3)}`),
-								statuses,
-								separator,
-							},
-							width,
-						),
-					];
+					// An editor drawing this line in its own footer (Prompt Truly Mine) replaces this row.
+					if (channel.host?.hostsStatusLine()) return [];
+					return [renderLine(width)];
 				},
 			};
 		});
