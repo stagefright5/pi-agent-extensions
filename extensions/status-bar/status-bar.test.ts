@@ -82,10 +82,13 @@ test("lends its line to a focused host editor and steps aside; falls back the mo
 	channel.host = { hostsStatusLine: () => hosting };
 	try {
 		assert.deepEqual(rows(), [], "the editor draws the line; the footer row disappears");
-		const lent = channel.render!(120, "⌃Z undo  ⌃Y redo");
+		const extras = ["shell", "⌃Z undo  ⌃Y redo"];
+		const lent = channel.render!(120, extras);
 		assert.equal(visibleWidth(lent), 120);
-		assert.match(lent, /^\/project · main · plan review +⌃Z undo {2}⌃Y redo +openai\/GPT-6 Astra/u);
-		assert.doesNotMatch(channel.render!(70, "⌃Z undo  ⌃Y redo"), /undo/, "the centre is dropped first");
+		assert.match(lent, /^\/project · main {2}shell {2}⌃Z undo {2}⌃Y redo · plan review +openai\/GPT-6 Astra/u);
+		const narrower = channel.render!(92, extras);
+		assert.match(narrower, /^\/project · main {2}shell · plan review +openai/u, "the last extra is dropped first");
+		assert.match(channel.render!(40, extras), /shell/u, "the mode outlives the directory when narrow");
 		hosting = false;
 		assert.equal(rows().length, 1, "picker or overlay focused: the status bar shows again");
 		dispose();

@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { stripVTControlCharacters as plain } from "node:util";
 import { CURSOR_MARKER, visibleWidth, type TUI } from "@earendil-works/pi-tui";
 import { UndoRedoEditor } from "./index.ts";
-import { composerPalette } from "./composer-style.ts";
+import { composerPalette, FOOTER_TEXT_SOFTENING, softenForeground } from "./composer-style.ts";
 
 const host = new URL(".", import.meta.resolve("@earendil-works/pi-coding-agent"));
 const { KeybindingsManager } = await import(new URL("core/keybindings.js", host).href);
@@ -49,7 +49,11 @@ function pair(initial = getThemeByName("dark")) {
 			const composer = actual.slice(Number(Reflect.get(surfaced, "menuHeight")));
 			const open = palette.getFgAnsi("userMessageText") + palette.getBgAnsi("userMessageBg");
 			const close = "\x1b[49m\x1b[39m";
-			const footer = palette.getFgAnsi("userMessageText") + composerPalette(palette).footer;
+			const footer = softenForeground(
+				palette.getFgAnsi("userMessageText") + composerPalette(palette).footer,
+				composerPalette(palette).footer,
+				FOOTER_TEXT_SOFTENING,
+			);
 			if (width < 3) {
 				// Compact viewport: no padding rows or footer strip, just the native rows on the surface.
 				assert.deepEqual(

@@ -74,12 +74,12 @@ export function renderFooter(
 	const left = " ".repeat(Math.min(inset, width)) + (fits ? palette.fg("bashMode", mode) : "");
 	const leftWidth = Math.min(inset, width) + (fits ? visibleWidth(mode) : 0);
 	if (status) {
-		// The lent status line fills the strip; hints (or a scroll indicator) ride in its gap.
-		const gap = fits ? 2 : 0;
-		const room = width - leftWidth - gap - inset;
-		const middle = center ?? styleHints(hints, palette);
-		const line = room > 0 ? status(room, middle || undefined) : "";
-		return left + " ".repeat(gap) + line + " ".repeat(Math.max(0, width - leftWidth - gap - visibleWidth(line)));
+		// The lent status line fills the strip: <dir> <mode> <hints> · <statuses> … model · context · cost.
+		const lead = " ".repeat(Math.min(inset, width));
+		const room = width - lead.length - inset;
+		const extras = [mode ? palette.fg("bashMode", mode) : "", center ?? styleHints(hints, palette)];
+		const line = room > 0 ? status(room, extras) : "";
+		return lead + line + " ".repeat(Math.max(0, width - lead.length - visibleWidth(line)));
 	}
 	const shown = [...hints];
 	const plain = () => shown.map((hint) => `${hint.key} ${hint.action}`).join("  ");
@@ -91,8 +91,49 @@ export function renderFooter(
 	);
 }
 
-/** Render a status line exactly `width` cells wide, with an optional centred segment. */
-export type StatusLine = (width: number, center?: string) => string;
+/** Render a status line exactly `width` cells wide; `extras` follow the directory, last dropped first. */
+export type StatusLine = (width: number, extras?: readonly string[]) => string;
+
+/**
+ * Pull every truecolor foreground toward `background` by `amount` (0–1), keeping each hue, so
+ * quiet chrome sits closer to its bar while warning and error colours stay distinguishable.
+ * Rows without truecolor sequences (256-color themes) are returned unchanged.
+ */
+export function softenForeground(line: string, background: string, amount: number): string {
+	const bg = truecolorAfter(background, BG_TRUECOLOR);
+	if (!bg) return line;
+	const [first = "", ...rest] = line.split(FG_TRUECOLOR);
+	return (
+		first +
+		rest
+			.map((chunk) => {
+				const end = chunk.indexOf("m");
+				const rgb = truecolorAfter(FG_TRUECOLOR + chunk, FG_TRUECOLOR);
+				if (!rgb) return FG_TRUECOLOR + chunk;
+				const soft = rgb.map((value, index) => Math.round(value + (bg[index]! - value) * amount));
+				return `${FG_TRUECOLOR}${soft.join(";")}${chunk.slice(end)}`;
+			})
+			.join("")
+	);
+}
+
+const FG_TRUECOLOR = "\x1b[38;2;";
+const BG_TRUECOLOR = "\x1b[48;2;";
+
+/** The `r;g;b` triple of the first truecolor sequence starting with `prefix`, if any. */
+export function truecolorAfter(ansi: string, prefix: string): number[] | undefined {
+	const start = ansi.indexOf(prefix);
+	if (start < 0) return undefined;
+	const end = ansi.indexOf("m", start);
+	const rgb = ansi
+		.slice(start + prefix.length, end < 0 ? undefined : end)
+		.split(";")
+		.map(Number);
+	return end > 0 && rgb.length === 3 && rgb.every((value) => Number.isInteger(value)) ? rgb : undefined;
+}
+
+/** How far footer text moves toward the footer colour: low-contrast chrome that stays legible. */
+export const FOOTER_TEXT_SOFTENING = 0.4;
 
 function styleHints(hints: readonly FooterHint[], palette: LabelPalette): string {
 	return hints.map((hint) => palette.fg("muted", hint.key) + " " + palette.fg("dim", hint.action)).join("  ");

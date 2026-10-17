@@ -35,33 +35,35 @@ export type StatusLayout = {
 
 /**
  * Prefer full fields; sacrifice path/provider detail before context or extension statuses.
- * An optional `center` segment (such as editor hints) sits in the gap, centred, only when it fits
- * with room to spare at the full layout; it is the first thing dropped.
+ * Optional `extras` (a host editor's mode label, then its hints) follow the directory in priority
+ * order, before extension statuses. When space runs out the last extra goes first, before any
+ * field is shortened; the first extra outlives the directory on narrow terminals.
  */
-export function layoutStatusBar(data: StatusLayout, width: number, center = ""): string {
+export function layoutStatusBar(data: StatusLayout, width: number, extras: readonly string[] = []): string {
 	if (width <= 0) return "";
 	const join = (parts: readonly string[]) => parts.filter(Boolean).join(data.separator);
-	for (const [location, model] of [
-		[data.location, data.model],
-		[data.shortLocation, data.model],
-		[data.shortLocation, data.shortModel],
-	]) {
-		const left = join([location!, ...data.statuses]);
-		const right = join([model!, data.context, data.cost]);
-		const gap = width - visibleWidth(left) - visibleWidth(right);
-		const centerWidth = visibleWidth(center);
-		if (centerWidth && gap >= centerWidth + 6) {
-			const before = Math.floor((gap - centerWidth) / 2);
-			return left + " ".repeat(before) + center + " ".repeat(gap - centerWidth - before) + right;
+	const kept = extras.filter(Boolean);
+	const withExtras = (location: string, count: number) =>
+		[location, ...kept.slice(0, count)].filter(Boolean).join("  ");
+	for (let count = kept.length; count >= 0; count--) {
+		for (const [location, model] of [
+			[data.location, data.model],
+			[data.shortLocation, data.model],
+			[data.shortLocation, data.shortModel],
+		]) {
+			const left = join([withExtras(location!, count), ...data.statuses]);
+			const right = join([model!, data.context, data.cost]);
+			const gap = width - visibleWidth(left) - visibleWidth(right);
+			if (gap >= 3) return left + " ".repeat(gap) + right;
 		}
-		if (gap >= 3) return left + " ".repeat(gap) + right;
 	}
 
 	// On narrow terminals keep context first (including warning/error coloring),
 	// then extension state. Optional metadata only consumes genuinely spare room.
 	let line = join([data.context, ...data.statuses]);
 	if (visibleWidth(line) > width) return truncateToWidth(line, width, "…");
-	for (const item of [data.shortModel, data.cost, data.shortLocation]) {
+	for (const item of [kept[0] ?? "", data.shortModel, data.cost, data.shortLocation]) {
+		if (!item) continue;
 		const candidate = join([line, item]);
 		if (visibleWidth(candidate) <= width) line = candidate;
 	}

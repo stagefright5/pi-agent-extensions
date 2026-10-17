@@ -4,7 +4,7 @@ import { stripVTControlCharacters as plain } from "node:util";
 import { CURSOR_MARKER, renderFakeCursor, visibleWidth, type TUI, type TuiMouseEvent } from "@earendil-works/pi-tui";
 import { UndoRedoEditor } from "./index.ts";
 import { getNativeAutocompleteHeight } from "./editor-compat.ts";
-import { composerPalette } from "./composer-style.ts";
+import { composerPalette, truecolorAfter } from "./composer-style.ts";
 import { statusLineChannel } from "./status-line.ts";
 
 const host = new URL(".", import.meta.resolve("@earendil-works/pi-coding-agent"));
@@ -212,7 +212,7 @@ test("themed composer: half-row padded bar, mode rail, footer strip, hint placeh
 		plain(row).replaceAll(CURSOR_MARKER, "").replaceAll(fakeStart, "").replaceAll(fakeEnd, "");
 	const surfaceFg = palette.getBgAnsi("userMessageBg").replace("[48;", "[38;");
 	let rows = editor.render(80);
-	// ▄ half pad · draft · ▀ surface over footer · footer labels (the screen's last row)
+	// ▄ half pad · draft · ▀ half pad over the terminal · one-row footer (the screen's last row)
 	assert.deepEqual(
 		rows.map((row) => text(row)[1]),
 		["\u2584", " ", "\u2580", " "],
@@ -220,10 +220,9 @@ test("themed composer: half-row padded bar, mode rail, footer strip, hint placeh
 	assert.ok(rows.every((row) => visibleWidth(row) === 80));
 	assert.ok(rows[0]!.startsWith(surfaceFg), "top half pad is drawn in the surface color");
 	assert.ok(!rows[0]!.includes("\x1b[48;"), "its other half is the terminal background");
-	assert.ok(
-		rows[2]!.includes(surfaceFg) && rows[2]!.includes(composerPalette(palette).footer),
-		"draft bar meets the footer",
-	);
+	assert.ok(rows[2]!.startsWith(surfaceFg), "bottom half pad is drawn in the surface color");
+	assert.ok(!rows[2]!.includes("\x1b[48;"), "a half-row gap separates the one-row footer");
+	assert.ok(rows[3]!.includes(composerPalette(palette).footer), "the footer is a single darker row");
 	assert.deepEqual(
 		rows.map((row) => text(row)[0]),
 		["\u2584", "\u258e", "\u2580", " "],
@@ -279,14 +278,12 @@ test("a lent status line fills the footer only while the focused composer draws 
 	);
 	editor.setPaddingX(1);
 	const channel = statusLineChannel();
-	const centers: Array<string | undefined> = [];
-	channel.render = (width, center) => {
-		centers.push(center === undefined ? undefined : plain(center));
-		const left = "~/repo · main";
+	const lent: string[][] = [];
+	channel.render = (width, extras = []) => {
+		lent.push(extras.map((extra) => plain(extra)));
+		const left = ["~/repo · main", ...extras.map((extra) => plain(extra)).filter(Boolean)].join("  ");
 		const right = "Claude · high · 7%/1000k · $1.000";
-		const middle = center ? plain(center) : "";
-		const gap = width - left.length - right.length - middle.length;
-		return left + " ".repeat(Math.max(1, gap >> 1)) + middle + " ".repeat(Math.max(1, gap - (gap >> 1))) + right;
+		return left + " ".repeat(Math.max(1, width - left.length - right.length)) + right;
 	};
 	t.after(() => {
 		channel.render = undefined;
@@ -302,18 +299,24 @@ test("a lent status line fills the footer only while the focused composer draws 
 	assert.match(footer(), /^ ~\/repo · main +Claude · high · 7%\/1000k · \$1\.000 $/u);
 	assert.equal(editor.hostsStatusLine(), true);
 	assert.equal(channel.host, editor);
-	assert.equal(centers.at(-1), undefined, "no hints while drafting");
+	assert.deepEqual(lent.at(-1), ["", ""], "no mode or hints while drafting");
 	for (const width of [20, 80, 160]) assert.equal(visibleWidth(editor.render(width).at(-1)!), width);
 
 	editor.setText("!ls");
-	assert.match(footer(), /^ shell {2}~\/repo/u, "the mode label leads the footer");
+	assert.match(footer(), /^ ~\/repo · main {2}shell +Claude/u, "<dir> then <mode>");
 	editor.insertTextAtCursor(" -la");
 	editor.handleInput("\x1a");
-	footer();
-	assert.equal(centers.at(-1), "⌃Z undo  ⌃Y redo", "undo/redo rides in the status gap");
+	assert.match(footer(), /^ ~\/repo · main {2}shell {2}⌃Z undo {2}⌃Y redo +Claude/u, "<dir> <mode> <hints>");
+	const row = editor.render(80).at(-1)!;
+	const footerBg = composerPalette(palette).footer;
+	const fg = truecolorAfter(row, "\x1b[38;2;")!;
+	const bg = truecolorAfter(footerBg, "\x1b[48;2;")!;
+	const text = truecolorAfter(palette.getFgAnsi("userMessageText"), "\x1b[38;2;")!;
+	const distance = (a: number[], b: number[]) => a.reduce((sum, v, i) => sum + Math.abs(v - b[i]!), 0);
+	assert.ok(distance(fg, bg) < distance(text, bg) * 0.7, "footer text sits closer to its bar");
 
 	editor.setText(Array.from({ length: 50 }, (_, i) => `line ${i}`).join("\n"));
 	editor.handleInput("\x1b[5~");
 	footer();
-	assert.match(centers.at(-1) ?? "", /↓ \d+ more/u, "overflow stays readable in the gap");
+	assert.match(lent.at(-1)?.[1] ?? "", /↓ \d+ more/u, "overflow stays readable after the directory");
 });

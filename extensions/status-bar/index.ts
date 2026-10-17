@@ -45,7 +45,7 @@ export default function statusBarExtension(pi: ExtensionAPI): void {
 			const unsubscribeFromBranchChanges = footerData.onBranchChange(() => tui.requestRender());
 			const channel = statusLineChannel();
 
-			const renderLine = (width: number, center?: string): string => {
+			const renderLine = (width: number, extras?: readonly string[]): string => {
 				const theme = ctx.ui.theme;
 				const cwd = formatCwd(ctx.sessionManager.getCwd());
 				const separator = theme.fg("borderMuted", " · ");
@@ -90,7 +90,7 @@ export default function statusBarExtension(pi: ExtensionAPI): void {
 						separator,
 					},
 					width,
-					center,
+					extras,
 				);
 			};
 			channel.render = renderLine;

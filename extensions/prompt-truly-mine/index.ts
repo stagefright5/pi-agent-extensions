@@ -62,7 +62,9 @@ import { statusLineChannel, type StatusLineHost } from "./status-line.ts";
 import { SearchIndex, Searcher } from "@stagefright5/pi-picker";
 import {
 	composerPalette,
+	FOOTER_TEXT_SOFTENING,
 	halfRow,
+	softenForeground,
 	paintRow,
 	INPUT_HINTS,
 	renderFooter,
@@ -543,9 +545,14 @@ export class UndoRedoEditor extends CustomEditor implements StatusLineHost {
 		const painted = [
 			stripTerminalSequences(top).trim() ? surface(top) : halfRow(width, "\u2584", palette.surface),
 			...content.map((line) => surface(railed(line))),
-			// The rail stays on draft rows: a split half-row cell cannot also carry the rail cleanly.
-			halfRow(width, "\u2580", palette.surface, palette.footer),
-			paintRow(bottom, width, palette.text, palette.footer),
+			// The draft bar closes on the terminal background, so the footer below is exactly one row.
+			halfRow(width, "\u2580", palette.surface),
+			// Footer text sits closer to its bar than draft text does to the surface.
+			softenForeground(
+				paintRow(bottom, width, palette.text, palette.footer),
+				palette.footer,
+				FOOTER_TEXT_SOFTENING,
+			),
 		];
 		const view = nativeMenu.length ? getAutocompleteView(this, nativeMenu.length) : undefined;
 		const menu = view

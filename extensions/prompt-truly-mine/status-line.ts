@@ -11,8 +11,11 @@ export type StatusLineHost = {
 };
 
 export type StatusLineChannel = {
-	/** One status line exactly `width` cells wide; `center` is placed in the gap when it fits. */
-	render?: (width: number, center?: string) => string;
+	/**
+	 * One status line exactly `width` cells wide. `extras` (already styled, most important first,
+	 * e.g. a mode label then hints) follow the directory; the last is dropped first when narrow.
+	 */
+	render?: (width: number, extras?: readonly string[]) => string;
 	host?: StatusLineHost;
 };
 

@@ -54,7 +54,7 @@ Because pi supports only one custom footer at a time, another footer extension l
 
 ## Inside the Prompt Truly Mine composer
 
-When [Prompt Truly Mine](../prompt-truly-mine/README.md) is loaded, its composer draws this status line inside its own footer bar and this footer returns no rows, saving a screen row. The line is lent through a global key (`Symbol.for("@stagefright5/pi-status-line/v1")`) rather than an import, so each package still works alone. Whenever the composer is not focused or cannot draw it (a picker, selector, or overlay is open, or the terminal is too small), this footer shows the line again in the same frame. The composer may pass a short centre segment (undo/redo hints or an overflow indicator); it is placed in the gap between the two groups only when it fits with room to spare.
+When [Prompt Truly Mine](../prompt-truly-mine/README.md) is loaded, its composer draws this status line inside its own footer bar and this footer returns no rows, saving a screen row. The line is lent through a global key (`Symbol.for("@stagefright5/pi-status-line/v1")`) rather than an import, so each package still works alone. Whenever the composer is not focused or cannot draw it (a picker, selector, or overlay is open, or the terminal is too small), this footer shows the line again in the same frame. The composer passes its own segments, most important first (its mode label, then undo/redo hints or an overflow indicator). They follow the directory and branch, before extension statuses. When space runs out the last segment goes first, before any field is shortened, and the first segment outlives the directory on narrow terminals.
 
 <!-- package-tools:install:start -->
 
