@@ -84,7 +84,7 @@ The composer chrome, aligned to the draft inset:
 ```
 
 - **Half-row padding:** `▄`/`▀` half-block rows give the draft bar and the footer bar half a row of padding above and below, so the draft and the footer labels sit vertically centred. Rows that carry native text (scroll or working indicators) stay full rows. In regular (non-fullscreen) mode, a terminal drag across those rows can copy the block glyphs; fullscreen selection never does.
-- **Mode rail:** the one-cell left inset shows `▎` in the theme's `accent` color, or `bashMode` for `!`/`!!` commands, from the draft through the footer. It needs `editorPaddingX` ≥ 1 and is never part of the draft.
+- **Mode rail:** the one-cell left inset shows `▎` in the theme's `accent` color, or `bashMode` for `!`/`!!` commands, on each draft row. It stops at the draft so the half-row edge into the footer stays clean (one cell cannot hold the rail and two half colours). It needs `editorPaddingX` ≥ 1 and is never part of the draft.
 - **Placeholder:** an empty draft shows dim `Ask Pi anything`; it disappears on the first keystroke.
 - **Footer bar:** `shell` or `shell · no context` on the left; `/ commands  ! shell  @ files` on the right, replaced by `⌃Z undo  ⌃Y redo` right after an undo until you edit again. Hints drop from the end on narrow terminals.
 - Native scroll indicators replace the top or bottom row where content is hidden. Theme changes apply at render time, including with Obsidian Ice.

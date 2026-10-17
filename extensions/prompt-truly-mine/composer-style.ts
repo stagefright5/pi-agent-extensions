@@ -106,16 +106,9 @@ export function asForeground(bg: string): string {
 /**
  * Half-row padding. `▄` paints the lower half of each cell in `color`, `▀` the upper half; the other
  * half shows `background` (the terminal default when omitted). Bars get half a row of padding above
- * and below, so their text sits exactly centred. `firstCell` (already styled) replaces cell 0.
+ * and below, so their text sits exactly centred.
  */
-export function halfRow(
-	width: number,
-	glyph: "\u2584" | "\u2580",
-	color: string,
-	background = "",
-	firstCell = "",
-): string {
+export function halfRow(width: number, glyph: "\u2584" | "\u2580", color: string, background = ""): string {
 	if (width <= 0) return "";
-	const body = glyph.repeat(Math.max(0, width - (firstCell ? 1 : 0)));
-	return `${background}${firstCell}${asForeground(color)}${body}\x1b[39m${background ? "\x1b[49m" : ""}`;
+	return `${background}${asForeground(color)}${glyph.repeat(width)}\x1b[39m${background ? "\x1b[49m" : ""}`;
 }

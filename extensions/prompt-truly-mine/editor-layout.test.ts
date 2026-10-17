@@ -229,17 +229,17 @@ test("themed composer: half-row padded bars, mode rail, footer strip, placeholde
 	);
 	assert.deepEqual(
 		rows.map((row) => text(row)[0]),
-		["\u2584", "\u258e", "\u258e", "\u258e", "\u2580"],
-		"the rail runs from the draft through the footer",
+		["\u2584", "\u258e", "\u2580", " ", "\u2580"],
+		"the rail marks only the draft rows, so the half-row split stays clean",
 	);
 	assert.match(text(rows[1]!), /^\u258e Ask Pi anything +$/u);
 	assert.ok(rows[1]!.includes(CURSOR_MARKER), "the placeholder keeps the hardware cursor marker");
-	assert.match(text(rows[3]!), /^\u258e +\/ commands {2}\$ skills {2}! shell {2}@ files $/u);
+	assert.match(text(rows[3]!), /^ +\/ commands {2}\$ skills {2}! shell {2}@ files $/u);
 	assert.ok(rows[1]!.includes(palette.fg("accent", "\u258e")));
 	editor.setText("!ls");
 	rows = editor.render(80);
 	assert.ok(rows[1]!.includes(palette.fg("bashMode", "\u258e")), "shell mode recolors the rail");
-	assert.match(text(rows[3]!), /^\u258eshell +\/ commands/u);
+	assert.match(text(rows[3]!), /^ shell +\/ commands/u);
 	assert.equal(editor.getText(), "!ls", "chrome never enters the draft");
 	// Clicks on the extra padding/footer rows land on the native bottom border, not past it.
 	for (const y of [2, 3, 4]) editor.handleMouse(click(5, y, rows.length));

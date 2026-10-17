@@ -519,7 +519,7 @@ export class UndoRedoEditor extends CustomEditor {
 				palette,
 			);
 		}
-		// A thin rail in the left inset carries the mode by color; the draft text never moves.
+		// A thin rail in the left inset of the draft rows carries the mode by color; the text never moves.
 		const rail = padding > 0 ? palette.fg(text.startsWith("!") ? "bashMode" : "accent", "\u258e") : undefined;
 		const railed = (line: string) => (rail ? withRail(line, rail) : line);
 		// Half-row padding keeps the draft and the footer labels vertically centred in their bars.
@@ -527,14 +527,9 @@ export class UndoRedoEditor extends CustomEditor {
 		const painted = [
 			stripTerminalSequences(top).trim() ? surface(top) : halfRow(width, "\u2584", palette.surface),
 			...content.map((line) => surface(railed(line))),
-			halfRow(
-				width,
-				"\u2580",
-				palette.surface,
-				palette.footer,
-				rail ? palette.surface + rail + palette.footer : "",
-			),
-			paintRow(railed(bottom), width, palette.text, palette.footer),
+			// The rail stays on draft rows: a split half-row cell cannot also carry the rail cleanly.
+			halfRow(width, "\u2580", palette.surface, palette.footer),
+			paintRow(bottom, width, palette.text, palette.footer),
 			halfRow(width, "\u2580", palette.footer),
 		];
 		const view = nativeMenu.length ? getAutocompleteView(this, nativeMenu.length) : undefined;
