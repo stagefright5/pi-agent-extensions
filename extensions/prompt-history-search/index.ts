@@ -483,9 +483,11 @@ async function openPromptHistory(ctx: ExtensionContext, initialQuery?: string): 
 		return;
 	}
 
+	let pickerTui: { requestRender(): void } | undefined;
 	const selected = await ctx.ui.custom<string | null>(
-		(tui, theme, keybindings, done) =>
-			createPromptHistoryPicker({
+		(tui, theme, keybindings, done) => {
+			pickerTui = tui;
+			return createPromptHistoryPicker({
 				tui,
 				theme: () => theme,
 				keybindings,
@@ -495,12 +497,16 @@ async function openPromptHistory(ctx: ExtensionContext, initialQuery?: string): 
 				cwd: ctx.cwd,
 				sessionPath: ctx.sessionManager.getSessionFile() ?? "",
 				done,
-			}),
+			});
+		},
 		{ overlay: true, overlayOptions: { anchor: "center", width: "90%", minWidth: 50, maxHeight: "85%" } },
 	);
 
 	if (selected !== null && selected !== undefined) {
 		ctx.ui.setEditorText(selected);
+		// Pi redraws when the overlay closes, before this text lands; setEditorText alone does not
+		// schedule a frame, so the draft would stay stale until the next keypress.
+		pickerTui?.requestRender();
 	}
 }
 

@@ -7,7 +7,7 @@ import test from "node:test";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
 import { stripVTControlCharacters as plain } from "node:util";
 import type { TUI } from "@earendil-works/pi-tui";
-import {
+import promptHistorySearch, {
 	createPromptHistoryPicker,
 	deletePromptsFromPersistedIndex,
 	discoverSessionFiles,
@@ -220,4 +220,43 @@ test("an unreadable index is set aside, never overwritten", async (t) => {
 	assert.equal(kept.length, 1);
 	assert.equal(await readFile(join(path, "..", kept[0]!), "utf8"), "{ not json");
 	assert.equal(JSON.parse(await readFile(path, "utf8")).version, 1);
+});
+
+test("inserting from Alt+R redraws the composer at once, not on the next keypress", async (t) => {
+	const root = await withProfile(t);
+	const dir = join(root, "sessions");
+	await mkdir(dir, { recursive: true });
+	writeSession(root, dir, ["fix the flaky test"]);
+	let shortcut: ((ctx: unknown) => Promise<void>) | undefined;
+	promptHistorySearch({
+		on() {},
+		events: { emit() {}, on() {} },
+		registerShortcut: (_key: string, options: { handler: typeof shortcut }) => (shortcut = options.handler),
+		registerCommand() {},
+	} as never);
+	const events: string[] = [];
+	await shortcut!({
+		mode: "tui",
+		hasUI: true,
+		cwd: root,
+		sessionManager: { getSessionDir: () => dir, getSessionFile: () => undefined },
+		ui: {
+			getEditorText: () => "",
+			setStatus() {},
+			notify() {},
+			setEditorText: (text: string) => events.push(`set:${text}`),
+			// The overlay closes (Pi redraws), then the chosen prompt arrives.
+			custom: async (factory: (...args: unknown[]) => unknown) => {
+				factory(
+					{ requestRender: () => events.push("render") },
+					getThemeByName("dark"),
+					new KeybindingsManager(),
+					() => {},
+				);
+				events.length = 0;
+				return "fix the flaky test";
+			},
+		},
+	});
+	assert.deepEqual(events, ["set:fix the flaky test", "render"]);
 });

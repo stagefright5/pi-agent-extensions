@@ -250,7 +250,7 @@ test("Esc steps back through confirmation, marks, then closes; Ctrl+F number tog
 		picker.results.map((item) => item.text),
 		["Refactor the auth module"],
 	);
-	assert.match(plain(picker.render(100)[2]!), /● alpha +● 7 days/u);
+	assert.match(plain(picker.render(100)[2]!), /^ ⌃F filter {2}1 ● alpha {3}2 ● 7 days/u);
 	picker.handleInput(KEY.esc);
 	assert.equal(closed(), 1);
 });

@@ -385,15 +385,14 @@ export class Picker<T> implements Component, Focusable {
 			const chips = this.filterState.chips().map((chip) => {
 				const mark = chip.active ? palette.fg("accent", "●") : palette.fg("dim", "○");
 				const label = chip.active ? palette.fg("userMessageText", chip.label) : palette.fg("dim", chip.label);
-				return (this.filterChord ? palette.fg("warning", `${chip.shortcut}`) + " " : "") + mark + " " + label;
+				// The digit is always shown so the row explains itself: ⌃F, then the number, toggles it.
+				const digit = palette.fg(this.filterChord ? "warning" : "dim", `${chip.shortcut}`);
+				return digit + " " + mark + " " + label;
 			});
-			lines.push(
-				panel(
-					" " +
-						(this.filterChord ? palette.fg("warning", "filter: press a number  ") : "") +
-						chips.join("   "),
-				),
-			);
+			const lead = this.filterChord
+				? palette.fg("warning", "filter: press a number  ")
+				: palette.fg("muted", "⌃F") + palette.fg("dim", " filter  ");
+			lines.push(panel(" " + lead + chips.join("   ")));
 		}
 		lines.push(panel(" " + palette.fg("dim", "─".repeat(Math.max(0, width - 2)))));
 

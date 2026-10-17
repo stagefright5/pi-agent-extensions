@@ -117,7 +117,7 @@ test("ranked search with highlights, filter chips, multi-select copy, and openin
 	for (const char of "test") browser.handleInput(char);
 	const lines = browser.render(120).map(plain);
 	assert.match(lines[0]!, /Tool output +3\/3/u);
-	assert.match(lines[2]!, /○ bash {3}○ read {3}○ errors only/u);
+	assert.match(lines[2]!, /⌃F filter {2}1 ○ bash {3}2 ○ read {3}3 ○ errors only/u);
 	browser.handleInput("\x06");
 	browser.handleInput("3");
 	assert.match(browser.render(120).map(plain)[0]!, /1\/3/u, "errors only");
