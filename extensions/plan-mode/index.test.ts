@@ -461,3 +461,17 @@ test("summary and feedback cancellation dispose promptly and ignore late complet
 		await f.close();
 	}
 });
+
+test("a long plan title is cut with an ellipsis without clearing the tool box background", async () => {
+	const f = await fixture();
+	try {
+		const title = "Background Bash extension (bg-bash), revised with a footer status and a much longer tail";
+		const call = f.tool.renderCall({ title, plan: "" }, f.runner.getUIContext().theme, {} as never);
+		const row = call.render(120)[0]!;
+		assert.match(stripTerminalSequences(row), /revised with a footer ?… *$/u);
+		// A full reset would also end the background the tool box paints behind this row.
+		assert.ok(!row.includes("\u001b[0m"), JSON.stringify(row));
+	} finally {
+		await f.close();
+	}
+});

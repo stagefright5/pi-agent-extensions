@@ -13,7 +13,14 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Text, visibleWidth, TuiMainScreen, type Terminal } from "@earendil-works/pi-tui";
 import extension from "./index.ts";
-import { callSubject, compactRenderers, formatDuration, resolveRenderers, resultNotices } from "./tool-renderers.ts";
+import {
+	callSubject,
+	compactRenderers,
+	fitLabel,
+	formatDuration,
+	resolveRenderers,
+	resultNotices,
+} from "./tool-renderers.ts";
 
 // Tests intentionally use pi's real schema/loader. Production imports only public APIs.
 const host = new URL(".", import.meta.resolve("@earendil-works/pi-coding-agent"));
@@ -290,4 +297,13 @@ test("extension registers only a resolver, not tools or transcript mutators", ()
 		},
 	} as never);
 	assert.deepEqual(calls, ["renderer"]);
+});
+
+test("cut labels keep the tool box background behind the ellipsis", () => {
+	const label = "\u001b[1mbash\u001b[22m  \u001b[36m" + "x".repeat(80) + "\u001b[39m";
+	const fitted = fitLabel(label, 30);
+	assert.equal(visibleWidth(fitted), 30);
+	assert.match(plain(fitted), /…$/u);
+	// Only the foreground and text attributes are reset, never the background.
+	assert.ok(!fitted.includes("\u001b[0m") && !fitted.includes("\u001b[49m"));
 });

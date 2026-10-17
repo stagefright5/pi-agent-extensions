@@ -1,6 +1,6 @@
 /** Evidence-guided planning with session-scoped, cancellable review UI. */
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { Key, Text, truncateToWidth } from "@earendil-works/pi-tui";
+import { Key, stripTerminalSequences, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { Check } from "typebox/value";
 import { join } from "node:path";
@@ -432,7 +432,14 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		renderCall(args, theme) {
 			return new Text(
 				theme.fg("toolTitle", theme.bold("plan_output ")) +
-					theme.fg("muted", truncateToWidth(args.title || "Untitled", 60)),
+					// Truncate the plain title before styling it: truncateToWidth ends with a full reset,
+					// which would also clear the tool box background for the rest of the row.
+					theme.fg(
+						"muted",
+						stripTerminalSequences(
+							truncateToWidth((args.title || "Untitled").replace(/\s+/gu, " "), 60, "…"),
+						),
+					),
 				0,
 				0,
 			);

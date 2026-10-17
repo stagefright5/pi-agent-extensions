@@ -14,6 +14,14 @@ function rowState(context: RenderContext): RowState {
 	return (context.state[rowKey] ??= {});
 }
 
+/**
+ * truncateToWidth ends the cut with a full reset, which also clears the tool box background for the
+ * rest of the row. Keep the cut and the ellipsis, but reset only the foreground and text attributes.
+ */
+export function fitLabel(text: string, width: number): string {
+	return truncateToWidth(text, width, "…").replaceAll("\x1b[0m", "\x1b[22;23;24;27;29;39m");
+}
+
 export function singleLine(value: unknown): string {
 	return typeof value === "string" ? stripVTControlCharacters(value).replace(/\s+/gu, " ").trim() : "";
 }
@@ -117,10 +125,10 @@ class CallCard implements Component {
 		const metadata = theme.fg(failed ? "error" : "dim", meta);
 		const metadataWidth = visibleWidth(metadata);
 		if (meta && width >= metadataWidth + 24) {
-			const left = truncateToWidth(label, width - metadataWidth - 2, "…");
+			const left = fitLabel(label, width - metadataWidth - 2);
 			return [left + " ".repeat(width - visibleWidth(left) - metadataWidth) + metadata];
 		}
-		return [truncateToWidth(label, width, "…")];
+		return [fitLabel(label, width)];
 	}
 }
 
@@ -155,10 +163,9 @@ class ResultPreview implements Component {
 		const lines = all.slice(0, limit);
 		if (all.length > limit)
 			lines.push(
-				truncateToWidth(
+				fitLabel(
 					this.theme.fg("dim", `${all.length - limit} more rows · `) + keyHint("app.tools.expand", "expand"),
 					width,
-					"…",
 				),
 			);
 		lines.push(...this.notices.render(width));
