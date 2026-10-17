@@ -101,11 +101,13 @@ export function createBashTool(options: ToolOptions) {
 		...base,
 		description:
 			`${base.description} Commands still running after ${BACKGROUND_AFTER_SECONDS} seconds move to the background ` +
-			"and return a job id instead of their final output. This threshold is fixed and cannot be overridden by tool arguments.",
+			"and return a job id instead of their final output. This threshold is fixed and cannot be overridden by tool arguments. " +
+			"A background return is not a completion result. Use job_status to verify the exit code before reporting success.",
 		promptGuidelines: [
 			...(base.promptGuidelines ?? []),
 			`bash commands still running after ${BACKGROUND_AFTER_SECONDS} seconds always continue as background jobs: the result says "Still running in background as job jN", and a bg-job message reports the exit later. This threshold is fixed; there is no wait argument. Do not poll in a loop; continue with other work or end your turn.`,
 			"Use job_output, job_status, and job_kill to inspect or stop background jobs. The optional timeout limits total runtime; it does not extend the foreground period.",
+			"A background return is not a completion result. Use job_status to verify the exit code before reporting success.",
 		],
 		parameters: bashSchema,
 		prepareArguments: (args) => {

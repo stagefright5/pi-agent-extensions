@@ -33,6 +33,14 @@ test("wait is absent from the schema and stale overrides are discarded without m
 	}
 });
 
+test("background completion must be verified before reporting success", async (t) => {
+	const { tool } = await fixture(t);
+	const guidance =
+		"A background return is not a completion result. Use job_status to verify the exit code before reporting success.";
+	assert.ok(tool.description.includes(guidance));
+	assert.ok(tool.promptGuidelines!.includes(guidance));
+});
+
 test("direct execution cannot override the fixed threshold, even without argument preparation", async (t) => {
 	const { tool, manager, ctx } = await fixture(t);
 	const observed: number[] = [];
