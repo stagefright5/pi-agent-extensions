@@ -1,5 +1,11 @@
 # @stagefright5/pi-artifact-design
 
+## 0.2.2
+
+### Patch Changes
+
+- 8b3189e: Shorten documentation, remove narration-style comments, and use concrete wording in design guidance, Plan Mode prompts, and artifact validation messages. Preserve approval requirements, command behavior, and compatibility notes. Mark the edited design fundamentals as adapted from upstream rather than verbatim.
+
 ## 0.2.1
 
 ### Patch changes

@@ -1,6 +1,6 @@
 {
   "name": "@stagefright5/pi-bg-bash",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Run pi's bash tool commands in the background once they outlast a short wait, with job tools, finish notifications, and a jobs manager",
   "type": "module",
   "keywords": [
