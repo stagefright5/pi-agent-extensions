@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, rm, readFile } from "node:fs/promises";
+import { rmSync } from "node:fs";
+import { mkdtemp, mkdir, readdir, rm, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -13,6 +14,12 @@ import {
 	historyIndexPath,
 	loadPromptIndexForSearch,
 } from "./index.ts";
+
+// Never touch the real profile: every test, and any write that settles after a test restores its
+// own profile, lands in this throwaway profile instead of ~/.pi/agent.
+const isolatedProfile = await mkdtemp(join(tmpdir(), "pi-isolated-profile-"));
+process.env.PI_CODING_AGENT_DIR = isolatedProfile;
+process.on("exit", () => rmSync(isolatedProfile, { recursive: true, force: true }));
 
 const host = new URL(".", import.meta.resolve("@earendil-works/pi-coding-agent"));
 const { KeybindingsManager } = await import(new URL("core/keybindings.js", host).href);
@@ -197,4 +204,20 @@ test("history picker: recency ranks equal matches, filters, multi-insert, copy, 
 	picker.handleInput("\x1br");
 	picker.handleInput("\r");
 	assert.equal(result, "review auth\nlong body");
+});
+
+test("the test run never resolves the real profile", () => {
+	assert.ok(historyIndexPath().startsWith(isolatedProfile));
+});
+
+test("an unreadable index is set aside, never overwritten", async (t) => {
+	await withProfile(t);
+	const path = historyIndexPath();
+	await mkdir(join(path, ".."), { recursive: true });
+	await writeFile(path, "{ not json");
+	await deletePromptsFromPersistedIndex([]);
+	const kept = (await readdir(join(path, ".."))).filter((name) => name.startsWith("index.json.unreadable-"));
+	assert.equal(kept.length, 1);
+	assert.equal(await readFile(join(path, "..", kept[0]!), "utf8"), "{ not json");
+	assert.equal(JSON.parse(await readFile(path, "utf8")).version, 1);
 });

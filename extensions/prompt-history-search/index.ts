@@ -51,6 +51,8 @@ type PersistedPromptIndex = {
 
 type LoadedPersistedIndex = {
 	existed: boolean;
+	/** The file exists but could not be read or parsed; it must never be overwritten blindly. */
+	unreadable: boolean;
 	bootstrappedAt?: number;
 	prompts: PromptRecord[];
 	deleted: Tombstone[];
@@ -200,15 +202,15 @@ function promptRecordFromUnknown(value: unknown): PromptRecord | null {
 	};
 }
 
-async function readPersistedIndex(): Promise<LoadedPersistedIndex> {
+async function readPersistedIndex(indexPath = historyIndexPath()): Promise<LoadedPersistedIndex> {
 	let raw: string;
 	try {
-		raw = await readFile(historyIndexPath(), "utf8");
+		raw = await readFile(indexPath, "utf8");
 	} catch (error) {
 		if (error && typeof error === "object" && (error as { code?: unknown }).code === "ENOENT") {
-			return { existed: false, prompts: [], deleted: [], warnings: 0, pruned: false };
+			return { existed: false, unreadable: false, prompts: [], deleted: [], warnings: 0, pruned: false };
 		}
-		return { existed: false, prompts: [], deleted: [], warnings: 1, pruned: false };
+		return { existed: true, unreadable: true, prompts: [], deleted: [], warnings: 1, pruned: false };
 	}
 
 	try {
@@ -228,6 +230,7 @@ async function readPersistedIndex(): Promise<LoadedPersistedIndex> {
 
 		return {
 			existed: true,
+			unreadable: false,
 			bootstrappedAt,
 			prompts,
 			deleted,
@@ -235,11 +238,12 @@ async function readPersistedIndex(): Promise<LoadedPersistedIndex> {
 			pruned: prompts.length !== originalPrompts.length,
 		};
 	} catch {
-		return { existed: true, prompts: [], deleted: [], warnings: 1, pruned: false };
+		return { existed: true, unreadable: true, prompts: [], deleted: [], warnings: 1, pruned: false };
 	}
 }
 
 async function writePersistedIndex(
+	indexPath: string,
 	prompts: PromptRecord[],
 	bootstrappedAt?: number,
 	deleted: readonly Tombstone[] = [],
@@ -252,7 +256,6 @@ async function writePersistedIndex(
 		prompts: mergePrompts([prompts], tombstones),
 		...(tombstones.length ? { deleted: tombstones } : {}),
 	};
-	const indexPath = historyIndexPath();
 	const tempPath = `${indexPath}.${process.pid}.tmp`;
 	await mkdir(dirname(indexPath), { recursive: true });
 	await writeFile(tempPath, `${JSON.stringify(payload)}\n`, "utf8");
@@ -270,11 +273,17 @@ async function updatePersistedIndex(
 	const run = indexWriteQueue
 		.catch(() => undefined)
 		.then(async () => {
-			const current = await readPersistedIndex();
+			// Resolve the profile once: reading one profile and writing another would replace its history.
+			const indexPath = historyIndexPath();
+			const current = await readPersistedIndex(indexPath);
+			if (current.unreadable) {
+				// Never overwrite history that could not be read; keep it next to the fresh index.
+				await rename(indexPath, `${indexPath}.unreadable-${Date.now()}`);
+			}
 			const next = update(current);
 			const deleted = next.deleted ?? current.deleted;
 			updatedPrompts = mergePrompts([next.prompts], deleted);
-			await writePersistedIndex(updatedPrompts, next.bootstrappedAt, deleted);
+			await writePersistedIndex(indexPath, updatedPrompts, next.bootstrappedAt, deleted);
 		});
 	indexWriteQueue = run;
 	await run;
@@ -628,7 +637,7 @@ export default function promptHistorySearchExtension(pi: ExtensionAPI): void {
 		// editor. Reads only the saved index; it never scans sessions at startup.
 		void indexWriteQueue
 			.catch(() => undefined)
-			.then(readPersistedIndex)
+			.then(() => readPersistedIndex())
 			.then((index) => {
 				const prompts = [...new Set(index.prompts.map((prompt) => prompt.text))].slice(0, RECALL_LIMIT);
 				if (prompts.length) pi.events.emit("prompt-history-search:recent", { prompts });

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { rmSync } from "node:fs";
 import test from "node:test";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -16,6 +17,12 @@ import {
 	type ExtensionUIContext,
 } from "@earendil-works/pi-coding-agent";
 import { TuiMainScreen, type Terminal, type AutocompleteProvider } from "@earendil-works/pi-tui";
+
+// Never touch the real profile: every test, and any write that settles after a test restores its
+// own profile, lands in this throwaway profile instead of ~/.pi/agent.
+const isolatedProfile = await mkdtemp(join(tmpdir(), "pi-isolated-profile-"));
+process.env.PI_CODING_AGENT_DIR = isolatedProfile;
+process.on("exit", () => rmSync(isolatedProfile, { recursive: true, force: true }));
 
 const host = new URL(".", import.meta.resolve("@earendil-works/pi-coding-agent"));
 const { loadExtensions } = await import(new URL("core/extensions/loader.js", host).href);
