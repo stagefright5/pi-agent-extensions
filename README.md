@@ -17,7 +17,6 @@ The workspace develops and typechecks against pi 1.3.0. Bang Don't Ghost additio
 | [Artifact Design](./extensions/artifact-design/README.md)                    | `@stagefright5/pi-artifact-design`        | Design self-contained HTML artifacts with a local Vite dev server, theme/CSP harness, and single-file build                            | `/skill:artifact-design`                                 |
 | [Bang Don't Ghost](./extensions/bang-dont-ghost/README.md)                   | `@stagefright5/pi-bang-dont-ghost`        | Automatically continue pi after a user-entered single-bang shell command                                                               | Automatic                                                |
 | [Background Bash](./extensions/bg-bash/README.md)                            | `@stagefright5/pi-bg-bash`                | Run pi's bash tool commands in the background once they outlast a short wait, with job tools, finish notifications, and a jobs manager | `bash` override, `job_*` tools, `/jobs`, `Alt+J`         |
-| [Codemode Explain](./extensions/codemode-explain/README.md)                  | `@stagefright5/pi-codemode-explain`       | Replace collapsed codemode script previews with a one-line summary written by a small model                                            | Automatic                                                |
 | [Jenkins CLI Operations](./extensions/jenkins-cli-operations/README.md)      | `@stagefright5/pi-jenkins-cli-operations` | Guarded Jenkins operations for pi using the official Jenkins CLI                                                                       | `/skill:jenkins-cli-operations`                          |
 | [Obsidian UI](./extensions/obsidian-ui/README.md)                            | `@stagefright5/pi-obsidian-ui`            | A copy-friendly graphite and ice theme with compact tool presentation for pi                                                           | Automatic tool styling; `obsidian-ice` theme             |
 | [OpenAI Fast](./extensions/openai-fast/README.md)                            | `@stagefright5/pi-openai-fast`            | Toggle OpenAI Fast mode (priority service tier) in pi                                                                                  | `/fast`, `pi --fast`                                     |
@@ -26,6 +25,7 @@ The workspace develops and typechecks against pi 1.3.0. Bang Don't Ghost additio
 | [Prompt Truly Mine](./extensions/prompt-truly-mine/README.md)                | `@stagefright5/pi-prompt-truly-mine`      | Inline extension commands and composable skill/prompt context with cursor-restoring undo and redo for pi                               | `$` references, inline `/`, `Ctrl+Z`, redo shortcuts     |
 | [Provider URL Logger](./extensions/provider-url-logger/README.md)            | `@stagefright5/pi-provider-url-logger`    | Log the provider, model, and base URL selected for pi provider requests                                                                | Automatic                                                |
 | [Compact Status Bar](./extensions/status-bar/README.md)                      | `@stagefright5/pi-status-bar`             | A compact single-line status bar for pi                                                                                                | Automatic in TUI mode                                    |
+| [Tool Explain](./extensions/tool-explain/README.md)                          | `@stagefright5/pi-tool-explain`           | Show AI summaries for tool calls and save tool choices in Pi settings                                                                  | Automatic, `/tool-explain`                               |
 | [Tool Output Browser](./extensions/tool-output-browser/README.md)            | `@stagefright5/pi-tool-output-browser`    | Browse complete stored tool results without expanding every pi transcript row                                                          | `/tool-output`                                           |
 | [Pi Picker](./packages/pi-picker/README.md)                                  | `@stagefright5/pi-picker`                 | Fast multi-word fuzzy search, highlighted lists, and picker overlays for pi extensions                                                 | Library: `createPicker`, `Searcher`, `renderInlinePanel` |
 
@@ -43,7 +43,6 @@ After a package is published, install only the extension or skill you want:
 pi install npm:@stagefright5/pi-artifact-design
 pi install npm:@stagefright5/pi-bang-dont-ghost
 pi install npm:@stagefright5/pi-bg-bash
-pi install npm:@stagefright5/pi-codemode-explain
 pi install npm:@stagefright5/pi-jenkins-cli-operations
 pi install npm:@stagefright5/pi-obsidian-ui
 pi install npm:@stagefright5/pi-openai-fast
@@ -52,6 +51,7 @@ pi install npm:@stagefright5/pi-prompt-history-search
 pi install npm:@stagefright5/pi-prompt-truly-mine
 pi install npm:@stagefright5/pi-provider-url-logger
 pi install npm:@stagefright5/pi-status-bar
+pi install npm:@stagefright5/pi-tool-explain
 pi install npm:@stagefright5/pi-tool-output-browser
 ```
 

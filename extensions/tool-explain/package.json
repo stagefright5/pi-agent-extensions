@@ -1,7 +1,7 @@
 {
-  "name": "@stagefright5/pi-codemode-explain",
+  "name": "@stagefright5/pi-tool-explain",
   "version": "0.0.0",
-  "description": "Replace collapsed codemode script previews with a one-line summary written by a small model",
+  "description": "Show AI summaries for tool calls and save tool choices in Pi settings",
   "type": "module",
   "keywords": [
     "codemode",
@@ -25,11 +25,11 @@
     ]
   },
   "publishConfig": {
-    "directory": "../../.tmp/publish/codemode-explain",
+    "directory": "../../.tmp/publish/tool-explain",
     "linkDirectory": false
   },
   "packageTools": {
-    "title": "Codemode Explain",
-    "interface": "Automatic"
+    "title": "Tool Explain",
+    "interface": "Automatic, `/tool-explain`"
   }
 }

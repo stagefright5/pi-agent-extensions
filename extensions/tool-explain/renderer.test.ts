@@ -17,7 +17,7 @@ import {
 	stopAnimations,
 } from "./renderer.ts";
 
-// Tests use pi's real codemode renderer and theme. Production imports only public APIs.
+// These internal imports test compatibility with Pi's codemode renderer.
 const host = new URL(".", import.meta.resolve("@earendil-works/pi-coding-agent"));
 const { initTheme, theme } = await import(new URL("modes/interactive/theme/theme.js", host).href);
 const { codemodeRenderers } = (await import(new URL("extensions/codemode/renderer.js", host).href)) as {
@@ -89,7 +89,6 @@ test("phases follow argument streaming, execution, and the pending summary", () 
 	assert.equal(phaseOf({ isPartial: false, argsComplete: true }, { status: "pending" }), "summarizing");
 	assert.equal(phaseOf({ isPartial: false, argsComplete: true }, { status: "failed" }), "done");
 	assert.equal(phaseOf({ isPartial: false, argsComplete: false }), "done");
-	// Each loading phase animates differently.
 	const sets = Object.values(SPINNERS).map((s) => s.frames.join());
 	assert.equal(new Set(sets).size, 3);
 });
@@ -113,7 +112,6 @@ test("a live row never shows code while collapsed and ends with the full summary
 		/1 call · 1 running · Elapsed/,
 	);
 
-	// Animations redraw the row on their own.
 	const before = r.redraws();
 	await new Promise((resolve) => setTimeout(resolve, 200));
 	assert.ok(r.redraws() > before);
@@ -131,7 +129,6 @@ test("a live row never shows code while collapsed and ends with the full summary
 		"\n3 calls · 1 failed · Took 1.0s",
 	);
 
-	// The animation stops once the row settles.
 	const settled = r.redraws();
 	await new Promise((resolve) => setTimeout(resolve, 200));
 	assert.equal(r.redraws(), settled);
@@ -254,7 +251,7 @@ test("failed calls and script errors appear under the header, collapsed and expa
 	];
 	const header = { argsComplete: true, executionStarted: true, isPartial: false, durationMs: 3000 };
 	const failure = "✗ bash sleep 1; cat /nope — cat: /nope: No such file or directory (exit 1)";
-	// pi renders the call, then the result, then draws both.
+	// Match Pi's order. Call both renderers before drawing their components.
 	let call = r.call(header);
 	const result = r.result({ calls }, "{}", false);
 	call = render(r.lastCall(), 100);
@@ -291,7 +288,7 @@ test("the script error is always visible and outside the collapsed limit", () =>
 			.at(-1),
 		"✗ Script error: Error: thrown",
 	);
-	// pi puts the message on the line after "Script error:".
+	// Pi puts the message on the line after "Script error:".
 	const content = [
 		{
 			type: "text",
@@ -309,7 +306,6 @@ test("the summary is drawn in the accent color beside a muted label", () => {
 	const running = headerText(theme, "executing", summary, false);
 	assert.ok(running.includes(theme.fg("accent", "Read files")));
 	assert.ok(running.includes(theme.fg("muted", "Executing code:")));
-	// Without a summary, the label keeps its normal emphasis.
 	assert.ok(
 		headerText(theme, "done", undefined, true).includes(theme.fg("toolTitle", theme.bold("Codemode failed"))),
 	);

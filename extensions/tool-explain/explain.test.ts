@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cleanSummary, codeKey, parseModelRef, pickModel, summarize, SummaryStore, type ChatModel } from "./explain.ts";
+import {
+	cleanSummary,
+	codeKey,
+	toolKey,
+	parseModelRef,
+	pickModel,
+	summarize,
+	SummaryStore,
+	type ChatModel,
+} from "./explain.ts";
 
 const CODE = Array.from({ length: 20 }, (_, i) => `const v${i} = await tools.read({ path: "f${i}" });`).join("\n");
 
@@ -19,7 +28,7 @@ test("model choice: configured, then cheapest same-provider text model, then the
 	assert.equal(pickModel(opus, available, { provider: "openai", id: "missing" }), undefined);
 	assert.equal(pickModel(undefined, available), undefined);
 	assert.equal(pickModel(opus, []), opus);
-	// Equal (e.g. subscription) prices prefer small-model names.
+	// Subscription models can have equal prices.
 	const free = [model("x", "big", 0, 0), model("x", "big-mini", 0, 0)];
 	assert.equal(pickModel(free[0], free)?.id, "big-mini");
 });
@@ -36,10 +45,18 @@ test("model references and summaries are normalized", () => {
 	);
 	assert.equal(cleanSummary("\u001b[31m**List MCP tools**\u001b[0m"), "List MCP tools");
 	assert.equal(cleanSummary("   "), "");
-	// Never shortened: rows wrap long summaries instead.
+	// The renderer wraps long summaries.
 	assert.equal(cleanSummary("word ".repeat(60)), "word ".repeat(60).trim());
 	assert.equal(codeKey("a"), codeKey("a"));
 	assert.notEqual(codeKey("a"), codeKey("b"));
+	assert.equal(toolKey("codemode", { code: "x" }), codeKey("x"));
+	assert.equal(
+		toolKey("bash", { command: "ls", nested: { b: 1, a: 2 } }),
+		toolKey("bash", { nested: { a: 2, b: 1 }, command: "ls" }),
+	);
+	assert.notEqual(toolKey("read", { path: "a" }), toolKey("write", { path: "a" }));
+	assert.notEqual(toolKey("read", { path: "a" }), toolKey("read", { path: "b" }));
+	assert.notEqual(toolKey("x", [1, 2]), toolKey("x", [2, 1]));
 });
 
 test("summarize sends the script without reasoning and rejects provider failures", async () => {

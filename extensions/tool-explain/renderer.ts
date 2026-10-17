@@ -1,20 +1,19 @@
 import { highlightCode, type Theme, type ToolRenderers } from "@earendil-works/pi-coding-agent";
 import { Spacer, Text, type Component } from "@earendil-works/pi-tui";
 import { stripVTControlCharacters } from "node:util";
-import { codeKey, type Summary, type SummaryStore } from "./explain.ts";
+import { toolKey, type Summary, type SummaryStore } from "./explain.ts";
 
 type CallRenderer = NonNullable<ToolRenderers["renderCall"]>;
 type RenderContext = Parameters<CallRenderer>[2];
 export type Phase = "writing" | "executing" | "summarizing" | "done";
 
-/** Each loading phase has its own animation. Frames follow the wall clock, so redraws only advance them. */
 export const SPINNERS: Record<Exclude<Phase, "done">, { frames: string[]; ms: number }> = {
 	writing: { frames: ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"], ms: 80 },
 	executing: { frames: ["◐", "◓", "◑", "◒"], ms: 120 },
 	summarizing: { frames: ["∙∙∙", "●∙∙", "∙●∙", "∙∙●"], ms: 160 },
 };
 const TICK_MS = 80;
-/** Stop redrawing a row that never settles, e.g. one orphaned by a crash. */
+// Limit redraws if a call never finishes.
 const MAX_ANIMATION_MS = 10 * 60_000;
 
 type RowState = {
@@ -25,21 +24,19 @@ type RowState = {
 	startedAt?: number;
 	endedAt?: number;
 	highlighted?: { code: string; text: string };
-	/** Written by renderResult, read lazily by the call header, which renders before it. */
 	failures?: Failure[];
 };
 export type Failure = { label: string; error: string };
 const MAX_COLLAPSED_FAILURES = 3;
 const MAX_ARG_CHARS = 60;
 const ARG_FIELDS = ["command", "path", "file_path", "url", "query", "pattern", "name"];
-const rowKey = Symbol("codemode-explain-row");
+const rowKey = Symbol("tool-explain-row");
 const tickers = new Set<ReturnType<typeof setInterval>>();
 
 function row(context: RenderContext): RowState {
 	return ((context.state as Record<symbol, RowState>)[rowKey] ??= {});
 }
 
-/** Clears every running animation; called on session shutdown. */
 export function stopAnimations(): void {
 	for (const ticker of tickers) clearInterval(ticker);
 	tickers.clear();
@@ -74,23 +71,28 @@ function frame(phase: Exclude<Phase, "done">, now = Date.now()): string {
 	return frames[Math.floor(now / ms) % frames.length]!;
 }
 
-export function headerText(theme: Theme, phase: Phase, summary: Summary | undefined, failed: boolean): string {
+export function headerText(
+	theme: Theme,
+	phase: Phase,
+	summary: Summary | undefined,
+	failed: boolean,
+	name = "codemode",
+): string {
 	const label = (text: string) => theme.fg("toolTitle", theme.bold(text));
 	const spin = (p: Exclude<Phase, "done">) => theme.fg("accent", frame(p));
 	const done = summary?.status === "done" ? summary.text : undefined;
-	// Beside a summary, the label steps back so the summary is the brightest part of the header.
 	const withSummary = (text: string, summaryText: string) =>
 		`${theme.fg("muted", text)} ${theme.fg("accent", summaryText)}`;
 	switch (phase) {
 		case "writing":
-			return `${spin("writing")} ${label("Writing codemode tool call…")}`;
+			return `${spin("writing")} ${label(`Writing ${name} tool call…`)}`;
 		case "executing":
 			return done
-				? `${spin("executing")} ${withSummary("Executing code:", done)}`
-				: `${spin("executing")} ${label("Executing code…")}`;
+				? `${spin("executing")} ${withSummary(name === "codemode" ? "Executing code:" : `Executing ${name}:`, done)}`
+				: `${spin("executing")} ${label(name === "codemode" ? "Executing code…" : `Executing ${name}…`)}`;
 		default: {
 			const mark = failed ? theme.fg("error", "✗") : theme.fg("success", "✓");
-			const title = failed ? "Codemode failed" : "Codemode executed";
+			const title = `${name === "codemode" ? "Codemode" : name} ${failed ? "failed" : "executed"}`;
 			if (phase === "summarizing") return `${mark} ${label(`${title}:`)} ${spin("summarizing")}`;
 			return done ? `${mark} ${withSummary(`${title}:`, done)}` : `${mark} ${label(title)}`;
 		}
@@ -109,6 +111,7 @@ export function statusText(
 	context: Pick<RenderContext, "isPartial" | "isError" | "durationMs">,
 	timing: Pick<RowState, "startedAt" | "endedAt">,
 	now = Date.now(),
+	failureLabel = "script failed",
 ): string {
 	const raw = (details as { calls?: unknown } | undefined)?.calls;
 	const calls: NestedCall[] = Array.isArray(raw) ? raw : [];
@@ -118,7 +121,7 @@ export function statusText(
 	if (count("running")) parts.push(theme.fg("warning", `${count("running")} running`));
 	if (count("error")) parts.push(theme.fg("error", `${count("error")} failed`));
 	if (count("cancelled")) parts.push(theme.fg("muted", `${count("cancelled")} cancelled`));
-	if (context.isError) parts.push(theme.fg("error", "script failed"));
+	if (context.isError) parts.push(theme.fg("error", failureLabel));
 	if (!context.isPartial && context.durationMs !== undefined)
 		parts.push(theme.fg("muted", `Took ${formatDuration(context.durationMs)}`));
 	else if (timing.startedAt !== undefined)
@@ -135,7 +138,7 @@ function singleLine(text: string): string {
 	return stripVTControlCharacters(text).replace(/\s+/g, " ").trim();
 }
 
-/** The argument that identifies a call: a command, path, URL, or query; otherwise the first string. */
+/** Prefer a command, path, URL, or query. Fall back to the first string argument. */
 export function shortArgs(raw: unknown): string {
 	let text = typeof raw === "string" ? raw : "";
 	try {
@@ -147,13 +150,13 @@ export function shortArgs(raw: unknown): string {
 			if (typeof value === "string") text = value;
 		}
 	} catch {
-		// Arguments over pi's record limit are truncated JSON: show them as text.
+		// Pi truncates arguments over its record limit, which can leave invalid JSON.
 	}
 	text = singleLine(text);
 	return text.length > MAX_ARG_CHARS ? `${text.slice(0, MAX_ARG_CHARS - 1).trimEnd()}…` : text;
 }
 
-/** The tool's own first error line, with bash's trailing exit code folded in. */
+/** Append bash's exit code to the first error line. */
 export function errorLine(raw: unknown): string {
 	const lines = (typeof raw === "string" ? stripVTControlCharacters(raw) : "")
 		.split("\n")
@@ -165,7 +168,6 @@ export function errorLine(raw: unknown): string {
 	return exit ? `${first} (exit ${exit})` : first;
 }
 
-/** Failed nested calls, then the script's own error when the whole script failed. */
 export function failuresOf(content: readonly { type: string; text?: string }[], details: unknown, isError: boolean) {
 	const raw = (details as { calls?: unknown } | undefined)?.calls;
 	const calls = (Array.isArray(raw) ? raw : []) as {
@@ -183,7 +185,7 @@ export function failuresOf(content: readonly { type: string; text?: string }[], 
 	if (isError) {
 		const text = content.map((block) => (block.type === "text" ? (block.text ?? "") : "")).join("\n");
 		const thrown = /^Script error:\s*(.*)$/m.exec(text)?.[1]?.trim();
-		// Rejected input (e.g. a bad options line) has no script header or "Script error:" line.
+		// Input validation errors have no script header or "Script error:" line.
 		const fallback = text
 			.split("\n")
 			.map((line) => line.trim())
@@ -193,16 +195,15 @@ export function failuresOf(content: readonly { type: string; text?: string }[], 
 	return failures;
 }
 
-/** ANSI faint (SGR 2), closed with SGR 22, which leaves colors alone. */
+/** SGR 22 resets faint styling without resetting colors. */
 export const faint = (text: string) => `\x1b[2m${text}\x1b[22m`;
 
 export function failureText(theme: Theme, failures: readonly Failure[], expanded: boolean): string {
-	// The script's own error is always shown and does not count toward the collapsed limit.
+	// The script error does not count toward the collapsed failure limit.
 	const calls = failures.filter((f) => f.label !== "Script error:");
 	const script = failures.filter((f) => f.label === "Script error:");
 	const shown = expanded ? calls : calls.slice(0, MAX_COLLAPSED_FAILURES);
 	const mark = theme.fg("error", "✗");
-	// Dimmer than the muted header label in any theme: dim color plus the terminal's faint style.
 	const quiet = (text: string) => faint(theme.fg("dim", text));
 	const lines = shown.map((f) => `${mark} ${quiet(`${f.label} — ${f.error}`)}`);
 	if (shown.length < calls.length) lines.push(quiet(`+${calls.length - shown.length} more failed`));
@@ -210,7 +211,7 @@ export function failureText(theme: Theme, failures: readonly Failure[], expanded
 	return lines.join("\n");
 }
 
-/** Reads failures when drawn, because pi renders the call before the result that reports them. */
+/** Read failures at draw time. Pi calls renderCall before renderResult populates them. */
 class FailureLines implements Component {
 	constructor(
 		private readonly state: RowState,
@@ -224,7 +225,7 @@ class FailureLines implements Component {
 	}
 }
 
-/** A replaceable stack of children; the native component is kept separately for its own render slot. */
+/** Retain the native component for reuse when the row expands. */
 class Slot implements Component {
 	native?: Component;
 	children: Component[] = [];
@@ -245,53 +246,74 @@ function highlighted(state: RowState, code: string): string {
 	return state.highlighted.text;
 }
 
-export function explainRenderers(native: ToolRenderers, store: SummaryStore): ToolRenderers {
+export function explainRenderers(native: ToolRenderers, store: SummaryStore, name = "codemode"): ToolRenderers {
+	const isCode = name === "codemode";
 	return {
 		...native,
+		// Use Pi's box for the summary even when the native tool draws its own.
+		renderShell: "default",
 		renderCall(args, theme: Theme, context) {
 			const slot = context.lastComponent instanceof Slot ? context.lastComponent : new Slot();
 			const state = row(context);
 			const code = (args as { code?: unknown } | undefined)?.code;
-			if (typeof code !== "string") {
-				// Invalid arguments keep pi's own error presentation.
+			if (isCode && typeof code !== "string") {
 				slot.native = native.renderCall?.(args, theme, { ...context, lastComponent: slot.native });
 				slot.children = slot.native ? [slot.native] : [];
 				return slot;
 			}
+			if (!isCode) {
+				// Hidden native components still need state and timer updates.
+				slot.native = native.renderCall?.(args, theme, { ...context, lastComponent: slot.native });
+			}
 			if (context.executionStarted) {
 				state.startedAt ??= Date.now();
-				// Run the native renderer once so expanded results keep pi's elapsed-time line.
-				if (!state.nativeStarted) native.renderCall?.(args, theme, { ...context, lastComponent: undefined });
+				// Codemode's native call renderer initializes timing for the result.
+				if (isCode && !state.nativeStarted)
+					native.renderCall?.(args, theme, { ...context, lastComponent: undefined });
 				state.nativeStarted = true;
 			}
 			if (!context.isPartial) state.endedAt ??= Date.now();
-			const key = context.argsComplete ? codeKey(code) : undefined;
+			const key = context.argsComplete ? toolKey(name, args) : undefined;
 			const summary = key ? store.get(key) : undefined;
 			if (key && summary?.status === "pending") store.wait(key, context.invalidate);
 			const phase = phaseOf(context, summary);
 			animate(state, context, phase !== "done");
 			slot.children = [
-				new Text(headerText(theme, phase, summary, context.isError), 0, 0),
+				new Text(headerText(theme, phase, summary, context.isError, name), 0, 0),
 				new FailureLines(state, theme, context.expanded),
 			];
-			if (context.expanded && code.trim())
-				slot.children.push(new Spacer(1), new Text(highlighted(state, code), 0, 0));
+			if (context.expanded) {
+				if (isCode && typeof code === "string" && code.trim())
+					slot.children.push(new Spacer(1), new Text(highlighted(state, code), 0, 0));
+				else if (!isCode)
+					slot.children.push(
+						new Spacer(1),
+						slot.native ?? new Text(JSON.stringify(args, null, 2) ?? "", 0, 0),
+					);
+			}
 			return slot;
 		},
 		renderResult(result, options, theme, context) {
 			const slot = context.lastComponent instanceof Slot ? context.lastComponent : new Slot();
-			// Always render natively too, so pi's own timers start and stop with the row.
+			// Native renderers must stop their timers even when their output is hidden.
 			slot.native = native.renderResult?.(result, options, theme, { ...context, lastComponent: slot.native });
-			row(context).failures = failuresOf(result.content, result.details, context.isError);
+			const text = result.content.map((block) => (block.type === "text" ? block.text : "")).join("\n");
+			row(context).failures = isCode
+				? failuresOf(result.content, result.details, context.isError)
+				: context.isError
+					? [{ label: name, error: errorLine(text) }]
+					: [];
 			if (options.expanded) {
-				slot.children = slot.native ? [slot.native] : [];
+				slot.children = [slot.native ?? new Text(theme.fg("toolOutput", text), 0, 0)];
 				return slot;
 			}
 			const status = statusText(
 				theme,
-				result.details,
+				isCode ? result.details : undefined,
 				{ ...context, isPartial: options.isPartial },
 				row(context),
+				Date.now(),
+				isCode ? "script failed" : "tool failed",
 			);
 			slot.children = status ? [new Spacer(1), new Text(status, 0, 0)] : [];
 			return slot;
