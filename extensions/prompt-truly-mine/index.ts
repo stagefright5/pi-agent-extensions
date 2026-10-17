@@ -1,16 +1,3 @@
-/**
- * Prompt Truly Mine
- *
- * Replaces pi's prompt editor with a CustomEditor subclass that adds:
- *   - Ctrl+Z and pi's configured tui.editor.undo key: undo
- *   - Ctrl+Shift+Z and Ctrl+Y: redo
- *   - Inline extension/skill/prompt-template autocomplete after "/"
- *   - Composable skill and prompt-template context expansion
- *
- * The editor still delegates to CustomEditor for pi app shortcuts,
- * autocomplete, prompt history, paste handling, image paste, etc.
- */
-
 import { access } from "node:fs/promises";
 import { constants } from "node:fs";
 import { dirname } from "node:path";
@@ -542,7 +529,6 @@ export class UndoRedoEditor extends CustomEditor implements StatusLineHost {
 			// Keep the composer at the bottom as suggestions open, filter, and close.
 			return [...nativeMenu, ...composer];
 		}
-		// Reuse user-message tokens: the draft and sent message share one visual surface.
 		const surface = (line: string) => theme.style(line, { fg: "userMessageText", bg: "userMessageBg" });
 		if (this.compactViewport) {
 			this.menuHeight = this.menuItemRows = 0;
@@ -564,16 +550,12 @@ export class UndoRedoEditor extends CustomEditor implements StatusLineHost {
 				INPUT_HINTS,
 			);
 		}
-		// A thin rail in the left inset of the draft rows carries the mode by color; the text never moves.
 		const rail = padding > 0 ? palette.fg(text.startsWith("!") ? "bashMode" : "accent", "\u258e") : undefined;
 		const railed = (line: string) => (rail ? withRail(line, rail) : line);
-		// Full padding rows above and below keep the draft centred in its bar, which sits directly on
-		// the one-row footer. Native top-row text (scroll or working indicators) stays readable.
 		const painted = [
 			surface(top),
 			...content.map((line) => surface(railed(line))),
 			surface(" ".repeat(width)),
-			// Footer text sits closer to its bar than draft text does to the surface.
 			softenForeground(
 				paintRow(bottom, width, palette.text, palette.footer),
 				palette.footer,
@@ -595,7 +577,7 @@ export class UndoRedoEditor extends CustomEditor implements StatusLineHost {
 		return [...menu, ...painted];
 	}
 
-	/** The surface-styled glyph under the cursor, so exiting Pi never punches a hole in the composer. */
+	/** Preserve the composer background when Pi clears the cursor cell on exit. */
 	private exitCursorCell: string | undefined;
 
 	private trackExitCursorCell(lines: readonly string[], theme: Theme): void {

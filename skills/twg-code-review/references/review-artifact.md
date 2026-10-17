@@ -2,7 +2,7 @@
 description: Versioned JSON artifact format and helper commands.
 ---
 
-# Code review — artifact
+# Code review artifact
 
 Write schema version 1 JSON to a uniquely named file in the operating system
 temp directory. Do not place review artifacts in the repository. Use the field

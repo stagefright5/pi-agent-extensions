@@ -2,9 +2,9 @@
 
 Angular Aria (`@angular/aria`) is a collection of headless, accessible directives that implement common WAI-ARIA patterns. These directives handle keyboard interactions, ARIA attributes, focus management, and screen reader support.
 
-**As an AI Agent, your role is to provide the HTML structure and CSS styling**, while the directives handle the complex accessibility logic.
+Provide the HTML structure and CSS. The directives handle accessibility behavior.
 
-## Styling Headless Components
+## Styling headless components
 
 Because Angular Aria components are headless, they do not come with default styles. You **must** use CSS to style different states based on the ARIA attributes or structural classes the directives automatically apply.
 
@@ -17,13 +17,13 @@ Common ARIA attributes to target in CSS:
 
 ---
 
-**CRITICAL**: Before using this package, it must be installed via the package manager. Confirm that it has been installed in the project. Use `npm install @angular/aria` to install if necessary.
+Check that `@angular/aria` is installed before using it. If needed, run `npm install @angular/aria`.
 
 ## 1. Accordion
 
 Organizes related content into expandable/collapsible sections.
 
-**Usage:** The Accordion is a layout component designed to organize content into logical groups that users can expand one at a time to reduce scrolling on content-heavy pages. Use it for FAQs, long forms, or progressive disclosure of information, but avoid it for primary navigation or scenarios where users must view multiple sections of content simultaneously.
+Use an accordion for FAQs, long forms, or content readers can expand one section at a time. Avoid it for primary navigation or content readers need to compare across sections.
 
 **Imports:** `import { AccordionContent, AccordionGroup, AccordionPanel, AccordionTrigger } from '@angular/aria/accordion';`
 
@@ -76,7 +76,7 @@ Target the `[aria-expanded]` attribute on the trigger to rotate icons, and style
 
 ## 2. Listbox
 
-A foundational directive for displaying a list of options. Used for visible selection lists (not dropdowns).
+Displays a visible list of selectable options, not a dropdown.
 
 **Usage:** Visible selectable lists (single or multi-select).
 
@@ -124,7 +124,7 @@ Target `[aria-selected="true"]` for selected state and `:focus-visible` or `[dat
 
 ---
 
-## 3. Combobox, Select, and Multiselect
+## 3. Combobox, select, and multiselect
 
 These patterns combine the `ngCombobox` directive (applied directly to the trigger/combobox element) with a popup containing an `ngListbox` widget.
 
@@ -212,11 +212,11 @@ Style the popup container to look like a dropdown floating above content (often 
 
 ---
 
-## 4. Menu and Menubar
+## 4. Menu and menubar
 
 For actions, commands, and context menus (not for form selection).
 
-**Usage:** The Menubar is a high-level navigation pattern designed for building desktop-style application command bars (e.g., File, Edit, View) that stay persistent across an interface. It is best utilized for organizing complex commands into logical top-level categories with full horizontal keyboard support, but it should be avoided for simple standalone action lists or mobile-first layouts where horizontal space is constrained.
+Use a menubar for desktop-style command categories such as File, Edit, and View, with horizontal keyboard navigation. Avoid it for standalone action lists or mobile layouts with limited width.
 
 **Imports:** `import {MenuBar, Menu, MenuContent, MenuItem, MenuTrigger} from '@angular/aria/menu';`
 
@@ -271,7 +271,7 @@ Use flexbox for the menubar. Hide/show submenus based on the trigger's state.
 
 Layered content sections where only one panel is visible.
 
-**Usage:** The Tabs component is used to organize related content into distinct, navigable sections, allowing users to switch between categories or views without leaving the page. It is ideal for settings panels, multi-topic documentation, or dashboards, but should be avoided for sequential workflows (steppers) or when navigation involves more than 7–8 sections.
+Use tabs for settings panels, documentation topics, or dashboard views within one page. Avoid them for sequential workflows or more than seven or eight sections.
 
 **Imports:** `import {Tab, Tabs, TabList, TabPanel, TabContent} from '@angular/aria/tabs';`
 
@@ -323,7 +323,7 @@ Target `[aria-selected="true"]` on the tab buttons.
 
 Groups related controls (like text formatting).
 
-**Usage:** The Toolbar is an organizational component designed to group frequently accessed, related controls into a single logical container. It is best used to enhance keyboard efficiency (via arrow-key navigation) and visual structure for workflows requiring repeated actions, such as text formatting or media controls.
+Use a toolbar for related controls, such as text formatting or media playback. Arrow keys move focus between controls.
 
 **Imports:** `import {Toolbar, ToolbarWidget, ToolbarWidgetGroup} from '@angular/aria/toolbar';`
 
@@ -364,7 +364,7 @@ Target `[aria-pressed="true"]` (for toggle buttons) or `[aria-checked="true"]` (
 
 Displays hierarchical data (file systems, nested nav).
 
-**Usage:** The Tree component is designed for navigating and displaying deeply nested, hierarchical data structures like file systems, organization charts, or complex site architectures. It should be used specifically for multi-level relationships where users need to expand or collapse branches, but it should be avoided for flat lists, data tables, or simple selection menus.
+Use a tree for nested data, such as files or an organization chart, where users expand and collapse branches. Avoid it for flat lists, tables, or simple selection menus.
 
 **Imports:** `import {Tree, TreeItem, TreeItemGroup} from '@angular/aria/tree';`
 
@@ -446,9 +446,9 @@ Target `[aria-selected="true"]` for selected cells and `:focus-visible` for the 
 }
 ```
 
-## 9. Testing with Component Harnesses
+## 9. Testing with component harnesses
 
-Angular Aria provides standard Component Harnesses (based on `@angular/cdk/testing`) to make unit testing clean, robust, and decoupled from DOM structural details.
+Angular Aria provides component harnesses based on `@angular/cdk/testing`. Tests can use their methods instead of depending on internal DOM structure.
 
 **Imports:**
 
@@ -459,7 +459,7 @@ import { AccordionGroupHarness, AccordionHarness } from "@angular/aria/accordion
 import { ListboxHarness, ListboxOptionHarness } from "@angular/aria/listbox/testing";
 ```
 
-### Example: Testing an Accordion with Harnesses
+### Example: testing an accordion with harnesses
 
 ```ts
 describe("MyAccordionComponent", () => {
@@ -486,9 +486,9 @@ describe("MyAccordionComponent", () => {
 });
 ```
 
-## 10. Integration with Signal Forms
+## 10. Integration with signal forms
 
-Because Angular Aria directives leverage Angular's modern `model()` signals for managing interactive values, they integrate **out-of-the-box** with Angular's new Signal Forms (`@angular/forms/signals`).
+Angular Aria directives use `model()` signals for interactive values and work with Signal Forms from `@angular/forms/signals`.
 
 The `[formField]` directive automatically detects directives like `ngCombobox` or `ngListbox` as custom form controls because they expose a `value` model.
 
@@ -500,7 +500,7 @@ import { Combobox, ComboboxPopup, ComboboxWidget } from "@angular/aria/combobox"
 import { Listbox, Option } from "@angular/aria/listbox";
 ```
 
-### Example 1: Autocomplete Combobox inside a Form
+### Example 1: autocomplete combobox inside a form
 
 Given a form model defined in your component:
 
@@ -541,7 +541,7 @@ You bind it directly using `[formField]`:
 </div>
 ```
 
-### Example 2: Select Component inside a Form
+### Example 2: select component inside a form
 
 Apply `ngCombobox` directly to a focusable `div` trigger and bind to `[formField]`:
 
@@ -578,7 +578,7 @@ Apply `ngCombobox` directly to a focusable `div` trigger and bind to `[formField
 </div>
 ```
 
-### Example 3: Standalone Listbox (Multi-select) inside a Form
+### Example 3: standalone listbox (multi-select) inside a form
 
 You can bind a multi-selectable Listbox directly to a form array:
 
@@ -590,8 +590,8 @@ You can bind a multi-selectable Listbox directly to a form array:
 </ul>
 ```
 
-## General Rules for Agents
+## General rules for agents
 
 1. **Never use native HTML elements like `<select>`** when asked to implement these specific Aria patterns. Use the `ng*` directives.
-2. **Handle CSS manually**: Remember that `Angular Aria` does NOT provide styles. You must write the CSS, targeting the native ARIA attributes (`aria-expanded`, `aria-selected`, etc.) that the directives automatically toggle.
-3. **Lazy Loading**: Always use the provided structural directives (`ngAccordionContent`, `ngTabContent`, `ngMenuContent`, `ngComboboxPopup`, `ngTreeItemGroup`) inside `ng-template` for heavy content panels or nested groups to ensure they are lazily rendered.
+2. Write CSS for the ARIA attributes that the directives toggle, such as `aria-expanded` and `aria-selected`. Angular Aria does not provide styles.
+3. Lazy-render heavy panels and nested groups with the provided structural directives inside `ng-template`: `ngAccordionContent`, `ngTabContent`, `ngMenuContent`, `ngComboboxPopup`, and `ngTreeItemGroup`.

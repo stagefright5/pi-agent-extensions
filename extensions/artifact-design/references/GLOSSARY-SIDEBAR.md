@@ -44,7 +44,7 @@ underneath as a normal section. Never use a floating overlay on mobile.
     overflow: hidden;
   }
 
-  /* 100vh, not a height:100% chain — the host does not guarantee html/body height. */
+  /* Use 100vh because the host does not guarantee html/body height. */
   .plate {
     height: 100vh;
     padding-block: 0;
@@ -91,7 +91,7 @@ function setAside(state, moveFocus) {
   try {
     localStorage.setItem("glossary-aside", state);
   } catch {
-    /* private window or blocked site data — the default is fine */
+    /* Keep the default when browser storage is unavailable. */
   }
   if (moveFocus) {
     const target = open ? glossCollapse : railOpen;

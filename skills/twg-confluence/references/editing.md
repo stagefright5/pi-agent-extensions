@@ -2,7 +2,7 @@
 description: Safely edit Confluence content with body files, snapshot tokens, lossless HTML, and read-back verification.
 ---
 
-# Confluence Editing
+# Confluence editing
 
 For any non-trivial body edit, use:
 
@@ -10,7 +10,7 @@ For any non-trivial body edit, use:
 read -> save to file -> edit locally -> update from file -> verify
 ```
 
-## Safe Workflow
+## Safe workflow
 
 1. Fetch full detail in the intended body format. For edits to classic pages
    (`type=page`), add `--draft` and use that draft body and its returned
@@ -42,7 +42,7 @@ the entire body. Use inline `--edits` for small payloads and `--edits-file` for
 larger, multiline, or sensitive payloads. Title-only changes should not resend
 body content.
 
-## Dry Runs and Snapshot Conflicts
+## Dry runs and snapshot conflicts
 
 - A dry run validates one snapshot; it neither reserves nor refreshes it. For
   body-changing dry runs, add `-o json --output-file <path>` and read

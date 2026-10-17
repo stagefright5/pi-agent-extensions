@@ -12,11 +12,11 @@ do not create a second root home.
 
 ## Scale choices
 
-- **Lean-rich** — substantive hubs plus only workflow-critical companions;
-  default for ambiguous briefs.
-- **Standard** — evidenced functions, maintained templates, and trackers.
-- **Expanded** — multiple teams, services, or workstreams; requires counts,
-  stages, a representative vertical slice, and approval before expansion.
+- Lean-rich uses hub pages and only the supporting content the workflow needs.
+  Use it for ambiguous briefs.
+- Standard adds functions supported by evidence, maintained templates, and trackers.
+- Expanded covers multiple teams, services, or workstreams. Show counts, stages,
+  and a representative branch, then obtain approval before expansion.
 
 These are not quotas. Explain the evidence behind every large branch.
 
@@ -35,7 +35,7 @@ Recommended lean-rich shape:
 When justified, add Metrics, Experience Design, Operations, Security and Trust,
 Ways of Working, or Reference. Prefer maintained trackers/maps over empty leaves.
 
-For a brief-only source, create a rich scaffold from known context without
+For a brief-only source, create a starting structure from known context without
 inventing owners, dates, metrics, evidence, decisions, or runtime facts.
 
 ## Team space
@@ -82,9 +82,9 @@ Default to structure adaptation rather than body copying:
 2. Identify workflow, navigation, naming, lifecycle, voice, content placement,
    and stale or source-specific branches.
 3. Propose what to preserve, adapt, collapse, or omit and each body relationship.
-4. Copy bodies only when approved; never imply-copy access or public links.
+4. Copy bodies only when approved; never copy access settings or public links without approval.
 
-Do not claim a “style clone” without body samples or crawl the whole source just
+Do not claim a "style clone" without body samples or crawl the whole source just
 to propose structure.
 
 ## Page, folder, and hierarchy rules

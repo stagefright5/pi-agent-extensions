@@ -1,8 +1,8 @@
-# Injection Context
+# Injection context
 
 The `inject()` function can only be used when code is executing within an **injection context**.
 
-## Where is an Injection Context Available?
+## Where is an injection context available?
 
 An injection context is automatically available in:
 

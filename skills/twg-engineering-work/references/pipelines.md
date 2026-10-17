@@ -14,7 +14,7 @@ relevant branch and commit; keep passed, failed, skipped, and unknown separate.
 Work in two steps: list runs with one query, then read only the runs whose
 details change the answer. Both commands take `--workspace <ws> --repo <repo>`.
 
-## List Runs
+## List runs
 
 `twg bitbucket pipeline query` returns runs newest first. Filter with
 `--status` (for example `FAILED`), `--state`, `--branch`, `--trigger`, or
@@ -40,9 +40,9 @@ they do not require another query. Repeat `--repo` for a combined history;
 `--limit` applies to the combined result, so query separately for equal samples
 per repository.
 
-## Read One Run
+## Read one run
 
 `twg bitbucket pipeline get --pipeline <build-number>` returns the run and its
 steps. Add `--logs --failed-steps` for failing-step logs, `--lines` to cap log
 length, `--step` for one step, and `--test-reports` or `--test-cases` for test
-results. Group failures by step and cause before hydrating more runs.
+results. Group failures by step and cause before fetching more runs.

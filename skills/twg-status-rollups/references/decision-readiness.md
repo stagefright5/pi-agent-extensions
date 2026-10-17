@@ -2,7 +2,7 @@
 description: Build go/no-go, launch, rollout, milestone, or approval decision-readiness briefs from a resolved work anchor, material gates, and connected evidence.
 ---
 
-# Decision Readiness
+# Decision readiness
 
 Use for launch/rollout readiness, milestone gates, approval asks, and other
 go/no-go or proceed/hold decisions. Resolve the native project, goal, work item,
@@ -30,7 +30,7 @@ scope may close each material missing gate while it can change the decision;
 otherwise stop and report the missing gate. Do not turn partial evidence into a
 readiness claim.
 
-For a named or resolved anchor, verify the hydrated evidence matches its
+For a named or resolved anchor, verify the retrieved evidence matches its
 identity and distinguishing qualifiers before ranking gates or synthesizing
 readiness. An alias or successor is in scope only with source-defined
 relationship evidence; missing evidence for the named anchor is a scoped gap,

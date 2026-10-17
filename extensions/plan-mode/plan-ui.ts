@@ -182,9 +182,6 @@ export class PlanDocumentView implements Component {
 		const palette = paletteFromTheme(theme);
 		const height = Math.max(1, Math.floor(this.host.rows() * 0.9));
 		const compact = height < 8;
-		// One panel colour for the whole card, as in the pi-picker overlays. It is darker than the
-		// composer surface, so the card never merges with the composer bar below it; thin rules
-		// separate the header and the footer from the document.
 		const sheet = (line: string) => paintRow(truncateToWidth(line, width, ""), width, palette.text, palette.panel);
 		this.padLeft = width >= 40 ? 3 : width >= 12 ? 1 : 0;
 		const padRight = width >= 40 ? 3 : width >= 12 ? 1 : 0;
@@ -226,7 +223,6 @@ export class PlanDocumentView implements Component {
 					rule,
 				];
 
-		// A thin thumb in the right padding shows where the visible part sits in a long document.
 		const thumbSize = overflow ? Math.max(1, Math.round((this.bodyHeight * this.bodyHeight) / total)) : 0;
 		const thumbTop = overflow
 			? Math.round((top / Math.max(1, total - this.bodyHeight)) * (this.bodyHeight - thumbSize))
@@ -532,7 +528,7 @@ export async function withLoader<T>(
 	});
 }
 
-/** Width-safe inline transcript rendering; never pretends the viewport is wider. */
+/** Keep inline transcript rendering within the viewport width. */
 export function createPlanMessageComponent(
 	plan: string,
 	title: string | null,

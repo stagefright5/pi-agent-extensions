@@ -16,7 +16,7 @@ export default defineConfig({
     // that do not ship. viteSingleFile raises this, set here to be explicit.
     assetsInlineLimit: 100 * 1024 * 1024,
     cssCodeSplit: false,
-    // Artifacts run in evergreen browsers only; no legacy transpile tax.
+    // Artifacts target evergreen browsers.
     target: "es2022",
     emptyOutDir: true,
   },

@@ -1,8 +1,8 @@
-# Angular Signals Overview
+# Angular signals overview
 
-Signals are the foundation of reactivity in modern Angular applications. A **signal** is a wrapper around a value that notifies interested consumers when that value changes.
+A signal wraps a value and notifies consumers when it changes.
 
-## Writable Signals (`signal`)
+## Writable signals (`signal`)
 
 Use `signal()` to create state that can be directly updated.
 
@@ -22,9 +22,9 @@ count.set(3);
 count.update((value) => value + 1);
 ```
 
-### Exposing as Readonly
+### Exposing as readonly
 
-When exposing state from a service, it is a best practice to expose a readonly version to prevent external mutation.
+Expose a readonly signal from a service to prevent callers from changing it.
 
 ```ts
 private readonly _count = signal(0);
@@ -32,7 +32,7 @@ private readonly _count = signal(0);
 readonly count = this._count.asReadonly();
 ```
 
-## Computed Signals (`computed`)
+## Computed signals (`computed`)
 
 Use `computed()` to create read-only signals that derive their value from other signals.
 
@@ -49,7 +49,7 @@ const doubleCount = computed(() => count() * 2);
 // doubleCount automatically updates when count changes.
 ```
 
-## Reactive Contexts
+## Reactive contexts
 
 A **reactive context** is a runtime state where Angular monitors signal reads to establish a dependency.
 
@@ -60,7 +60,7 @@ Angular automatically enters a reactive context when evaluating:
 - `linkedSignal` computations
 - Component templates
 
-### Untracked Reads (`untracked`)
+### Untracked reads (`untracked`)
 
 If you need to read a signal inside a reactive context _without_ creating a dependency (so that the context doesn't re-run when the signal changes), use `untracked()`.
 
@@ -74,7 +74,7 @@ effect(() => {
 });
 ```
 
-### Async Operations in Reactive Contexts
+### Async operations in reactive contexts
 
 The reactive context is only active for **synchronous** code. Signal reads after an `await` will not be tracked. **Always read signals before asynchronous boundaries.**
 

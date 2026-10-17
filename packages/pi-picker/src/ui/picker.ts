@@ -451,7 +451,6 @@ export class Picker<T> implements Component, Focusable {
 		this.listRows = stacked ? Math.ceil(bodyHeight * 0.55) : bodyHeight;
 		this.listTop = lines.length;
 
-		// Keep the selection in view.
 		if (this.selected < this.scroll) this.scroll = this.selected;
 		if (this.selected >= this.scroll + this.listRows) this.scroll = this.selected - this.listRows + 1;
 		const ids = this.result.ids.subarray(this.scroll, this.scroll + this.listRows);

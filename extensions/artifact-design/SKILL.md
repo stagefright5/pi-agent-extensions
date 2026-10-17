@@ -38,9 +38,9 @@ You must check the domain language before scaffolding:
 1. Count the distinct domain terms, acronyms, protocol concepts, and specialist
    configuration names that a new reader may not know.
 2. Record one of these decisions in the design plan:
-   - `Glossary: yes — approximately N terms`; read
+   - `Glossary: yes, approximately N terms`; read
      [references/GLOSSARY-SIDEBAR.md](references/GLOSSARY-SIDEBAR.md) before building.
-   - `Glossary: no — approximately N terms`; state why a glossary is unnecessary.
+   - `Glossary: no, approximately N terms`; state why a glossary is unnecessary.
 3. At approximately 15 or more terms, the glossary pattern is required for every
    artifact, including interactive explainers, architecture maps, dashboards,
    onboarding pages, and UI/document hybrids.
@@ -92,7 +92,7 @@ Never publish a file that has not passed validation and these checks.
 Point the Artifact tool at `dist/artifact.html`. Publish that built file, not the
 source `index.html`.
 
-## Non-negotiables
+## Requirements
 
 1. Build one self-contained file. CSP blocks external stylesheets, images and media
    with no visible error. Only scripts from cdnjs / jsdelivr `/npm/` /

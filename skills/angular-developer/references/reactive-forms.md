@@ -1,8 +1,8 @@
-# Reactive Forms
+# Reactive forms
 
-Reactive forms provide a model-driven approach to handling form inputs. They are built around observable streams and provide synchronous access to the data model, making them more scalable and testable than template-driven forms.
+Reactive forms define controls in TypeScript, expose changes through observables, and provide synchronous access to form values.
 
-## Core Classes
+## Core classes
 
 Reactive forms are built using these fundamental classes from `@angular/forms`:
 
@@ -44,7 +44,7 @@ export class ProfileEditor {
 }
 ```
 
-## Template Binding
+## Template binding
 
 Use directives to bind the model to the view:
 
@@ -72,7 +72,7 @@ Use directives to bind the model to the view:
 </form>
 ```
 
-## Accessing Controls
+## Accessing controls
 
 Use `.controls` for easy access to controls.
 
@@ -82,7 +82,7 @@ addAlias() {
 }
 ```
 
-## Updating Values
+## Updating values
 
 - `patchValue()`: Updates only the specified properties. Fails silently on structural mismatches.
 - `setValue()`: Replaces the entire model. Strictly enforces the form structure.
@@ -96,7 +96,7 @@ updateProfile() {
 }
 ```
 
-## Unified Change Events
+## Unified change events
 
 Modern Angular (v18+) provides a single `events` observable on all controls to track value, status, pristine, touched, reset, and submit events.
 
@@ -110,7 +110,7 @@ this.profileForm.events.subscribe((event) => {
 });
 ```
 
-## Manual State Management
+## Manual state management
 
 - `markAsTouched()` / `markAllAsTouched()`: Useful for showing validation errors on submit.
 - `markAsDirty()` / `markAsPristine()`: Tracks if the value has been modified.

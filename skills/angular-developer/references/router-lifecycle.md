@@ -1,8 +1,8 @@
-# Router Lifecycle and Events
+# Router lifecycle and events
 
 Angular Router emits events through the `Router.events` observable, allowing you to track the navigation lifecycle from start to finish.
 
-## Common Router Events (Chronological)
+## Common router events (chronological)
 
 1. **`NavigationStart`**: Navigation begins.
 2. **`RoutesRecognized`**: Router matches the URL to a route.
@@ -12,7 +12,7 @@ Angular Router emits events through the `Router.events` observable, allowing you
 6. **`NavigationCancel`**: Navigation canceled (e.g., guard returned `false`).
 7. **`NavigationError`**: Navigation failed (e.g., error in resolver).
 
-## Subscribing to Events
+## Subscribing to events
 
 Inject the `Router` and filter the `events` observable.
 
@@ -38,7 +38,7 @@ Enable detailed console logging of all routing events during application bootstr
 provideRouter(routes, withDebugTracing());
 ```
 
-## Common Use Cases
+## Common use cases
 
 - **Loading Indicators**: Show a spinner when `NavigationStart` fires and hide it on `NavigationEnd`/`Cancel`/`Error`.
 - **Analytics**: Track page views by listening for `NavigationEnd`.

@@ -207,7 +207,6 @@ test("typing ranks multi-word matches; navigation, primary action, copy, confirm
 	picker.handleInput(KEY.ctrlY);
 	assert.deepEqual(log, ["copy:1"]);
 	assert.match(plain(picker.render(100).at(-1)!), /Copied/u);
-	// Delete asks for confirmation, then removes.
 	picker.handleInput(KEY.ctrlD);
 	assert.match(plain(picker.render(100).at(-1)!), /Press ⌃D again to delete 1/u);
 	picker.handleInput(KEY.ctrlD);
@@ -216,7 +215,6 @@ test("typing ranks multi-word matches; navigation, primary action, copy, confirm
 		picker.results.map((item) => item.text.split("\n")[0]),
 		["Review auth middleware"],
 	);
-	// Marks apply actions to every marked item.
 	for (let i = 0; i < 4; i++) picker.handleInput("\x7f");
 	picker.handleInput(KEY.tab);
 	picker.handleInput(KEY.tab);

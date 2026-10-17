@@ -11,9 +11,9 @@ metadata:
 
 # twg-space-creation
 
-Use with root `twg`. Turn a source into an approved information architecture
-and Confluence mix, then create and verify it. `twg-confluence` owns content
-semantics and write safety; live help owns mutation grammar.
+Use with root `twg`. Propose a Confluence hierarchy and content types from the
+source, obtain approval, then create and verify them. Follow `twg-confluence`
+for content rules and write safety, and live help for command syntax.
 
 ## CLI launcher fallback
 
@@ -24,8 +24,9 @@ PATH failures.
 
 ## Guiding principle
 
-Build a navigable space, not an object quota. Favor useful hubs, ask only
-material questions, and show cost before substantial work.
+Organize pages around the readers' tasks. Do not create pages to meet a count.
+Ask about choices that change the design, and show the expected cost before
+substantial work.
 
 ## Workflow
 
@@ -42,7 +43,7 @@ material questions, and show cost before substantial work.
    may proceed. Otherwise require create/refine/cancel confirmation. Always
    confirm a large, ambiguous, private, or synthetic build. Approval bounds the
    build; it does not authorize archive, delete, overwrite, or public links.
-6. **Create in stages.** Load `references/twg-confluence-space.md`. Ledger the
+6. **Create in stages.** Load `references/twg-confluence-space.md`. Record the
    build; set/read instructions when supported; verify one branch and one of
    every selected type. Expand only families matching the approved semantics.
 7. **Verify and hand off.** Reconcile hierarchy, bodies, every structured/visual
@@ -71,11 +72,11 @@ parent with the space root.
 
 ## References
 
-- `references/proposal-flow.md` — intake, space contract, approval, instructions.
+- `references/proposal-flow.md`. intake, space contract, approval, instructions.
   **Load every run.**
-- `references/blueprints.md` — workflow-first starting shapes and scale choices.
-- `references/page-archetypes.md` — rich composition by page purpose.
-- `references/repo-discovery.md` — repository evidence without repo-shaped IA.
-- `references/twg-confluence-space.md` — stable creation and verification flow.
+- `references/blueprints.md`. workflow-first starting shapes and scale choices.
+- `references/page-archetypes.md`. content types and layouts for each page's purpose.
+- `references/repo-discovery.md`. repository evidence organized around readers' tasks.
+- `references/twg-confluence-space.md`. stable creation and verification flow.
 
 Body-format syntax belongs exclusively to live `body-formats` guidance.

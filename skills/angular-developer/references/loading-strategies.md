@@ -1,8 +1,8 @@
-# Route Loading Strategies
+# Route loading strategies
 
 Angular supports two main strategies for loading routes and components to balance initial load time and navigation responsiveness.
 
-## Eager Loading
+## Eager loading
 
 Components are bundled into the initial JavaScript payload and are available immediately.
 
@@ -10,14 +10,13 @@ Components are bundled into the initial JavaScript payload and are available imm
 { path: 'home', component: Home }
 ```
 
-- **Pros**: Seamless transitions.
-- **Cons**: Increases initial bundle size.
+Navigation needs no additional component download, but the initial bundle is larger.
 
 ## Lazy Loading
 
 Components or routes are loaded only when the user navigates to them. This creates separate JavaScript "chunks".
 
-### Lazy Loading Components
+### Lazy loading components
 
 Use `loadComponent` to fetch the component on demand.
 
@@ -28,7 +27,7 @@ Use `loadComponent` to fetch the component on demand.
 }
 ```
 
-### Lazy Loading Child Routes
+### Lazy loading child routes
 
 Use `loadChildren` to fetch a set of routes.
 
@@ -39,7 +38,7 @@ Use `loadChildren` to fetch a set of routes.
 }
 ```
 
-## Injection Context and Lazy Loading
+## Injection context and lazy loading
 
 Loader functions run within the **injection context** of the current route. This allows you to call `inject()` to make context-aware loading decisions.
 

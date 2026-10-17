@@ -1,9 +1,9 @@
-# End-to-End (E2E) Testing
+# End-to-End (E2E) testing
 
 > [!IMPORTANT]
 > Only use the setup guidelines in this file if there is no existing E2E testing framework configured in the workspace, or if the user has explicitly requested to change or set up E2E testing.
 
-## Setting Up and Running E2E Tests
+## Setting up and running E2E tests
 
 Add supported E2E frameworks to the project using `ng add`:
 
@@ -34,6 +34,6 @@ Run E2E tests:
 ng e2e [project] [options]
 ```
 
-## Custom & Enterprise Testing Tools
+## Custom & enterprise testing tools
 
 For custom enterprise runners (e.g., Katalon Studio, TestCafe, Selenium), define execution commands in `package.json` scripts.

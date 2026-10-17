@@ -2,7 +2,7 @@
 
 Most of this extension was written with the pi agent CLI.
 
-Replaces pi's `bash` tool so that slow commands stop blocking the agent. A command that finishes within a fixed 10-second foreground period returns exactly as before. A command still running after that keeps going as a background job, and the tool returns right away with a job id:
+Replaces pi's `bash` tool. Commands that finish within 10 seconds return normally. Longer commands continue in the background, and the tool returns a job id:
 
 ```text
 $ npm run build
@@ -12,7 +12,7 @@ $ npm run build
 [Still running in background as job j3 (pid 48121) after 10s. Log: /tmp/pi-bg-bash-<uid>/<session>-<unique>/j3.log. Check it with job_output or job_status and stop it with job_kill; a bg-job message arrives when it exits.]
 ```
 
-When the job exits, the agent receives a message with its exit code and last 40 lines, and continues from there.
+When the job exits, the agent receives its exit code and last 40 lines of output.
 
 [Back to the extension workspace](../../README.md)
 
@@ -32,7 +32,7 @@ pi install npm:@stagefright5/pi-bg-bash
 
 The tool keeps pi's built-in behavior for anything that finishes in time: the same streaming transcript row, truncation, full-output temp file, `PI_*` session variables, `shellPath` and `shellCommandPrefix` settings, and codemode result (`exit_code`, `output`, …). Other extensions that restyle `bash` rows keep working.
 
-The foreground period is **always 10 seconds**, including for builds, tests, servers, and watchers. The agent cannot override it: there is no `wait` parameter. Any stale call that still supplies `wait` has that field discarded; even direct execution ignores it.
+The foreground period is always 10 seconds, including for builds, tests, servers, and watchers. There is no `wait` parameter to override it. Any stale call that still supplies `wait` has that field discarded; even direct execution ignores it.
 
 `timeout` keeps its meaning and keeps applying after a command moves to the background. Pressing `Esc` while the tool waits stops the command, as before; once a command is in the background, `Esc` no longer affects it.
 
@@ -49,13 +49,13 @@ A backgrounded result has no `exit_code`; codemode scripts get `job_id`, `runnin
 
 Each declares an output schema and annotations (`job_kill` is destructive, idempotent, and closed-world; the others are read-only and run in parallel). `job_list` is registered inactive by default; use `job_status` without an id, or explicitly enable the alias. Strict-mode nulls are normalized in `prepareArguments` before validation.
 
-Logs are created with mode `0600` in private `0700` directories, independent of umask. Unique per-manager directories avoid collisions across Pi instances. Reload preserves jobs and logs; orderly session termination kills running jobs, waits for log closure, and removes that manager's logs. This cleanup applies to quit, new, resume, and fork, not reload. It normally finishes promptly, but waits up to 3.5 seconds for processes and up to one additional second for log closure before filesystem cleanup. That bounded delay prevents old-session jobs from leaking into a replacement session. Forced process termination can leave private files behind. Shell settings come from the active runtime's merged `pi.getSettings()`.
+Logs are created with mode `0600` in private `0700` directories, independent of umask. Unique per-manager directories avoid collisions across Pi instances. Reload preserves jobs and logs; orderly session termination kills running jobs, waits for log closure, and removes that manager's logs. This cleanup applies to quit, new, resume, and fork, not reload. It waits up to 3.5 seconds for processes and up to one additional second for log closure before filesystem cleanup. That bounded delay prevents old-session jobs from leaking into a replacement session. Forced process termination can leave private files behind. Shell settings come from the active runtime's merged `pi.getSettings()`.
 
 ## Finish messages
 
 A background job that exits on its own sends a `bg-job` message with its exit code, runtime, log path, and last 40 lines. If the agent is idle the message starts a turn; if it is busy the message waits as a follow-up instead of interrupting. In the transcript the message is one line, `○ j3 exited with code 0 · 42s · npm test`, that expands to the output.
 
-Who stopped a job decides whether the agent hears about it:
+Notifications depend on how the job stopped:
 
 | Stopped by                    | Message                                                                     |
 | ----------------------------- | --------------------------------------------------------------------------- |

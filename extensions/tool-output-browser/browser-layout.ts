@@ -1,7 +1,6 @@
 import { truncateToWidth } from "@earendil-works/pi-tui";
 import type { Theme } from "@earendil-works/pi-coding-agent";
 
-/** Open-sided panels keep content easy to select and avoid heavy nested boxes. */
 export function browserFrame(width: number, theme: Theme, error = false) {
 	const columns = Math.max(0, Math.floor(width));
 	return {

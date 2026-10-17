@@ -8,8 +8,8 @@ description: >
 
 # twg-responsibility-routing
 
-Use the root `twg` skill. Use this workflow to answer “who should I involve,
-why them, and in what role?” Do not assume a broad topic is an exact product.
+Use the root `twg` skill. Use this workflow to answer "who should I involve,
+why them, and in what role?" Do not assume a broad topic is an exact product.
 
 ## CLI launcher fallback
 
@@ -18,7 +18,7 @@ Run `twg <command>`. On shell `command not found`, use `$HOME/.local/bin/twg`
 tell user to add that directory to PATH. Do not treat auth or command errors as
 PATH failures.
 
-## Classify The Role
+## Classify the role
 
 Keep these roles distinct:
 
@@ -31,19 +31,19 @@ Keep these roles distinct:
   organization or can route an unresolved ask.
 - **Informed stakeholder**: affected by the decision but not responsible for it.
 
-## Resolve Scope Before People
+## Resolve scope before people
 
 For a fuzzy topic or area, compare one bounded
 `twg rovo search "<topic>" --app confluence` pass with one bounded
 `twg work search "<topic>"` pass. Group same-named results into distinct
-initiative, platform, domain, feature, and team clusters. Hydrate 2-5 central
+initiative, platform, domain, feature, and team clusters. Fetch 2-5 central
 charters, roadmaps, services, projects, or active workstreams before ranking
 people. If the sources disagree, show the alternative scopes or ask the user.
 
 For a stable project, goal, component, service, work item, page, or repository,
 use that reference directly.
 
-## Find Responsibility And Authority
+## Find responsibility and authority
 
 - Use `twg responsibility get <reference>` for declared owners, teams,
   maintainers, approvers, reviewers, or escalation roles. It takes an ARI, URL,
@@ -54,12 +54,12 @@ use that reference directly.
 - Use `twg responsibility infer <reference>` only when declared responsibility
   is missing or the user asks for evidence-based candidates. Preserve confidence,
   reason codes, evidence window, and declared-versus-observed status.
-- Infer primarily from scoped search, declared roles, and hydrated work evidence.
+- Infer primarily from scoped search, declared roles, and retrieved work evidence.
   Org data is optional; do not block or weaken the workflow merely because it is
   unavailable.
 - When org data is connected and a candidate leader or manager is known, prefer
   the narrowest useful tree: `org-tree` for hierarchy, `work-tree` for
-  cross-surface breadth, `workitem-tree` for Jira work, or `pr-tree` for PR
+  activity across products, `workitem-tree` for Jira work, or `pr-tree` for PR
   authorship/review. Tree counts help validate reach and organizational scope;
   they do not by themselves prove expertise, ownership, or approval authority.
 - Load `../twg/references/USER-IDENTIFIERS.md` for selector boundaries. Use
@@ -79,7 +79,7 @@ Use `twg-context-discovery` only when relationship or dependency expansion is
 needed after the scope and people roles are established. It is not the default
 route for a responsibility question.
 
-## Evidence And Output
+## Evidence and output
 
 Strong evidence includes explicit ownership, accountable roles, workflow
 authority, charter/roadmap leadership, service ownership, sustained decisions,

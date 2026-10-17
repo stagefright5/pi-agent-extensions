@@ -543,7 +543,6 @@ export interface PromptHistoryPickerOptions {
 	delete?: (prompts: readonly PromptRecord[]) => Promise<void>;
 }
 
-/** The Alt+R picker: ranked search, preview, filters, multi-select insert, copy, and delete. */
 export function createPromptHistoryPicker(options: PromptHistoryPickerOptions) {
 	const now = options.now ?? Date.now();
 	const newest = options.prompts[0]?.timestamp ?? now;

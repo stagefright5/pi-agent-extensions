@@ -2,7 +2,7 @@
 description: Write Jira descriptions, comments, mentions, links, and structured content with supported HTML, Markdown, or ADF forms.
 ---
 
-# Jira Rich Content
+# Jira rich content
 
 Match the command's advertised description or comment format.
 

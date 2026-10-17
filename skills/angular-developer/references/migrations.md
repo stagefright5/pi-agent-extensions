@@ -1,13 +1,13 @@
-# Automatic Migrations & Code Modernization
+# Automatic migrations & code modernization
 
 When tasked with refactoring or modernizing an existing codebase, always prefer using the official automated schematics available in `@angular/core` over manual text replacement.
 
-## Discovering Migrations
+## Discovering migrations
 
 To view all available schematics for the installed version of the core framework, run:
 `ng generate @angular/core: --help`
 
-## Common Migration Schematics
+## Common migration schematics
 
 Use the following commands to apply specific syntax updates. You can scope these commands to a specific project or directory using the `--project <name>` or `--path <dir>` flags.
 
@@ -21,7 +21,7 @@ Use the following commands to apply specific syntax updates. You can scope these
 | **Self-Closing Tags**     | `ng generate @angular/core:self-closing-tag`                |
 | **Standalone**            | `ng generate @angular/core:standalone` (See workflow below) |
 
-## Specialized Workflow: Migrating to Standalone
+## Specialized workflow: migrating to standalone
 
 The Standalone migration is an interactive, multi-step refactoring. You **MUST** perform this in three discrete stages, verifying that the application builds and runs correctly after each stage completes:
 

@@ -2,13 +2,13 @@
 description: Create, read, update, move, archive, label, comment on, version, and export Confluence pages and content.
 ---
 
-# Confluence Content
+# Confluence content
 
-Use the unified `confluence content` surface for supported content operations.
+Use `confluence content` commands for supported content operations.
 Inspect live help because available content types and operations can differ by
 build profile.
 
-## Content Types
+## Content types
 
 - `live_doc`: use for collaborative or likely co-authored internal content when
   supported, including working docs, plans, meeting notes, and status updates.
@@ -29,7 +29,7 @@ does not determine a new child's type.
 For known content, use the native get command with the stable ID or URL. Request
 full body, comments, versions, or permissions only when the task needs them.
 
-## Persisted Remix Infographics
+## Persisted Remix infographics
 
 A saved Remix infographic is exposed as an attachment on its owning page. Resolve
 and download it with the existing content attachment commands:
@@ -64,9 +64,9 @@ Read `data.aiSummary`. It is a string when a generated summary exists and
 page excerpt. Do not use it for whiteboards, databases, embeds, folders, or
 smart links because non-document content rejects `--detail`.
 
-## Non-doc Read-back And Whiteboard Rendering
+## Non-doc read-back and whiteboard rendering
 
-Non-doc body formats hydrate their bodies through `--format`, not `--detail`:
+Non-doc body formats fetch their bodies through `--format`, not `--detail`:
 
 ```bash
 # Editable persisted whiteboard SVG.
@@ -103,7 +103,7 @@ file, and inspect the rendered layout before claiming visual verification.
 `--output-file` writes the full command payload, including the returned PNG URL.
 A URL alone is not visual proof.
 
-## Embed And Smart Link Reads
+## Embed and smart link reads
 
 An `embed` or `smart_link` stores a destination URL rather than the destination's
 content. Resolve the destination, route it by product or provider, and verify any
@@ -222,7 +222,7 @@ Export behavior depends on the requested format:
 Do not poll Word exports, and do not treat the initial PDF task response as a
 completed export.
 
-## Downloading A Persisted Remix Infographic
+## Downloading A persisted Remix infographic
 
 Use the existing attachment commands. List the owning page's attachments with
 `confluence content attachments list --id <content-id> --filename <media-file-id>`,

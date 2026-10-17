@@ -18,7 +18,7 @@ Run `twg <command>`. On shell `command not found`, use `$HOME/.local/bin/twg`
 tell user to add that directory to PATH. Do not treat auth or command errors as
 PATH failures.
 
-## Use When
+## Use when
 
 - "I'm taking over on-call"
 - "Reliability, incident, SEV, or post-incident review readout"
@@ -26,10 +26,10 @@ PATH failures.
 - "Analyze root cause or draft postmortem/PIR learning/action items"
 - "Open risks, blockers, overloaded people, operational health"
 
-## First Move
+## First move
 
 Resolve scope, window, anchors, owner/escalation, status, recency, and
-follow-ups before joining surfaces. For incident, PIR, reliability, or on-call
+follow-ups before combining sources. For incident, PIR, reliability, or on-call
 requests, start with native JSM incident, post-incident-review, or Jira
 workitem records when available. Use Rovo or document search only to
 disambiguate an anchor or fill a bounded gap, never as the incident inventory.
@@ -39,14 +39,14 @@ Run without `--site`; TWG inherits the user's pinned Jira/JSM site. Only add a
 site override when the user explicitly requests another tenant. Never assume a
 vendor-internal incident site.
 
-## Evidence Policy
+## Evidence policy
 
 - Rank by impact, urgency, owner clarity, recurrence risk, and actionability;
   separate live risks from historical mentions.
 - Keep operational state distinct from adjacent PR, pipeline, document, or chat
   activity; missing or inaccessible state is an evidence gap.
 - Cluster incident, PIR, follow-up, runbook, owner, asset, or meeting evidence
-  by service, theme, owner, and recency. Hydrate highest-risk clusters and
+  by service, theme, owner, and recency. Fetch highest-risk clusters and
   stop when theme, owner signal, and confidence are clear.
 - Separate `working theory`, `confirmed problem`, `mitigation`, and `root
 cause`; require a causal mechanism for root cause and label claims
@@ -55,17 +55,17 @@ cause`; require a causal mechanism for root cause and label claims
   remaining evidence instead of aliases or broad inventories.
 - Read build health from `bitbucket pipeline query`, not per-pipeline `get`;
   raise its default `--limit 15` when needed, state the covered span, and
-  hydrate ranked sets through one batched `get`.
+  fetch ranked sets through one batched `get`.
 
-## Recipe Cards
+## Recipe cards
 
-### Leadership Reliability Review / On-Call Handoff
+### Leadership reliability review / on-call handoff
 
 Load `references/reliability-review.md`. Resolve leader, platform, and window;
 cluster themes, separate cause from mitigation, connect prevention work, and
 rank actions. For handoffs, add a first-hour checklist and escalation map.
 
-### Incident Investigation / Mitigation
+### Incident investigation / mitigation
 
 Use for active, newly mitigated, or pre-PIR incidents. Anchor on the incident,
 then gather responders, symptoms, impact, recent deploys/flags/config,
@@ -75,7 +75,7 @@ See `references/incident-investigation.md`. Output a four-signal matrix,
 hypotheses, confidence, next checks, and mitigation options; never call
 mitigation the root cause without its mechanism.
 
-### Post-Incident Root Cause / Learning
+### Post-Incident root cause / learning
 
 Use after mitigation/recovery when drafting or evaluating a PIR. Pair the
 incident with the PIR, linked docs, final comms, remediation PRs, and actions;
@@ -83,14 +83,14 @@ cover mitigation, causal mechanism, 5-whys, and detection/response gaps. See
 `references/pir-root-cause.md`. Output root cause, contributing factors,
 mitigation-versus-cause, and prioritized actions.
 
-### Assets / Asset Refresh
+### Assets / asset refresh
 
 Build contributors from project/goal/Jira/PR/doc/activity evidence. Inspect
 Assets schema/type metadata before AQL; join people through discovered user-like
 attributes such as `Calculated user`. Rank contribution centrality plus asset
 risk and report confidence/gaps. See `references/assets.md`.
 
-### Capacity / Staffing / Meetings
+### Capacity / staffing / meetings
 
 For staffing, resolve project/topic/org and identify people by related work,
 ownership, review influence, docs, and project/goal involvement; check load
@@ -98,7 +98,7 @@ before recommending. For meetings, query scoped recordings, preview transcripts,
 fetch full transcripts only for central ones, then summarize decisions, actions,
 and gaps.
 
-## Output Shape
+## Output shape
 
 - Lead with severity, urgency, or recommendation, then owner, status, recency,
   impact, confidence, and evidence.
@@ -113,7 +113,7 @@ and gaps.
 
 - Do not fetch every transcript/page body or treat every incident mention as a
   live risk.
-- Do not wait for chat/comments to surface directional pre-PIR hypotheses.
+- Do not wait for chat or comments to label a hypothesis before investigating it.
 - Do not call mitigation root cause without a mechanism or treat workflow
   panels, bot comments, or opaque fields as RCA narrative.
 - Do not use keyword matches alone as ownership; cross-check assignee, service

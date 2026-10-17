@@ -281,7 +281,6 @@ test("review card: one panel colour, ruled header and footer, inset document, pr
 	for (const line of lines) assert.equal(visibleWidth(line), 80);
 	const footer = text.at(-1)!;
 	assert.match(footer, /^ {4}a approve {4}⇧S all changes +c copy {3}esc close {3}$/u);
-	// The legend is clickable where it is drawn.
 	const row = lines.length - 1;
 	s.view.handleMouse(mouse("click", footer.indexOf("all changes"), row));
 	assert.deepEqual(s.actions, ["allSummary"]);

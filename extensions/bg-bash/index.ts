@@ -1,9 +1,3 @@
-/**
- * Background Bash: replaces the built-in `bash` tool. Commands that finish within a fixed 10 seconds
- * return exactly as before; slower ones continue as background jobs that the agent can inspect with
- * `job_*` tools and hears about when they exit. `/jobs` (or Alt+J, or a click on the footer
- * indicator) opens the jobs manager.
- */
 import { type ExtensionAPI, type ExtensionContext, type Theme } from "@earendil-works/pi-coding-agent";
 import { Key, truncateToWidth, wrapTextWithAnsi, type Component } from "@earendil-works/pi-tui";
 import { jobTail, JobsBrowser } from "./browser.ts";

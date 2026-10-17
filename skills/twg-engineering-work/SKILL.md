@@ -18,7 +18,7 @@ Run `twg <command>`. On shell `command not found`, use `$HOME/.local/bin/twg`
 tell user to add that directory to PATH. Do not treat auth or command errors as
 PATH failures.
 
-## Use When
+## Use when
 
 - "Which PRs are waiting for my review?"
 - "Where is this API implemented or used?"
@@ -32,7 +32,7 @@ PATH failures.
   this week"
 - "Open bugs/tasks with PRs in flight"
 
-## First Move
+## First move
 
 Resolve the engineering anchor:
 
@@ -47,7 +47,7 @@ Resolve the engineering anchor:
 Provider-native PR commands apply only to their host; Bitbucket
 activity/comment/task commands never apply to GitHub PRs.
 
-## Route Selection
+## Route selection
 
 - Use `../twg-code-review/SKILL.md` only when named or code review requests additional context.
   Exclude ordinary reviews during testing.
@@ -65,9 +65,9 @@ activity/comment/task commands never apply to GitHub PRs.
   notifications), use `twg-status-rollups` plus
   `../twg-status-rollups/references/personal-work-summary.md`.
 
-## Batch The PR Set
+## Batch the PR set
 
-Hydrate a PR set in one call, never one call per PR.
+Fetch a PR set in one call, never one call per PR.
 
 - Reviewers, approvals, age, merge state: one `pull-requests get <pr-url…>`
   covers the whole set. Use PR URLs (`url` in query results); ARIs give
@@ -85,9 +85,9 @@ Hydrate a PR set in one call, never one call per PR.
 - Group IDs by repository. Both accept 25 IDs with shared `--workspace` and
   `--repo`. Use `--agent-fields @compact`; report per-PR errors and `partial`.
 
-## Evidence Policy
+## Evidence policy
 
-- Hydrate PR comments, tasks, pipeline status, and diff only for stale,
+- Fetch PR comments, tasks, pipeline status, and diff only for stale,
   blocked, central, or high-impact PRs.
 - Stop PR rollups once themes, repos/services, owners, and recency are identified.
 - For review status, include age, requested reviewers, comments/tasks, approval
@@ -99,16 +99,16 @@ Hydrate a PR set in one call, never one call per PR.
   from known repos, people, workitems, or search anchors, then answer from what
   succeeded and call out the PR coverage gap.
 
-## Recipe Cards
+## Recipe cards
 
-### Review Queue
+### Review queue
 
 Classify reviewer-scoped PRs: reviewable now (requested, unapproved, unblocked),
 fix-before-review/merge (blocking feedback, tasks or failing CI), already
 reviewed. Rank reviewable first; distinguish pre-merge-only tasks, avoid
 assumed approvals.
 
-### Stale Reviews / Review Bottlenecks
+### Stale reviews / review bottlenecks
 
 Find PRs open or waiting beyond the threshold; group by repo, author, reviewer,
 and stage. Bottleneck patterns: missing reviewer, unresolved tasks, failing CI,
@@ -119,12 +119,12 @@ repeated request-changes, owner unavailable.
 Use workitem context for linked PRs, commits, branches, and repos. Fetch PRs
 only when the user asks for details, status, or next action.
 
-### Repo Contributors / Hot Areas
+### Repo contributors / hot areas
 
 Query PRs/commits for the repo and window; group by files/areas, authors,
 reviewers, and themes. Hot areas rank changed area, frequency, and ownership.
 
-### PR-Based Status Rollup
+### PR-Based status rollup
 
 Resolve org/team first, then collect PRs for members or repos in the window.
 Group into themes and repos/services, and call out gaps where PR-only evidence

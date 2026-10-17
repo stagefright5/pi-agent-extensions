@@ -1,5 +1,5 @@
 /**
- * `pnpm bench:picker` — keystroke, open, and frame budgets on synthetic prompt-like data.
+ * `pnpm bench:picker` measures keystroke, open, and frame times on synthetic prompts.
  * Exits non-zero when a p95 exceeds its budget. Not part of `pnpm test` (timing is machine-bound).
  */
 import { performance } from "node:perf_hooks";

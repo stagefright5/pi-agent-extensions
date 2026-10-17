@@ -74,7 +74,6 @@ export function renderFooter(
 	const left = " ".repeat(Math.min(inset, width)) + (fits ? palette.fg("bashMode", mode) : "");
 	const leftWidth = Math.min(inset, width) + (fits ? visibleWidth(mode) : 0);
 	if (status) {
-		// The lent status line fills the strip: <dir> <mode> <hints> · <statuses> … model · context · cost.
 		const lead = " ".repeat(Math.min(inset, width));
 		const room = width - lead.length - inset;
 		const extras = [mode ? palette.fg("bashMode", mode) : "", center ?? styleHints(hints, palette)];
@@ -95,8 +94,8 @@ export function renderFooter(
 export type StatusLine = (width: number, extras?: readonly string[]) => string;
 
 /**
- * Pull every truecolor foreground toward `background` by `amount` (0–1), keeping each hue, so
- * quiet chrome sits closer to its bar while warning and error colours stay distinguishable.
+ * Blend truecolor foregrounds toward `background` by `amount`, from 0 to 1.
+ * Preserve hues so warning and error colours remain distinguishable.
  * Rows without truecolor sequences (256-color themes) are returned unchanged.
  */
 export function softenForeground(line: string, background: string, amount: number): string {

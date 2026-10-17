@@ -1,8 +1,8 @@
-# Creating and Using Services
+# Creating and using services
 
 Services in Angular are reusable pieces of code that handle data fetching, business logic, or state management that multiple components or other services need to access.
 
-## Creating a Service
+## Creating a service
 
 You can generate a service using the Angular CLI:
 
@@ -41,11 +41,11 @@ Using `@Service` is the recommended approach for most services. It tells Angular
 
 If you don't want to create a singleton of your service, you can set `@Service({autoProvided: false})` and declare the service a `providers` array.
 
-## Injecting a Service
+## Injecting a service
 
 Once a service is created, you can inject it into components, directives, or other services using the `inject()` function.
 
-### Injecting into a Component
+### Injecting into a component
 
 ```ts
 import { Component, inject } from "@angular/core";
@@ -66,7 +66,7 @@ export class Example {
 }
 ```
 
-### Injecting into Another Service
+### Injecting into another service
 
 Services can inject other services in the exact same way.
 
@@ -88,7 +88,7 @@ export class BasicDataStore {
 }
 ```
 
-## Advanced Service Patterns
+## Advanced service patterns
 
 While `@Service` covers most scenarios, you may sometimes need:
 

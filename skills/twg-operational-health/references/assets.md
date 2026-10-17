@@ -2,7 +2,7 @@
 description: Query Assets and CMDB schemas with AQL, including a person and device join, ownership, lifecycle, age, status, and risk.
 ---
 
-# Assets And CMDB Queries
+# Assets and CMDB queries
 
 Use AQL only after inspecting the site's Assets schema, object types, and
 attributes. Names are site-specific.

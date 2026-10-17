@@ -29,7 +29,7 @@
   }
 }
 
-/* And again, so the explicit toggle wins in the other direction. */
+/* Explicit dark mode overrides the OS preference. */
 :root[data-theme="dark"] {
   --ground: #14120f;
   --surface: #1c1a16;
@@ -46,7 +46,7 @@
 
 body {
   margin: 0;
-  /* Explicit, from a token. A transparent body borrows the host's ground. */
+  /* A transparent body would show the host's background. */
   background: var(--ground);
   color: var(--ink);
   font-family: var(--body);

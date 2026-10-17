@@ -18,7 +18,6 @@ Environment files define configuration values that are replaced at build time.
 > **Security note:** Environment files are bundled into the client-side application.
 > They are visible to anyone who can load the page.
 > Never store sensitive information like API keys, secrets, or credentials in environment files.
-> These values can be easily accessed by users.
 
 Generate environment files using the CLI:
 
@@ -60,9 +59,9 @@ If you need a development-mode check, use `isDevMode()` from `@angular/core` ins
 
 ## Runtime configuration (advanced)
 
-In some scenarios, applications need to load configuration at runtime instead of build time.
+Load configuration at runtime when deployment environments need different values.
 
-This allows the same build artifact to be deployed across multiple environments without rebuilding.
+The same build can then run in multiple environments without rebuilding.
 
 A common approach is to load a JSON configuration file from the `assets` folder during application
 initialization.

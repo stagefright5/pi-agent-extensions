@@ -1,8 +1,8 @@
-# Defining Dependency Providers
+# Defining dependency providers
 
 Angular offers automatic and manual ways to provide dependencies to its Dependency Injection (DI) system.
 
-## Automatic Provision
+## Automatic provision
 
 The most common way to provide a service is using `providedIn: 'root'` on an `@Injectable()`.
 
@@ -23,7 +23,7 @@ export const APP_CONFIG = new InjectionToken<AppConfig>("app.config", {
 });
 ```
 
-## Manual Provision
+## Manual provision
 
 You use the `providers` array when a service lacks `providedIn`, when you want a new instance for a specific component, or when configuring runtime values.
 
@@ -55,13 +55,13 @@ You use the `providers` array when a service lacks `providedIn`, when you want a
 export class Example {}
 ```
 
-## Scopes of Providers
+## Scopes of providers
 
 - **Application Bootstrap**: Global singletons. Use for HTTP clients, logging, or app-wide config.
 - **Component/Directive**: Isolated instances. Use for component-specific state or forms. Services are destroyed when the component is destroyed.
 - **Route**: Feature-specific services loaded only with specific routes.
 
-## Library Pattern: `provide*` functions
+## Library pattern: `provide*` functions
 
 Library authors should export functions that return provider arrays to encapsulate configuration:
 

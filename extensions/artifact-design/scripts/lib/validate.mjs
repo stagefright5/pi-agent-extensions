@@ -102,7 +102,7 @@ export function validate(file) {
   for (const { tag, url, kind } of externalRefs(html)) {
     if (isInline(url)) continue;
     if (!/^https?:\/\//i.test(url)) {
-      errors.push(`<${tag}> references "${url}" — not inlined, so it will 404 once published.`);
+      errors.push(`<${tag}> references "${url}". The asset is not inlined and will return 404 after publishing.`);
       continue;
     }
     if (kind === "other" || kind === null) {
@@ -113,7 +113,7 @@ export function validate(file) {
     }
     if (!isAllowed(kind, url)) {
       errors.push(
-        `<${tag}> loads "${url}" — not on the ${kind} allowlist (${ALLOW[kind].join(", ")}). It will be blocked with no visible error.`,
+        `<${tag}> loads "${url}", which is not on the ${kind} allowlist (${ALLOW[kind].join(", ")}). It will be blocked with no visible error.`,
       );
     }
   }
@@ -127,11 +127,11 @@ export function validate(file) {
 
   if (css && !bodyHasBackground(css)) {
     warnings.push(
-      "No explicit background on body — a transparent body borrows the host's ground and inverts in one theme.",
+      "No explicit background on body. A transparent body shows the host's background, which may use the opposite theme.",
     );
   }
   if (!/<title>/i.test(html)) {
-    warnings.push("No <title> — the artifact falls back to its filename in the gallery.");
+    warnings.push("No <title>. The gallery will use the filename.");
   }
 
   return { file, bytes, errors, warnings };
@@ -142,9 +142,9 @@ export function report(result) {
   for (const e of result.errors) console.error(`  error    ${e}`);
   for (const w of result.warnings) console.warn(`  warning  ${w}`);
   if (!result.errors.length && !result.warnings.length) {
-    console.log(`  clean — ${kb}KB, single file, CSP-safe`);
+    console.log(`  clean, ${kb}KB, single file, CSP-safe`);
   } else {
-    console.log(`  ${result.errors.length} error(s), ${result.warnings.length} warning(s) — ${kb}KB`);
+    console.log(`  ${result.errors.length} error(s), ${result.warnings.length} warning(s), ${kb}KB`);
   }
   return result.errors.length === 0;
 }

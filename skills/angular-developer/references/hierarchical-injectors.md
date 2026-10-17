@@ -1,13 +1,13 @@
-# Hierarchical Injectors
+# Hierarchical injectors
 
 Angular's dependency injection system is hierarchical, meaning services can be scoped to different levels of the application.
 
-## Types of Injector Hierarchies
+## Types of injector hierarchies
 
 1. **`EnvironmentInjector` Hierarchy**: Configured via `@Service()`, `@Injectable({ providedIn: 'root' })` or `ApplicationConfig.providers` during bootstrap. These are global singletons.
 2. **`ElementInjector` Hierarchy**: Created implicitly at each DOM element. Configured via the `providers` or `viewProviders` array in `@Component()` or `@Directive()`.
 
-## Resolution Rules
+## Resolution rules
 
 When a dependency is requested, Angular resolves it in two phases:
 
@@ -15,7 +15,7 @@ When a dependency is requested, Angular resolves it in two phases:
 2. If not found, it searches the **`EnvironmentInjector`** tree, starting from the closest environment injector up to the root.
 3. If still not found, it throws an error (unless marked optional).
 
-## Resolution Modifiers
+## Resolution modifiers
 
 You can alter how Angular searches for a dependency using the options object in `inject()`:
 

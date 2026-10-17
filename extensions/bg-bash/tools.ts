@@ -1,10 +1,3 @@
-/**
- * The `bash` override and the `job_*` companion tools.
- *
- * `bash` reuses pi's built-in definition (renderers, streaming, truncation, temp files, PI_* env)
- * and only swaps its process backend: commands that finish within 10 seconds return exactly as
- * before; slower ones keep running as background jobs.
- */
 import { access } from "node:fs/promises";
 import {
 	createBashToolDefinition,
@@ -218,7 +211,6 @@ function jobInfo(job: Job): JobInfo {
 	};
 }
 
-/** One line per job: `j3 exited 0 · 42s · pid 123 · npm test`. */
 export function jobLine(job: Job): string {
 	const state =
 		job.state === "running"
@@ -231,7 +223,6 @@ export function jobLine(job: Job): string {
 	return `${job.id} ${state} · ${formatDuration(job.elapsedMs())} · pid ${job.pid ?? "?"} · ${job.command.replace(/\s+/gu, " ").trim()}`;
 }
 
-/** A text result plus its `structuredContent` (which every tool with an output schema sets). */
 function reply(text: string, structured: object, isError = false): AgentToolResult<undefined> {
 	return {
 		content: [{ type: "text", text }],

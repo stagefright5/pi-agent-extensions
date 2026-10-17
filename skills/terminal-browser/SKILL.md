@@ -1,6 +1,6 @@
 ---
 name: terminal-browser
-description: A real browser running inside the terminal. It splits the human's terminal pane automatically, so you can show a website side by side with the conversation, render HTML to visualize something, and drive whatever tab is open — snapshot, click, fill, eval — with the `terminal-browser action` subcommand.
+description: Open websites and local HTML in a terminal pane beside the conversation. Inspect and control the active tab with terminal-browser action commands for snapshots, clicks, form input, and JavaScript evaluation.
 ---
 
 `terminal-browser open <url>` puts a browser in a terminal pane. On its own it

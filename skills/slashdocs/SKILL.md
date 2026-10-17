@@ -9,8 +9,8 @@ slashdocs was formerly named aidocs. Treat an aidocs URL, document, or command
 as a slashdocs one: old aidocs links still work, and the `aidocs` CLI is now
 `slashdocs`.
 
-Use this skill for **any slashdocs-related task**. If the user mentions slashdocs or
-points at a slashdocs asset, use the `slashdocs` CLI to inspect or act on it. If given a slashdocs document URL, don't try to curl or web fetch it. Use the slashdocs cli.
+Use `slashdocs` to inspect or act on slashdocs assets, including document URLs.
+Do not use curl or web fetch for those URLs.
 
 ## First rule: read the guidelines before authoring
 

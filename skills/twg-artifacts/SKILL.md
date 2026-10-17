@@ -39,7 +39,7 @@ may restrict them.
 
 Pass `--description <text>` with a concise summary of the file's actual
 content. This description is indexed to improve artifact search. When the user
-does not provide one, derive it from the content you created or inspected—not
+does not provide one, derive it from the content you created or inspected, not
 only from its filename or media type. Do not invent content you have not read.
 
 ## Choose access for creation

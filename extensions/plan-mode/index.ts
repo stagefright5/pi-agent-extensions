@@ -1,4 +1,3 @@
-/** Evidence-guided planning with session-scoped, cancellable review UI. */
 import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { createUsageTracker } from "@stagefright5/pi-extension-utils";
 import { restorePlanState, STATE_TYPE } from "./state.ts";
@@ -232,8 +231,8 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			? "Summary of all plan changes"
 			: `Changes · iteration ${versions.length - 1} → ${versions.length}`;
 		const prompt = allChanges
-			? `Summarize ALL changes across these ${versions.length} plan iterations. What evolved, was added, removed, or restructured? Be concise and use markdown.\n\n${versions.map((plan, i) => `### Version ${i + 1}\n${plan}`).join("\n\n---\n\n")}`
-			: `Summarize the changes between these two plan versions. What was added, removed, or modified? Be concise and use markdown.\n\n### Previous Version\n${versions.at(-2)}\n\n### Current Version\n${versions.at(-1)}`;
+			? `Summarize additions, removals, and revisions across all ${versions.length} plan iterations. Use concise Markdown.\n\n${versions.map((plan, i) => `### Version ${i + 1}\n${plan}`).join("\n\n---\n\n")}`
+			: `Summarize additions, removals, and revisions between these two plan versions. Use concise Markdown.\n\n### Previous version\n${versions.at(-2)}\n\n### Current version\n${versions.at(-1)}`;
 		const accounting = usage;
 		const summary = await withLoader(ctx, `Generating ${title.toLowerCase()}…`, signal, (requestSignal) =>
 			accounting.track(
@@ -415,7 +414,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			title: Type.String({ description: "Short descriptive title for the plan" }),
 			plan: Type.String({
 				description:
-					"Full markdown plan covering outcome, evidence, impact, assumptions, implementation phases, validation, and material risks; include compatibility and rollout/backout when relevant.",
+					"Full Markdown plan covering outcome, evidence, impact, assumptions, implementation phases, validation, and risks. Include compatibility, rollout, and backout when relevant.",
 			}),
 		}),
 		async execute(_toolCallId, params, signal, _onUpdate, ctx) {
@@ -458,8 +457,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			const head =
 				theme.fg("toolTitle", theme.bold("plan_output ")) +
 				theme.fg("muted", plain(args.title || "Untitled", 60));
-			// The model streams the whole plan as one tool argument, which can take a minute. Show it
-			// growing so the row never looks stuck.
+			// Show progress while the model streams the plan argument.
 			const progress = context?.argsComplete === false ? planProgress(args.plan) : undefined;
 			return new Text(progress ? head + "\n" + theme.fg("dim", plain(progress, 100)) : head, 0, 0);
 		},

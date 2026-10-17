@@ -8,7 +8,7 @@ description: >
 
 # twg-confluence
 
-Use with root `twg` for Confluence-focused work. Live help owns command grammar.
+Use with root `twg` for Confluence-focused work. Use live help for command syntax.
 
 ## CLI launcher fallback
 
@@ -17,7 +17,7 @@ Run `twg <command>`. On shell `command not found`, use `$HOME/.local/bin/twg`
 tell user to add that directory to PATH. Do not treat auth or command errors as
 PATH failures.
 
-## First Route
+## First route
 
 | Intent                           | Route                                                                                      |
 | -------------------------------- | ------------------------------------------------------------------------------------------ |
@@ -26,7 +26,7 @@ PATH failures.
 | Exact Confluence filtering       | Confluence search with CQL                                                                 |
 | Date-filtered page/blogpost list | `confluence search query --cql` with `lastmodified`; `content list` has no date filter     |
 | Fuzzy page/topic discovery       | Cross-product search, then native get                                                      |
-| Create or update content         | Unified `confluence content` surface                                                       |
+| Create or update content         | `confluence content` commands                                                              |
 | Space metadata/lifecycle         | `confluence space`                                                                         |
 | Hierarchy                        | `confluence tree`                                                                          |
 | Export                           | Word returns a download directly; PDF requires export-status polling                       |
@@ -34,7 +34,7 @@ PATH failures.
 Use `twg help describe "<exact path>"` before an unfamiliar or consequential
 mutation.
 
-## Confluence Semantics
+## Confluence semantics
 
 [Pagination](references/pagination.md).
 
@@ -62,7 +62,7 @@ mutation.
   reading. Read source first; include values, labels, narrative, and
   visualization instructions in the prompt. "This page" is not enough.
 
-## Safe Authoring And Editing
+## Safe authoring and editing
 
 - Treat user authorization and CLI confirmation as separate checks for archive,
   trash, and purge. Passing `--yes` is an execution preflight, not evidence the

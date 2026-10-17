@@ -35,7 +35,7 @@ const searcher = new Searcher(index, { limit: 200, boost: (id) => recency(index.
 const { ids, total } = searcher.search("auth tests");
 ```
 
-`Searcher` narrows incrementally: when a query only extends its last word or adds a word, it rescores just the previous survivors for just the changed word, resumes the fuzzy scan where the shorter word stopped, and skips exact fuzzy scores for items that cannot reach the top results. `searchAsync` yields between slices on very large indexes and drops superseded searches. `FilterState` turns declared filter groups (options OR within a group, AND across groups, optionally exclusive) into a cached item mask.
+`Searcher` reuses results when a query extends its last word or adds a word. It rescores only the previous matches, and only for the changed word. Fuzzy scans resume where the shorter word stopped. Items that cannot reach the top results skip exact fuzzy scoring. `searchAsync` yields between slices on very large indexes and drops superseded searches. `FilterState` turns declared filter groups (options OR within a group, AND across groups, optionally exclusive) into a cached item mask.
 
 ## Picker
 

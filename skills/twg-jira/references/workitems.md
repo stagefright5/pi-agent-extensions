@@ -2,9 +2,9 @@
 description: Read and mutate Jira workitems, comments, links, watchers, attachments, fields, change history, and relationships.
 ---
 
-# Jira Workitems
+# Jira workitems
 
-Use this reference after `twg-jira` has selected the Jira workitem surface.
+Use this reference for Jira workitem commands selected by `twg-jira`.
 Inspect live help for the exact command contract.
 
 ## Reads

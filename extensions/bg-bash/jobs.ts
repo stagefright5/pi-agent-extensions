@@ -74,7 +74,6 @@ export class TailRing {
 			this.startsAtLine = dropped[dropped.length - 1] === 0x0a;
 		}
 		if (this.size > this.cap) {
-			// A single oversized chunk: keep only its end.
 			const only = this.chunks[0]!;
 			const cut = only.length - this.cap;
 			this.chunks[0] = only.subarray(cut);
@@ -111,7 +110,7 @@ export function cleanOutput(text: string): string {
 		.replace(CONTROLS, "");
 }
 
-/** Last `lines` lines of `text` (ignoring one trailing newline). */
+/** Ignore one trailing newline when counting lines. */
 export function lastLines(text: string, lines: number): string {
 	const trimmed = text.endsWith("\n") ? text.slice(0, -1) : text;
 	if (lines <= 0) return "";

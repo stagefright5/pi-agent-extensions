@@ -1,8 +1,8 @@
-# Data Resolvers
+# Data resolvers
 
-Data resolvers fetch data before a route activates, ensuring components have the necessary data upon rendering.
+Data resolvers fetch data before a route activates, so components have it when they render.
 
-## Creating a Resolver
+## Creating a resolver
 
 Implement the `ResolveFn` type.
 
@@ -14,7 +14,7 @@ export const userResolver: ResolveFn<User> = (route, state) => {
 };
 ```
 
-## Configuring the Route
+## Configuring the route
 
 Add the resolver under the `resolve` key.
 
@@ -28,9 +28,9 @@ Add the resolver under the `resolve` key.
 }
 ```
 
-## Accessing Resolved Data
+## Accessing resolved data
 
-### 1. Via `ActivatedRoute` (Traditional)
+### 1. Via `ActivatedRoute` (traditional)
 
 ```ts
 private readonly route = inject(ActivatedRoute);
@@ -38,7 +38,7 @@ protected readonly data = toSignal(this.route.data);
 protected readonly user = computed(() => this.data().user);
 ```
 
-### 2. Via Component Inputs (Modern)
+### 2. Via component inputs (modern)
 
 Enable `withComponentInputBinding()` in `provideRouter` to pass resolved data directly to `@Input` or `input()`.
 
@@ -50,7 +50,7 @@ provideRouter(routes, withComponentInputBinding());
 user = input.required<User>();
 ```
 
-## Error Handling
+## Error handling
 
 Navigation is blocked if a resolver fails.
 
@@ -61,7 +61,7 @@ Navigation is blocked if a resolver fails.
 return userService.get(id).pipe(catchError(() => of(new RedirectCommand(router.parseUrl("/error")))));
 ```
 
-## Best Practices
+## Best practices
 
-- **Keep it lightweight**: Fetch only critical data.
-- **Provide feedback**: Listen to router events to show a global loading bar during navigation, as the UI stays on the old page until the resolver finishes.
+- Fetch only data needed to render the route.
+- Show a loading bar using router events. The old page remains visible until the resolver finishes.

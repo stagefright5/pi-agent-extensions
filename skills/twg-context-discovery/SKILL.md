@@ -18,17 +18,17 @@ Run `twg <command>`. On shell `command not found`, use `$HOME/.local/bin/twg`
 tell user to add that directory to PATH. Do not treat auth or command errors as
 PATH failures.
 
-## First Move
+## First move
 
 Resolve the anchor before widening:
 
 - Stable key, URL, or ARI: use directly when the family is clear.
-- Named project/service: retain qualifiers; resolve/hydrate and verify
+- Named project/service: retain qualifiers; resolve/fetch and verify
   identity before synthesis. Use an alias/successor only with source evidence;
   report missing named evidence as a scoped gap. Broad or ambiguous topics may
   explore plausible scopes.
 - Fuzzy topic/name: classify scope; compare plausible anchors before ranking,
-  hydrating only those whose evidence can resolve the scope. Keep the set small,
+  fetching only those whose evidence can resolve the scope. Keep the set small,
   but do not use a fixed anchor count when a material ambiguity remains.
 - Multiple same-kind anchors: batch them in one context call when supported.
 - Unknown command shape: inspect focused help before calling data.
@@ -47,7 +47,7 @@ For ownership, expertise, approval authority, leadership reach-outs, or
 escalation, load `../twg-responsibility-routing/SKILL.md`. Return here only
 when that workflow needs relationship or dependency expansion.
 
-## Route Selection
+## Route selection
 
 - Person anchors: load `../twg/references/USER-IDENTIFIERS.md` for context,
   collaborators, reporting peers, and activity routes. Check live help for 3P
@@ -66,15 +66,15 @@ when that workflow needs relationship or dependency expansion.
   unavailable.
 - For restart, handoff, or OOO catch-up, load
   `../twg-status-rollups/references/personal-work-summary.md` and follow its
-  restart guidance. Infer priority across connected evidence and hydrate only
+  restart guidance. Infer priority across connected evidence and fetch only
   anchors that change the user's next action.
-- Dependency map and page/topic prompts need hydrated anchors before broad search is
+- Dependency map and page/topic prompts need retrieved anchors before broad search is
   evidence. Map broad subdomains before assigning owners/experts.
-- Raw graph-query/debugging surfaces are not the default dependency-map route.
+- Raw graph-query and debugging commands are not the default dependency-map route.
   Use them only when the user explicitly asks for that query language or typed
   commands cannot express the required edge.
 
-## Evidence Policy
+## Evidence policy
 
 Use inline or compact output first. Fetch central candidates' fields, owner,
 status, body, comments, URLs, and context edges. Escalate to full output or
@@ -82,10 +82,10 @@ targeted native follow-ups only for material evidence or coverage gaps within
 the established scope. Do not stop at a numeric count while such a gap remains.
 Treat third-party URLs as nodes and retain relationship direction.
 
-## Expansion Rules
+## Expansion rules
 
 - Expand by relationship role, not raw count.
-- Hydrate parent, epic, inbound peer, blocker, consumer, central page, external
+- Fetch parent, epic, inbound peer, blocker, consumer, central page, external
   design, PR, commit, branch, assignee, reporter, contributor, and reviewer
   signals when they change direction, risk, ownership, or next action.
 - Fetch known older links directly by URL, key, ID, or ARI instead of widening
@@ -98,7 +98,7 @@ Treat third-party URLs as nodes and retain relationship direction.
   can close the material gap.
 - If a context or graph-backed command returns the same backend/coverage error
   twice, do not keep probing adjacent graph paths. Record the coverage gap and
-  continue with product-native hydrated evidence.
+  continue with product-native retrieved evidence.
 - Stop when the next candidate would not add new entities, links, contributors,
   teams, decisions, ownership, risk, or next action.
 
@@ -112,7 +112,7 @@ only when it clarifies a multi-entity map.
 
 ## Anti-Patterns
 
-- Do not stop at search results without hydrating anchors.
+- Do not stop at search results without fetching anchors.
 - Do not treat `stdout_shape` as a complete entity or URL inventory.
 - Do not skip peer expansion for graph/dependency prompts because peers look
   "Done".

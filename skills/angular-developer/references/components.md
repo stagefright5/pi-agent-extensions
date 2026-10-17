@@ -1,8 +1,8 @@
 # Components
 
-Angular components are the fundamental building blocks of an application. Each component consists of a TypeScript class with behaviors, an HTML template, and a CSS selector.
+An Angular component has a TypeScript class, an HTML template, and a CSS selector.
 
-## Component Definition
+## Component definition
 
 Use the `@Component` decorator to define a component's metadata.
 
@@ -26,7 +26,7 @@ export class Profile {
 }
 ```
 
-## Metadata Options
+## Metadata options
 
 - `selector`: The CSS selector that identifies this component in templates.
 - `template`: Inline HTML template (preferred for small templates).
@@ -35,7 +35,7 @@ export class Profile {
 - `styleUrl` / `styleUrls`: Path(s) to external CSS file(s).
 - `imports`: Lists the components, directives, or pipes used in this component's template.
 
-## Using Components
+## Using components
 
 To use a component, add it to the `imports` array of the consuming component and use its selector in the template.
 
@@ -48,11 +48,11 @@ To use a component, add it to the `imports` array of the consuming component and
 export class App {}
 ```
 
-## Template Control Flow
+## Template control flow
 
 Angular uses built-in blocks for conditional rendering and loops.
 
-### Conditional Rendering (`@if`)
+### Conditional rendering (`@if`)
 
 Use `@if` to conditionally show content. You can include `@else if` and `@else` blocks.
 
@@ -90,7 +90,7 @@ The `@for` block iterates over collections. The `track` expression is **required
 
 **Implicit Variables**: `$index`, `$count`, `$first`, `$last`, `$even`, `$odd`.
 
-### Switching Content (`@switch`)
+### Switching content (`@switch`)
 
 The `@switch` block renders content based on a value. It uses strict equality (`===`) and has **no fallthrough**.
 
@@ -108,7 +108,7 @@ The `@switch` block renders content based on a value. It uses strict equality (`
 added }
 ```
 
-## Core Concepts
+## Core concepts
 
 - **Host Element**: The DOM element that matches the component's selector.
 - **View**: The DOM rendered by the component's template inside the host element.

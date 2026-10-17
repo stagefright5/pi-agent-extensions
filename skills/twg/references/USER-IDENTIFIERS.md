@@ -2,7 +2,7 @@
 description: Mixed-identity manager chains, direct reports, reporting peers, and exact actor identifiers for work, docs, meetings, and videos. Third-party user conversations/mentions, collaborator boundaries, and partial person documents pagination.
 ---
 
-# User Identifiers And Hierarchy Handoffs
+# User identifiers and hierarchy handoffs
 
 Resolve once; retain returned IDs, site, and time window. Replace placeholders
 with returned values. Check focused `twg help describe "<command>"` for availability.
@@ -59,8 +59,8 @@ twg work query --scope user --identifier '<manager-identifier>' --activity all -
 
 | Returned evidence                        | Say                                                | Do not infer                               |
 | ---------------------------------------- | -------------------------------------------------- | ------------------------------------------ |
-| Null profile, manager identifier present | “No 1P profile returned”; query the identity       | No 1P account exists; identity unqueryable |
-| Document relationship + update date      | “Document updated; personal activity date unknown” | Personal activity date, authorship, impact |
+| Null profile, manager identifier present | "No 1P profile returned"; query the identity       | No 1P account exists; identity unqueryable |
+| Document relationship + update date      | "Document updated; personal activity date unknown" | Personal activity date, authorship, impact |
 
 Empty 1P facets or `org-tree` ancestors do not exclude a 3P manager; check `user manager`.
 
@@ -119,7 +119,7 @@ Chain depth defaults to 1; `data.truncated: true` means more levels, not
 incomplete actor sets. Reports/peers cap at 25 logical people. Overflow,
 ambiguity, cycles, or incomplete scans fail closed; never shrink the roster to bypass them.
 
-## Exact Actor Sets
+## Exact actor sets
 
 Pass one logical person's complete `actorIdentifiers[].ari` set in one call:
 
@@ -134,7 +134,7 @@ twg docs query --actor-identifier '<actor-ari-1>' --actor-identifier '<actor-ari
 - Never combine with `--identifier`, `--account-id`, `--assignee`, `--participant`,
   topic search, or `--include-viewed`. Unsupported on context, collaborators, and artifact get.
 
-## Partial Results
+## Partial results
 
 `docs query` without `--first` scans pages automatically. Manual pagination
 (`--first`) and partial scans include `data.pageInfo`; complete automatic scans omit it.
@@ -148,7 +148,7 @@ twg docs query --actor-identifier '<actor-ari-1>' --actor-identifier '<actor-ari
 | Docs manual page: `data.pageInfo.hasNextPage: false`, no partial signal       | No further pages for this query                                                                                     |
 | Docs partial/truncated scan                                                   | Follow `meta.failures` recovery guidance; resume only with a returned safe cursor                                   |
 | Missing pagination metadata in manual mode or an unknown contract             | Pagination completeness unverified; do not invent a terminal page                                                   |
-| Empty/partial/access-limited results                                          | Describe scope and gaps, not “this person did no work”                                                              |
+| Empty/partial/access-limited results                                          | Describe scope and gaps, not "this person did no work"                                                              |
 
 ```bash
 twg docs query --identifier '<person-ari>' --since 14d --site '<site>' -o json
@@ -162,7 +162,7 @@ Work defaults to authored activity; use `--activity all` for broader coverage.
 Other people's viewed history is unavailable. Attribute roles from returned
 relationships; counts do not prove impact.
 
-## Context And Collaborators
+## Context and collaborators
 
 Check `context user` help for 3P support; absence is a capability gap, not permission to coerce an AAID.
 

@@ -17,12 +17,12 @@ Run `twg <command>`. On shell `command not found`, use `$HOME/.local/bin/twg`
 tell user to add that directory to PATH. Do not treat auth or command errors as
 PATH failures.
 
-## Use When
+## Use when
 
 - Personal/team/org work summaries, standups, handoffs, or appraisals.
 - Project/goal/topic status, leadership readouts, bottlenecks, or launch readiness.
 
-## First Move
+## First move
 
 Resolve the person/roster or project/topic anchor. Preserve the requested window;
 otherwise state a bounded default. Personal summaries: one year maximum.
@@ -31,7 +31,7 @@ Resolve "my manager's work" with `user manager --identifier <requester-aaid>`,
 then `references/personal-work-summary.md`. Empty `org-tree` ancestors do not
 exclude a 3P manager.
 
-## Tree Routing Matrix
+## Tree routing matrix
 
 Load `../twg/references/USER-IDENTIFIERS.md` for supported selectors.
 Mixed-identity reporting: `user manager-chain`, `user direct-reports --identifier`,
@@ -41,9 +41,9 @@ separately; tree rollups remain first-party scoped.
 - `pr-tree`: PR-only org activity.
 - `org-tree`: 1P hierarchy/roster, not delivery evidence.
 - `workitem-tree`: Jira-only org activity.
-- `work-tree`: multi-surface org activity.
+- `work-tree`: org activity across products.
 
-## Fast Path: PR-Based Leadership Rollup
+## Fast path: pr-based leadership rollup
 
 1. Preserve scope/window. Split merged/open queries: `--state merged` with `--since`
    filters merge time; `--state open` with `--since` filters update time, not creation.
@@ -55,7 +55,7 @@ separately; tree rollups remain first-party scoped.
    repo or theme evidence, and synthesize at manager/team level.
    Do not issue per-person queries to populate groups; add one targeted PR
    follow-up only when a material theme lacks proof.
-5. Add one secondary surface only for a named gap.
+5. Add one secondary source only for a named gap.
 
 Target 2-4 calls. Missing nested evidence in compact output: read saved full
 `stdout.json`; do not re-root/refetch branches already present there.
@@ -76,11 +76,11 @@ Before answering, run a local JSON calculation on the saved full responses:
   consistently in headings and prose; disclose discrepancies rather than guessing.
   Volume establishes neither leadership nor momentum.
 
-## Evidence Policy
+## Evidence policy
 
 - Match evidence to the requested scope; open PRs are not shipped work.
 - Filter server-side by status/date/owner/tag when supported; rank broad lists,
-  reuse fields, hydrate missing evidence.
+  reuse fields, fetch missing evidence.
 - Batch ranked reads with `goals get`, `projects get`, `focus-areas get`,
   `jira workitem get`, or `pull-requests get`.
 - Read Confluence page bodies with `confluence content get`, not `docs get`.
@@ -88,39 +88,39 @@ Before answering, run a local JSON calculation on the saved full responses:
 - Stop when evidence is sufficient. After two identical backend failures, stop
   that path and report the gap.
 
-## Recipe Cards
+## Recipe cards
 
-### Short-Window Personal Update / Standup
+### Short-Window personal update / standup
 
 Load `references/personal-work-summary.md` for personal updates, standups, and
 catch-ups. Preserve person, project, and window; separate delivery, review,
 coordination, and evidence gaps.
 
-### Team Or Org Leadership Readout
+### Team or org leadership readout
 
 Resolve the first-party org-tree; state directory coverage gaps without
 recursively walking the org.
 Org projects: `twg projects query --scope org
---include-inferred` (`[Paid: Enriched]`). Group results; hydrate outliers
+--include-inferred` (`[Paid: Enriched]`). Group results; fetch outliers
 affecting momentum, blockers, or ownership.
 
-### Project Or Goal Status
+### Project or goal status
 
 Fetch the native project/goal first, with owner, state, update, links, dates,
-and recency. Hydrate only risk, progress, or dependency evidence.
+and recency. Fetch only risk, progress, or dependency evidence.
 
-### Decision Readiness / Go-No-Go
+### Decision readiness / go-no-go
 
 Load `references/decision-readiness.md`. Resolve the native project or decision anchor;
 bound scope by explicit links. Identify gates; give a recommendation with
 confidence, gaps, and change conditions. Do not infer owners.
 
-### Topic Status
+### Topic status
 
 Resolve/search once, select central project, goal, page, or workitem anchors,
-then hydrate those before broad work/activity queries.
+then fetch those before broad work/activity queries.
 
-### Appraisal / Performance Evidence
+### Appraisal / performance evidence
 
 Resolve person and horizon. Separate delivery, review, collaboration,
 docs/strategy, project/goal impact, and stakeholder signals. Avoid count-only

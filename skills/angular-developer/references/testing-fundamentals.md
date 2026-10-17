@@ -1,10 +1,10 @@
-# Testing Fundamentals
+# Testing fundamentals
 
-This guide covers the fundamental principles and practices for writing unit tests in this repository, which uses Vitest as the test runner.
+Use Vitest for these unit tests.
 
-## Core Philosophy: Zoneless & Async-First
+## Core philosophy: zoneless & async-first
 
-This project follows a modern, zoneless testing approach. State changes schedule updates asynchronously, and tests must account for this.
+Zoneless state changes schedule asynchronous updates. Wait for them before asserting.
 
 **Do NOT** use `fixture.detectChanges()` to manually trigger updates.
 **ALWAYS** use the "Act, Wait, Assert" pattern:
@@ -13,7 +13,7 @@ This project follows a modern, zoneless testing approach. State changes schedule
 2.  **Wait:** Use `await fixture.whenStable()` to allow the framework to process the scheduled update and render the changes.
 3.  **Assert:** Verify the outcome.
 
-### Basic Test Structure Example
+### Basic test structure example
 
 ```ts
 import { ComponentFixture, TestBed } from "@angular/core/testing";

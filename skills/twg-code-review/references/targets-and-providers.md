@@ -2,7 +2,7 @@
 description: Target selection, fixed review snapshots, and provider read rules.
 ---
 
-# Code review — targets and providers
+# Code review targets and providers
 
 ## Resolution
 

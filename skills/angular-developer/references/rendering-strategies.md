@@ -1,8 +1,8 @@
-# Rendering Strategies
+# Rendering strategies
 
 Angular supports multiple rendering strategies to optimize for SEO, performance, and interactivity.
 
-## 1. Client-Side Rendering (CSR)
+## 1. Client-Side rendering (CSR)
 
 **Default Strategy.** Content is rendered entirely in the browser.
 
@@ -10,7 +10,7 @@ Angular supports multiple rendering strategies to optimize for SEO, performance,
 - **Pros**: Simplest to configure, low server cost.
 - **Cons**: Poor SEO, slower initial content visibility (must wait for JS).
 
-## 2. Static Site Generation (SSG / Prerendering)
+## 2. Static site generation (SSG / prerendering)
 
 Content is pre-rendered into static HTML files at **build time**.
 
@@ -18,7 +18,7 @@ Content is pre-rendered into static HTML files at **build time**.
 - **Pros**: Fastest initial load, excellent SEO, CDN-friendly.
 - **Cons**: Requires rebuild for content updates, not for user-specific data.
 
-## 3. Server-Side Rendering (SSR)
+## 3. Server-Side rendering (SSR)
 
 Content is rendered on the server for the **initial request**. Subsequent navigations happen client-side (SPA style).
 
@@ -34,7 +34,7 @@ Hydration is the process of making server-rendered HTML interactive in the brows
 - **Incremental Hydration**: (Advanced) Parts become interactive as needed using `@defer` blocks.
 - **Event Replay**: Captures and replays user events that happened before hydration finished.
 
-## Decision Matrix
+## Decision matrix
 
 | Requirement                     | Strategy             |
 | :------------------------------ | :------------------- |

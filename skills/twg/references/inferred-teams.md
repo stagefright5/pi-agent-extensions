@@ -2,7 +2,7 @@
 description: Guidance for inferred teams.
 ---
 
-# Inferred Teams
+# Inferred teams
 
 Default teams commands return canonical TeamV2 teams. Use inferred teams only when
 the user explicitly asks for inferred teams, project/space-backed teams, or gives

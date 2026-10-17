@@ -2,7 +2,7 @@
 description: Detect duplicate Jira issues across a bounded scope with semantic comparison and explicit stopping rules.
 ---
 
-# Jira Duplicate Detection
+# Jira duplicate detection
 
 Use this decision policy with existing TWG capabilities. It does not replace
 JQL querying, `jira workitem similar`, or native workitem reads.
@@ -15,7 +15,7 @@ scope. Base the decision on semantic meaning, not an exact text match. Search
 in both creation time directions by default. Apply a created time filter only
 when the user requests one.
 
-## Safety Boundary
+## Safety boundary
 
 This detection phase is read only. Do not mutate Jira. Do not create, edit,
 transition, comment, link, or delete Jira work while detecting duplicates.
@@ -25,7 +25,7 @@ They can expose an existing duplicate decision and invalidate an independent
 comparison. Judge only from summary, description, created time, project, issue
 type, status, and other metadata that does not reveal issue relationships.
 
-## Candidate Scope
+## Candidate scope
 
 Do not restrict candidates by created time unless the user asks for a date or
 directional filter. A newer issue can reveal that an older target is a
@@ -36,7 +36,7 @@ When the user requests a directional search, apply that filter after semantic
 retrieval or include it in JQL when it reduces the requested scope. Round
 minute-level JQL cutoffs consistently when the user supplies a time boundary.
 
-## Duplicate Meaning
+## Duplicate meaning
 
 A duplicate describes essentially the same underlying issue, request, need, or
 event. Wording, detail, and the split between summary and description may
@@ -52,7 +52,7 @@ fields.
 For human written bugs, requests, service desk work, and accessibility
 findings, time distance alone does not prevent a duplicate decision.
 
-## Target Comparison
+## Target comparison
 
 Read the target with the native Jira workitem read. Do not request or inspect
 comments or issue links. Record its created time, project, issue type, summary,
@@ -94,7 +94,7 @@ For a mirrored alert, identify a bracketed Jira key in the summary. A tracking
 issue that embeds the target key can be a duplicate. A tracking issue that
 embeds a different key cannot.
 
-## Candidate Retrieval
+## Candidate retrieval
 
 Use the existing TWG capabilities within the selected Jira site and the user's
 JQL scope. Confirm exact grammar with live help.
@@ -144,9 +144,9 @@ Do not run a candidate retrieval query whose only purpose is to fetch the
 target key. Direct reads of known candidate keys are hydration calls, not JQL
 retrieval queries.
 
-## Evaluation Gates
+## Evaluation gates
 
-Apply these gates in order to every hydrated candidate.
+Apply these gates in order to every retrieved candidate.
 
 ### Gate 0: self and requested-scope check
 
@@ -179,7 +179,7 @@ likely to be one occurrence when the other identifying details match. Events mor
 than 30 days apart fail without permitted field evidence of the same event or
 root cause.
 
-## Hard False Positive Filters
+## Hard false positive filters
 
 Apply these rules even when semantic similarity is high:
 
@@ -197,7 +197,7 @@ Apply these rules even when semantic similarity is high:
 7. IT requests for different users, teams, or resources are not duplicates
    unless the permitted fields show that one request was submitted twice.
 
-## Confidence and Selection
+## Confidence and selection
 
 Use these ranges:
 
@@ -210,7 +210,7 @@ Use these ranges:
 Select the passing candidate with the highest confidence. When confidence is
 equal, prefer the earliest created candidate, then the lowest numbered key.
 
-Never select a semantic result without hydrating and evaluating it. A hydrated
+Never select a semantic result without fetching and evaluating it. A retrieved
 semantic result that passes Gates 0 through 3 with confidence of at least 0.50
 remains eligible even when it does not reach the early exit threshold. Return
 no duplicate only when every result fails a gate or has confidence below 0.50.

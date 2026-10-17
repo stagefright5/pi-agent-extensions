@@ -2,7 +2,7 @@
 description: Use Teamwork Graph to find company context that can change the review.
 ---
 
-# Code review — relevant company context
+# Company context for code review
 
 After the initial diff inspection, identify questions the repository cannot
 answer: intended behavior, external API contracts, dependent systems, ownership,

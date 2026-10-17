@@ -12,7 +12,7 @@ import { createPicker, type FilterGroup, type Picker } from "@stagefright5/pi-pi
 import { cleanOutput, formatDuration, lastLines, type Job, type JobManager } from "./jobs.ts";
 import { LogView } from "./log-view.ts";
 
-/** The panel fits its jobs, keeps room for a useful preview, and never exceeds half the terminal. */
+/** Fit the jobs and preview within half the terminal height. */
 const PANEL_HEIGHT = { fit: true, max: 0.5, min: 14 } as const;
 const PREVIEW_LINES = 300;
 const PREVIEW_BYTES = 32 * 1024;
@@ -268,7 +268,6 @@ export class JobsBrowser implements Component, Focusable {
 		this.options.tui.requestRender();
 	}
 
-	/** The log view uses the panel's maximum height. */
 	private overlayHeight(): number {
 		return Math.max(8, Math.floor(this.options.tui.terminal.rows * PANEL_HEIGHT.max));
 	}

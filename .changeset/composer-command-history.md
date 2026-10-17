@@ -5,7 +5,7 @@
 
 Keep autocomplete above the bottom-anchored composer while preserving native keyboard navigation, mouse hit testing, and selection styling. Document native symmetric character-cell padding.
 
-Polish composer chrome: half-row padded draft and footer bars with vertically centred text, a colored mode rail in the left inset, an empty-draft placeholder, and a darker footer bar with the shell mode and `/ commands  ! shell  @ files` (replaced by `⌃Z undo  ⌃Y redo` after an undo). Redraw autocomplete as its own panel with a visible selection, aligned names, scope-tag-free word-boundary descriptions, and a position/key legend. Fix the black cell Pi's exit leaves where the cursor was.
+Update the composer layout with half-row padded draft and footer bars with vertically centred text, a colored mode rail in the left inset, an empty-draft placeholder, and a darker footer bar with the shell mode and `/ commands  ! shell  @ files` (replaced by `⌃Z undo  ⌃Y redo` after an undo). Redraw autocomplete as its own panel with a visible selection, aligned names, scope-tag-free word-boundary descriptions, and a position/key legend. Preserve the composer background when Pi clears the cursor cell on exit.
 
 Make fullscreen composer selection copy only draft source text, never the visual inset, soft-wrap breaks, chrome, or cursor. Support drag, double-click word, and triple-click line selection, and honor `fullscreenCopyOnSelect`.
 

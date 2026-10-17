@@ -1,8 +1,8 @@
-# Async Reactivity with `resource`
+# Async reactivity with `resource`
 
 A `Resource` incorporates asynchronous data fetching into Angular's signal-based reactivity. It executes an async loader function whenever its dependencies change, exposing the status and result as synchronous signals.
 
-## Basic Usage
+## Basic usage
 
 The `resource` function accepts an options object with two main properties:
 
@@ -39,11 +39,11 @@ export class UserProfile {
 }
 ```
 
-## Aborting Requests
+## Aborting requests
 
 If the `params` signal changes while a previous loader is still running, the `Resource` will attempt to abort the outstanding request using the provided `abortSignal`. **Always pass `abortSignal` to your `fetch` calls.**
 
-## Reloading Data
+## Reloading data
 
 You can imperatively force the resource to re-run the loader without the params changing by calling `.reload()`.
 
@@ -51,7 +51,7 @@ You can imperatively force the resource to re-run the loader without the params 
 this.userResource.reload();
 ```
 
-## Resource Status Signals
+## Resource status signals
 
 The `Resource` object provides several signals to read its current state:
 
@@ -61,7 +61,7 @@ The `Resource` object provides several signals to read its current state:
 - `error()`: The error thrown by the loader, or `undefined`.
 - `status()`: A string constant representing the exact state (`'idle'`, `'loading'`, `'resolved'`, `'error'`, `'reloading'`, `'local'`).
 
-## Local Mutation
+## Local mutation
 
 You can optimistically update the resource's value directly. This changes the status to `'local'`.
 
@@ -69,6 +69,6 @@ You can optimistically update the resource's value directly. This changes the st
 this.userResource.value.set({ name: "Optimistic Update" });
 ```
 
-## Reactive Data Fetching with `httpResource`
+## Reactive data fetching with `httpResource`
 
-If you are using Angular's `HttpClient`, prefer using `httpResource`. It is a specialized wrapper that leverages the Angular HTTP stack (including interceptors) while providing the same signal-based resource API.
+With Angular's `HttpClient`, prefer `httpResource`. It uses the Angular HTTP stack, including interceptors, with the signal-based resource API.

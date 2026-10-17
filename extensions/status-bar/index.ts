@@ -1,13 +1,3 @@
-/**
- * Compact Status Bar Extension
- *
- * Replaces pi's multi-line built-in footer with one line:
- *   cwd · branch · extension statuses       model · thinking · context · cost
- *
- * Statuses registered with `registerStatusAction` are clickable, and Alt+S moves keyboard focus
- * onto them (←/→ move, Enter opens, Esc leaves).
- */
-
 import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import { isKeyRelease, Key, matchesKey, type TUI, type TuiMouseEvent } from "@earendil-works/pi-tui";
 import { homedir } from "node:os";

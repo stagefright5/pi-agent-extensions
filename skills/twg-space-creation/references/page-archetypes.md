@@ -1,29 +1,28 @@
 ---
-description: Choose useful Confluence content types and compose rich pages, databases, whiteboards, and links according to the job each space area performs.
+description: Choose useful Confluence content types and compose pages, databases, whiteboards, and links according to the job each space area performs.
 ---
 
-# Page archetypes and rich composition
+# Page types and composition
 
 Load while turning a blueprint into the composition map. This decides **what
 belongs together**; live `body-formats` guidance decides exact syntax.
 
 ## Select content by job
 
-- **Page/live doc** — explain, orient, decide, teach, or synthesize.
-- **Folder** — group navigation with no narrative job.
-- **Database** — repeatedly add, filter, assign, or review records with a stable
-  schema.
-- **Whiteboard** — understand flows, journeys, dependencies, clusters, or
-  workshop input spatially.
-- **Smart link/embed** — keep an external system canonical in context.
-- **Attachment** — preserve a bounded artifact whose fidelity matters.
+- Use a page or live doc to explain, teach, record decisions, or summarize sources.
+- Use a folder to group navigation without explanatory content.
+- Use a database for records with a stable schema that people repeatedly add,
+  filter, assign, or review.
+- Use a whiteboard to map flows, dependencies, groups, or workshop input.
+- Use a smart link or embed when an external system remains the source of truth.
+- Use an attachment when the original file must remain intact.
 
 A database or whiteboard normally has an owning page for purpose, scope,
 maintenance, and interpretation. Skip it when a page section or table suffices.
 
 ## Composition recipes
 
-### Home / Start Here
+### Home / start here
 
 Route each audience's next action with purpose, ownership, current state,
 workflow navigation, canonical links, and contribution guidance. Avoid a
@@ -98,7 +97,7 @@ meeting notes.
 
 ## Quality gate
 
-A rich scaffold may contain meaningful prompts, starter tables, status/owner
+A starting structure may contain prompts, starter tables, status/owner
 placeholders, canonical links, and repeatable templates without fabricating
 facts. Remove any artifact that cannot answer:
 

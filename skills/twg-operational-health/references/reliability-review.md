@@ -2,7 +2,7 @@
 description: Build a bounded leadership reliability review from representative JSM incidents, PIRs, ownership, and prevention evidence.
 ---
 
-# Leadership Reliability Review
+# Leadership reliability review
 
 Resolve platform and window. For a current open-incident handoff, query
 `twg jsm incident query --jql 'issuetype = "[System] Incident" AND statusCategory != Done ORDER BY updated DESC' --limit 20`
@@ -30,7 +30,7 @@ work. Absence from JSM alone is not proof of no incident evidence. These are
 bounded fallbacks, not permission to substitute a tenant-wide search corpus.
 
 Treat incident and PIR results as the primary corpus. Pair linked records,
-cluster materially distinct themes, and hydrate only representative records
+cluster materially distinct themes, and fetch only representative records
 needed to establish impact, mitigation, causal confidence, recurrence, and
 prevention status. Use `org-tree` once after services or owners are known when
 people data is available. Query docs, Jira work, code, collaboration, or

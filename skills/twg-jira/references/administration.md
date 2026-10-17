@@ -2,7 +2,7 @@
 description: Manage Jira fields, contexts, screens, schemes, workflows, priorities, issue types, components, versions, filters, dashboards, and boards.
 ---
 
-# Jira Administration
+# Jira administration
 
 Keep Jira configuration separate from workitem data.
 

@@ -27,7 +27,7 @@ python3 "$session_dir/execute-approved-cleanup.py" --approval "$approval_id"
 
 The helper checks identity, path overlaps, open files, saved choices, and relevant Git or duplicate evidence. It moves through same-volume renames or `git worktree move`, then verifies each result. It records blocked paths and refuses to replay an approval that already has a journal. Read a failed journal before deciding how to recover.
 
-The website reads progress from journals matched by `approvalId`. Mark a move verified only after checking the destination and absent source. Celebrate only when every approved path is verified. Report blocked paths plainly and leave the rest recoverable.
+The website reads progress from journals matched by `approvalId`. Mark a move verified only after checking the destination and absent source. Report completion only when every approved path is verified. Report blocked paths plainly and leave the rest recoverable.
 
 ## Maintain the package
 

@@ -2,7 +2,7 @@
 description: User permission, single-comment posting, duplicate checks, and re-review behavior.
 ---
 
-# Code review — posting
+# Posting a code review
 
 Load only after the user requests or authorizes posting. Normal review and
 artifact rendering do not require this reference.

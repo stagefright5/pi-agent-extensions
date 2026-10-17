@@ -2,7 +2,7 @@
 description: Find and prioritize Jira workitems with JQL, project, assignee, sprint, status, type, priority, labels, and time filters.
 ---
 
-# Jira Querying
+# Jira querying
 
 Use the Jira-native workitem search when the target is definitely Jira and the
 user has fuzzy text rather than structured filters:
@@ -28,7 +28,7 @@ Guidance:
 
 - When the user gives a Jira key or URL, read that workitem natively first. If
   only a title or fuzzy description is provided, search produces candidate
-  keys; hydrate the selected key natively before treating its fields or status
+  keys; fetch the selected key natively before treating its fields or status
   as authoritative. Do not replace an explicit workitem with a similarly named
   result.
 - Use `jira workitem search` for Jira-only fuzzy text. Use
@@ -39,7 +39,7 @@ Guidance:
 - Use board/backlog commands when the user identifies a concrete board and its
   backlog order matters.
 - Use `rovo search --app jira` only when semantic Rovo discovery is wanted;
-  hydrate selected Jira keys with `jira workitem get`.
+  fetch selected Jira keys with `jira workitem get`.
 - Similarity and search ranking nominate candidates; they do not prove a
   duplicate, blocker, relationship, ownership, or current workflow state.
   Verify the requested relationship or formal status from the native workitem

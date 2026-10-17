@@ -1,8 +1,8 @@
-# Angular CLI Guide for Agents
+# Angular CLI guide for agents
 
 The Angular CLI (`ng`) is the primary tool for managing an Angular workspace. Always prefer CLI commands over manual file creation or generic `npm` commands when modifying project structure or adding Angular-specific dependencies.
 
-## 1. Managing Dependencies
+## 1. Managing dependencies
 
 **ALWAYS use `ng add` for Angular libraries** instead of `npm install`. `ng add` installs the package AND runs initialization schematics (e.g., configuring `angular.json`, updating root providers).
 
@@ -18,9 +18,9 @@ To update the application and its dependencies (which automatically runs code mi
 ng update @angular/core@<latest or specific version> @angular/cli<latest or specific version>
 ```
 
-## 2. Generating Code (`ng generate` or `ng g`)
+## 2. Generating code (`ng generate` or `ng g`)
 
-Always use the CLI to generate code to ensure it adheres to Angular standards and updates necessary configuration files automatically.
+Use the CLI to generate code and update the required configuration files.
 
 | Target       | Command               | Notes                                                                                          |
 | :----------- | :-------------------- | :--------------------------------------------------------------------------------------------- |
@@ -33,7 +33,7 @@ Always use the CLI to generate code to ensure it adheres to Angular standards an
 
 _Note: There is no command to generate a single route definition. Generate a component, then manually add it to the `Routes` array in `app.routes.ts`._
 
-## 3. Development Server & Proxying
+## 3. Development server & proxying
 
 Start the local development server with hot-module replacement (HMR):
 
@@ -41,7 +41,7 @@ Start the local development server with hot-module replacement (HMR):
 ng serve
 ```
 
-### Backend API Proxying
+### Backend API proxying
 
 To proxy API requests during development (e.g., rerouting `/api` to a local Node server):
 
@@ -59,7 +59,7 @@ To proxy API requests during development (e.g., rerouting `/api` to a local Node
    }
    ```
 
-## 4. Building the Application
+## 4. Building the application
 
 Compile the application into an output directory (default: `dist/<project-name>/browser`). Modern Angular uses the `@angular/build:application` builder (esbuild-based).
 

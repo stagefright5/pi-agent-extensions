@@ -1,10 +1,10 @@
-# Dependent State with `linkedSignal`
+# Dependent state with `linkedSignal`
 
-The `linkedSignal` function lets you create writable state that is intrinsically linked to some other state. It is perfect for state that needs a default value derived from an input or another signal, but can still be independently modified by the user.
+`linkedSignal` creates writable state with a default derived from an input or another signal. Users can override that value.
 
 If the source state changes, the `linkedSignal` resets to a new computed value.
 
-## Basic Usage
+## Basic usage
 
 When you only need to recompute based on a source, pass a computation function. `linkedSignal` works like `computed`, but the resulting signal is writable (you can call `.set()` or `.update()` on it).
 
@@ -26,7 +26,7 @@ export class ShippingMethodPicker {
 }
 ```
 
-## Advanced Usage: Accounting for Previous State
+## Advanced usage: accounting for previous state
 
 Sometimes, when the source state changes, you want to preserve the user's manual selection if it is still valid. To do this, use the object syntax providing `source` and `computation`.
 

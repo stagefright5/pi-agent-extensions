@@ -1,8 +1,8 @@
-# Route Transition Animations
+# Route transition animations
 
 Angular Router supports the browser's **View Transitions API** for smooth visual transitions between routes.
 
-## Enabling View Transitions
+## Enabling view transitions
 
 Add `withViewTransitions()` to your router configuration.
 
@@ -12,7 +12,7 @@ provideRouter(routes, withViewTransitions());
 
 This is a **progressive enhancement**. In browsers that don't support the API, the router will still work but without the transition animation.
 
-## How it Works
+## How it works
 
 1. Browser takes a screenshot of the old state.
 2. Router updates the DOM (activates new component).
@@ -35,7 +35,7 @@ Use the `::view-transition-old()` and `::view-transition-new()` pseudo-elements.
 }
 ```
 
-## Advanced Control
+## Advanced control
 
 Use `onViewTransitionCreated` to skip transitions or customize behavior based on the navigation context.
 
@@ -50,7 +50,7 @@ withViewTransitions({
 });
 ```
 
-## Best Practices
+## Best practices
 
 - **Global Styles**: Always define transition animations in `styles.css` to avoid view encapsulation issues.
 - **View Transition Names**: Assign unique `view-transition-name` to elements that should transition smoothly across routes (e.g., a header image).

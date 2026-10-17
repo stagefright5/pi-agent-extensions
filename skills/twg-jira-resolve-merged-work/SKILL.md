@@ -38,11 +38,11 @@ sprint work and nearby PR merge dates.
 ## Workflow
 
 1. Load Jira candidates.
-   - Single/list: hydrate each provided workitem directly.
+   - Single/list: fetch each provided workitem directly.
    - Sprint: `jira sprint workitems query`.
    - Board: board/backlog/sprint commands advertised by live help.
    - Epic or space: JQL-backed `jira workitem query`.
-   - Hydrate key, title, status/category, assignee, updated time, parent,
+   - Fetch key, title, status/category, assignee, updated time, parent,
      subtasks/blockers, and URL.
 
 2. Split the set.
@@ -61,7 +61,7 @@ sprint work and nearby PR merge dates.
 4. Check optional discovery signals.
    - If `rovo list-apps` shows Bitbucket or GitHub connected, use Rovo search
      for keys, titles, PR URLs, branches, and repos. Treat it as discovery until
-     hydrated through TWG/provider/Jira evidence.
+     retrieved through TWG/provider/Jira evidence.
    - If `search-code` is available, search exact keys first, then distinctive
      title terms in discovered repos. Strong hits are branch names, commit text,
      changed files, or symbols; broad fuzzy hits stay weak.

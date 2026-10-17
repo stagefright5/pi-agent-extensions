@@ -13,8 +13,8 @@ Develop in separate source files, then build a single file:
 
 ```
 src/main.js  +  src/style.css  +  index.html
-        ↓  dev — real HMR, CSS swapped without reload
-        ↓  build — vite-plugin-singlefile inlines everything
+        ↓  dev: HMR swaps CSS without reloading
+        ↓  build: vite-plugin-singlefile inlines everything
 dist/artifact.html   ← publish this
 ```
 

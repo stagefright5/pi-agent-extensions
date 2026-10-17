@@ -6,13 +6,13 @@ description: >
   recovery.
 ---
 
-# Incident Investigation And Mitigation
+# Incident investigation and mitigation
 
 Use this reference before a PIR is complete, or when the user asks what is
 happening, who should investigate, how to reproduce, what changed, what is
 affected, or how to mitigate.
 
-## Incident Phase Model
+## Incident phase model
 
 Use industry phase names rather than local shorthand. There is no universal
 `T1`/`T2`/`T3` incident timeline standard that a non-Atlassian reader should be
@@ -25,7 +25,7 @@ expected to know. These are logical phases, not guaranteed timestamps:
 - `Triage and prioritize`: responders assess severity, customer impact, affected
   product/service, urgency, and escalation path.
 - `Investigate and diagnose`: responders reproduce or confirm the problem,
-  narrow hypotheses, and identify likely owner/service/change surfaces.
+  narrow hypotheses, and identify likely owners, services, and changes.
 - `Mitigate or contain`: responders identify and execute the recovery path. This
   may not be root cause.
 - `Resolve and recover`: service is restored, monitored for stability, and
@@ -34,16 +34,15 @@ expected to know. These are logical phases, not guaranteed timestamps:
 The goal is to reduce uncertainty and restore service. Do not wait for perfect
 root cause before proposing mitigations.
 
-## Directional Investigation Mode
+## Directional investigation mode
 
-Run from partial evidence. Incident tickets and Slack threads often contain
-breadcrumbs without explicit RCA labels: a pasted dashboard, a rollback note, a
-feature flag mention, an error phrase, or a responder asking the right owner to
-look. Use those traces to make directional progress.
+Start with the available evidence. Incident tickets and Slack threads may link
+a dashboard, note a rollback or feature flag, quote an error, or name an owner.
+Use these details to choose the next check, even without explicit RCA labels.
 
 Each run should:
 
-- Surface plausible hypotheses even when no source says "confirmed".
+- State plausible hypotheses even when no source says "confirmed".
 - Label each claim as `hint`, `supported`, `confirmed`, or `missing`.
 - Pair each hypothesis with confidence, the next check, and a rerun trigger.
 - Keep weak signals visible without overstating causality.
@@ -56,7 +55,7 @@ field`, `responder observation`, `change correlation`, `observability signal`,
 `topology/impact evidence`, `historical similarity`, `post-incident review`, or
 `post-incident action item`.
 
-## First Pass
+## First pass
 
 Start from the incident key, alert, service, customer, team, or time window.
 Resolve the user's incident-management system, site/cloud/workspace, and issue
@@ -68,15 +67,15 @@ When the evidence is strong, proceed and state the inferred anchor with its
 source. Ask the user only when evidence is weak or conflicting, such as a bare
 issue key with no site, multiple plausible sites, a project key reused across
 tenants, or a site-specific severity field that cannot be discovered from a
-hydrated candidate. Do not guess a default.
+retrieved candidate. Do not guess a default.
 
-Use live help for the current command shape before hydrating incident records
+Use live help for the current command shape before fetching incident records
 or querying by severity. For JSM-backed incidents, inspect `twg help jsm
 incident`; for Jira-backed incident records, inspect `twg help jira workitem
 get` or `twg help jira workitem query`.
 
 For severity-scoped analysis, do not use Jira `priority` as a proxy for
-incident severity unless the project explicitly defines it that way. Hydrate a
+incident severity unless the project explicitly defines it that way. Fetch a
 candidate incident first, discover the severity field label or metadata, then
 apply a project/site-specific query only after the field is known.
 
@@ -85,7 +84,7 @@ affected products, faulty service, support links, responders, and linked
 post-incident review or action records. Use context only after the incident
 anchor is selected.
 
-## Sparse Anchor Expansion
+## Sparse anchor expansion
 
 Treat the incident workitem as the anchor, not the complete investigation. At
 incident time the ticket may only contain symptoms, paging comments, or a rough
@@ -110,11 +109,11 @@ run bounded follow-up probes before synthesizing:
 
 For each family, record whether it was `probed`, `not available`, or `needs
 user/tool context`. Do not over-fetch. One good probe per missing family is
-often enough to move the investigation forward. If a surface is unavailable or
+often enough to move the investigation forward. If a source is unavailable or
 returns no evidence, keep the gap visible with the next best query or owner to
 ask.
 
-## Investigation Surfaces
+## Investigation sources
 
 Collect a bounded evidence set across the four RCA signal families:
 
@@ -132,10 +131,10 @@ Collect a bounded evidence set across the four RCA signal families:
   incidents/post-incident reviews with matching service, symptom, change class,
   alert, error message, or affected product.
 
-Avoid broad cross-product inventory. Add a surface only when it can change
+Avoid broad cross-product inventory. Add a source only when it can change
 severity, ownership, reproduction, mitigation, or next action.
 
-## Four-Signal Evidence Matrix
+## Four-Signal evidence matrix
 
 Produce a compact matrix before the theory table. Use it even when some
 dimensions are sparse:
@@ -150,7 +149,7 @@ dimensions are sparse:
 Do not require all four dimensions before advising responders. Missing
 dimensions become targeted next checks.
 
-## Working Theories
+## Working theories
 
 Maintain a theory table. Each row should include:
 
@@ -172,7 +171,7 @@ Examples of good active-incident hypotheses:
 - Data or bootstrap drift dropped/misrouted events; targeted replay/backfill may
   mitigate.
 
-## Mitigation Is Not Root Cause
+## Mitigation is not root cause
 
 Classify the recovery action separately:
 
@@ -190,7 +189,7 @@ Turning off a feature flag, rolling back, or scaling out is usually mitigation.
 It is root cause only when the evidence explains why that change caused the
 failure and why the mitigation removes the causal mechanism.
 
-## Output Shape
+## Output shape
 
 For an active incident:
 

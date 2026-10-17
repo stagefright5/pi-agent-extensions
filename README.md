@@ -96,7 +96,7 @@ If the same package is already loaded through the global symlink or npm, disable
 
 ## Tests and package validation
 
-Strictly typecheck production extension sources against the public SDK, check generated indexes, test the packaging tooling, and run every package's Node test script through the Vite+ task runner:
+Typecheck extension sources against the public SDK, check generated indexes, test the packaging scripts, and run every package's Node tests:
 
 ```bash
 vp run test
@@ -135,8 +135,8 @@ For an interactive Pi smoke test, start Pi normally through the development syml
 
 `scripts/package-tools.mjs` maintains two kinds of generated output:
 
-- **Tracked indexes:** this package table and installation list, the root Pi manifest, and marked installation sections in package READMEs. These stay tracked so a fresh checkout works without a build.
-- **Ignored distribution directories:** `.tmp/publish/<package>/`, containing runtime source/resources, a copied root `LICENSE`, a complete npm manifest, and a README with generated installation instructions and repository URLs.
+- Tracked indexes include this package table, installation lists, the root Pi manifest, and marked installation sections in package READMEs. A fresh checkout needs no build.
+- Ignored distribution directories under `.tmp/publish/<package>/` contain runtime source and resources, the root `LICENSE`, an npm manifest, and a README with installation instructions and repository URLs.
 
 The packaging integration tests require `pnpm` and `tar` on `PATH`. They pack all packages in a temporary workspace and inspect the tarballs without contacting a registry.
 
@@ -148,7 +148,7 @@ vp run packages:stage  # Check indexes and regenerate all distribution directori
 
 Source manifests retain names, versions, descriptions, module type, package-specific keywords, dependencies, local Pi resources, and development scripts. `packageTools.title` and `packageTools.interface` supply catalogue labels. License and repository defaults come from the root manifest; `pi-package` and extension/skill keywords are derived from each package's Pi resources. Publication access and the branch used in README repository links come from the Changesets configuration.
 
-The shared publication policy includes root JavaScript/TypeScript source, `README.md`, `CHANGELOG.md` when present, and `SKILL.md` when present. Skill packages additionally include `references/`, `scripts/`, and `template/`. Tests, dependencies, build output, and hidden files (except template `.gitignore` files) are excluded. Package-local `packageTools.include` and `packageTools.exclude` arrays accept explicit package-relative file/directory paths for exceptions; exclusions still apply to includes. Symlinks and paths outside the package are rejected.
+The shared publication policy includes root JavaScript/TypeScript source, `README.md`, `CHANGELOG.md` when present, and `SKILL.md` when present. Skill packages also include `references/`, `scripts/`, and `template/`. Tests, dependencies, build output, and hidden files (except template `.gitignore` files) are excluded. Package-local `packageTools.include` and `packageTools.exclude` arrays accept explicit package-relative file/directory paths for exceptions; exclusions still apply to includes. Symlinks and paths outside the package are rejected.
 
 Each package's `publishConfig.directory` points to its generated directory. `linkDirectory: false` keeps workspace dependency links pointed at source. A `prepack` hook refreshes that package's output for direct pnpm packing/publishing; use the root release command for Changesets. Published manifests omit development scripts, development dependencies and generator metadata. Source dependency requirements and release versions remain explicit; unresolved local/catalog runtime dependency references fail staging rather than leaking into npm.
 
@@ -174,8 +174,8 @@ Commit the generated version and changelog changes before publishing. The releas
 The packages run locally or connect to services you configure. Some read or write user data:
 
 - Jenkins CLI Operations connects to the configured Jenkins controller and stores non-secret connection metadata under the platform configuration directory. Credentials remain in the selected auth provider.
-- Plan Mode stores plans and revision history under `~/.pi/plans/`; its optional summaries use the active model provider.
+- Plan Mode stores new plans and revision history under `<agent-dir>/plans/`. Resumed sessions retain their saved path, including older `~/.pi/plans/` directories. Optional summaries use the active model provider.
 - Prompt History Search reads saved Pi sessions across projects into an in-memory index and local persisted index.
-- Provider URL Logger appends endpoint metadata to `<agent-dir>/provider-urls.log` without rotation. History and logging respect `PI_CODING_AGENT_DIR`.
+- Provider URL Logger appends endpoint metadata to `<agent-dir>/provider-urls.log` and rotates it at 1 MiB, keeping one archive. History and logging respect `PI_CODING_AGENT_DIR`.
 
 No package intentionally uploads its own index or log. Normal agent requests and Plan Mode's generated change summaries still use the configured model provider.

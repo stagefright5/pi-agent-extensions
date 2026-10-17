@@ -2,7 +2,7 @@
 description: Find Confluence pages with CQL, exact filters, titles, creators, labels, spaces, and modified dates.
 ---
 
-# Confluence Querying
+# Confluence querying
 
 Use CQL when the target is definitely Confluence and exact constraints are
 needed.

@@ -1,9 +1,9 @@
-# Angular Animations
+# Angular animations
 
 When animating elements in Angular, **first analyze the project's Angular version** in `package.json`.
 For modern applications (**Angular v20.2 and above**), prefer using native CSS with `animate.enter` and `animate.leave`. For older applications, you may need to use the deprecated `@angular/animations` package.
 
-## 1. Native CSS Animations (v20.2+ Recommended)
+## 1. Native CSS animations (v20.2+ recommended)
 
 Modern Angular provides `animate.enter` and `animate.leave` to animate elements as they enter or leave the DOM. They apply CSS classes at the appropriate times.
 
@@ -50,7 +50,7 @@ Use these directly on elements to apply CSS classes during the enter or leave ph
 
 _Note: `animate.leave` may be added to child elements being removed._
 
-### Event Bindings and Third-party Libraries
+### Event bindings and third-party libraries
 
 You can bind to `(animate.enter)` and `(animate.leave)` to call functions or use JS libraries like GSAP.
 
@@ -70,11 +70,9 @@ onLeave(event: AnimationCallbackEvent) {
 }
 ```
 
-## 2. Advanced CSS Animations
+## 2. Advanced CSS animations
 
-CSS offers robust tools for advanced animation sequences.
-
-### Animating State and Styles
+### Animating state and styles
 
 Toggle CSS classes on elements using property binding to trigger transitions.
 
@@ -92,7 +90,7 @@ div.open {
 }
 ```
 
-### Animating Auto Height
+### Animating auto height
 
 You can use `css-grid` to animate to auto height.
 
@@ -110,12 +108,12 @@ You can use `css-grid` to animate to auto height.
 }
 ```
 
-### Staggering and Parallel Animations
+### Staggering and parallel animations
 
 - **Staggering**: Use `animation-delay` or `transition-delay` with different values for items in a list.
 - **Parallel**: Apply multiple animations in the `animation` shorthand (e.g., `animation: rotate 3s, fade-in 2s;`).
 
-### Programmatic Control
+### Programmatic control
 
 Retrieve animations directly using standard Web APIs:
 
@@ -124,7 +122,7 @@ const animations = element.getAnimations();
 animations.forEach((anim) => anim.pause());
 ```
 
-## 3. Legacy Animations DSL (Deprecated)
+## 3. Legacy animations DSL (deprecated)
 
 For older projects (pre v20.2 or where `@angular/animations` is already heavily used), you use the component metadata DSL.
 
@@ -138,7 +136,7 @@ bootstrapApplication(App, {
 });
 ```
 
-### Defining Transitions
+### Defining transitions
 
 ```ts
 import { signal } from "@angular/core";

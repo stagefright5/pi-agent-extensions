@@ -21,8 +21,7 @@ function effective(theme) {
 
 function applyTheme(theme) {
   const root = document.documentElement;
-  // "system" stamps NOTHING. That is the state most viewers are in, and the
-  // state a [data-theme]-only stylesheet renders wrong.
+  // System mode leaves data-theme unset, so styles must also use prefers-color-scheme.
   if (theme === "system") {
     root.removeAttribute("data-theme");
     root.style.colorScheme = "";
@@ -100,12 +99,12 @@ function mount() {
 
 // window.claude is aliased so pages written against the published runtime still run.
 function installAgentStub() {
-  const log = (name, args) => console.info(`[artifact-harness] ${name}()`, ...args, "— stubbed in dev");
+  const log = (name, args) => console.info(`[artifact-harness] ${name}()`, ...args, "stubbed in dev");
 
   const agent = {
     async complete(prompt) {
       log("complete", [prompt]);
-      return "[stub completion — the published runtime answers this]";
+      return "[stub completion, the published runtime supplies the response]";
     },
     async getUser() {
       log("getUser", []);

@@ -8,7 +8,7 @@ Adds `$` skill and prompt-template references and inline extension-command autoc
 
 ## `$` skill and prompt-template references
 
-Skills and prompt templates attach with `$`, like Codex. Type `$` anywhere in the draft, including at the start, to open a menu of loaded skills (by bare name, such as `$angular-developer`) and file-based prompt templates (such as `$review`), labelled `[skill]` or `[prompt]`. Results are fuzzy-filtered and highlighted.
+Attach skills and prompt templates with `$`. Type `$` anywhere in the draft, including at the start, to open a menu of loaded skills (by bare name, such as `$angular-developer`) and file-based prompt templates (such as `$review`), labelled `[skill]` or `[prompt]`. Results are fuzzy-filtered and highlighted.
 
 Use `Enter` or `Tab` to insert the selected reference without submitting the draft, then keep writing or add more:
 
@@ -18,7 +18,7 @@ Implement this with $angular-developer $review
 
 Only names of loaded skills and templates count as references; anything else after `$` (`$HOME`, `$1`, `US$5`, `$review/src`) stays literal text. If a skill and a prompt template share a name, `$name` attaches the skill: the menu entry says so, and submitting warns about the clash.
 
-`/` is for commands only. The start-of-prompt `/` menu no longer lists skills or prompt templates, and the old forms are retired: submitting `/skill:name …`, or a draft that starts with `/template`, is blocked, keeps the draft, and shows a hint such as “Skills attach with $name now. Try $angular-developer”. A `/review` in the middle of a prompt is ordinary text.
+`/` is for commands only. The start-of-prompt `/` menu no longer lists skills or prompt templates, and the old forms are retired: submitting `/skill:name …`, or a draft that starts with `/template`, is blocked, keeps the draft, and shows a hint such as "Skills attach with $name now. Try $angular-developer". A `/review` in the middle of a prompt is ordinary text.
 
 ## Inline extension commands
 
@@ -37,7 +37,7 @@ Pi then dispatches the real extension command. Extension-generated user messages
 
 ## Context references
 
-When a draft is submitted, the extension finds every `$` reference, at the start or anywhere in the text. The model receives **your request first, byte-for-byte unchanged**, followed by a short list of the referenced files to read:
+When a draft is submitted, the extension finds every `$` reference, at the start or anywhere in the text. The model receives your request first, byte-for-byte unchanged, followed by the referenced file paths:
 
 ```text
 Implement this with $angular-developer $review
@@ -58,7 +58,7 @@ Repeated references are listed once. Unknown names and paths such as `$review/sr
 
 The editor is a filled card without horizontal rules or per-line prefixes. The draft surface shares the active theme's `userMessageBg` and `userMessageText` colors with sent user messages; the footer strip and suggestion panel are a shade darker (derived at render time in truecolor, `toolPendingBg`/`selectedBg` otherwise). Native scroll indicators take precedence over decorative labels. The status bar continues to show thinking effort.
 
-Autocomplete appears **above** the composer, so opening, filtering, or closing suggestions does not move the bottom-anchored prompt in fullscreen mode. Suggestions are re-ranked by the shared [Pi Picker](../../packages/pi-picker/README.md) engine (word starts and consecutive letters first; ties keep Pi's order; items only Pi matched stay at the end), and the typed text is highlighted in names and descriptions. The panel draws Pi's native suggestion state: names align with the draft inset, the selected row is highlighted with `› `, descriptions drop Pi's `[u]`/`[p]` scope tags and are cut at word boundaries with `…`, and a final row shows the position (`2/6`) and keys (`↑↓ select  ⇥ complete  esc close`). Keyboard navigation and mouse hit testing stay native; the legend row ignores clicks. If the native list shape changes, the native menu rows are shown instead.
+Autocomplete appears above the composer, so opening, filtering, or closing suggestions does not move the bottom-anchored prompt in fullscreen mode. Suggestions are re-ranked by the shared [Pi Picker](../../packages/pi-picker/README.md) engine (word starts and consecutive letters first; ties keep Pi's order; items only Pi matched stay at the end), and the typed text is highlighted in names and descriptions. The panel draws Pi's native suggestion state: names align with the draft inset, the selected row is highlighted with `› `, descriptions drop Pi's `[u]`/`[p]` scope tags and are cut at word boundaries with `…`, and a final row shows the position (`2/6`) and keys (`↑↓ select  ⇥ complete  esc close`). Keyboard navigation and mouse hit testing stay native; the legend row ignores clicks. If the native list shape changes, the native menu rows are shown instead.
 
 Horizontal spacing uses Pi's native `editorPaddingX` setting, in terminal character cells rather than pixels. Set `"editorPaddingX": 1` in `~/.pi/agent/settings.json` for equal one-cell left/right padding. Padding is visual only and never enters the submitted draft. Pi may draw the end-of-line cursor in the right padding cell. Very narrow terminals clamp padding to fit.
 
@@ -82,13 +82,13 @@ The composer chrome, aligned to the draft inset:
  ~/Work/alpha · main  shell  ⌃Z undo  ⌃Y redo     Claude Opus 5.5 · $4.2   footer bar (one row, darker)
 ```
 
-- **Padding:** one full row in the draft colour above and below the draft keeps it vertically centred; the bar sits directly on the footer, which is exactly one row and the last row on screen. Native scroll or working indicators replace the top padding row and stay readable.
-- **Mode rail:** the one-cell left inset shows `▎` in the theme's `accent` color, or `bashMode` for `!`/`!!` commands, on each draft row (not the padding rows). It needs `editorPaddingX` ≥ 1 and is never part of the draft.
-- **Input hints:** an empty draft shows `/ commands  $ skills  ! shell  @ files` right-aligned in the draft row (dropped from the end on narrow terminals); they disappear on the first keystroke. There is no placeholder prompt text.
-- **Footer bar:** one darker row reading `<dir> <mode> <hints>`: the directory, then `shell` or `shell · no context` for `!`/`!!` drafts, then `⌃Z undo  ⌃Y redo` right after an undo (until you edit again) or the `↓ N more` overflow indicator. Footer text is drawn closer to the footer colour than draft text is to the draft surface (in truecolor themes; hues are kept, so context warnings stay distinguishable).
-- **Status line:** with [Compact Status Bar](../status-bar/README.md) loaded, its line fills the footer: `<dir · branch>  <mode>  <hints> · <extension statuses> … model · context · cost`, and Pi's separate footer row disappears. When space runs out the hints go first, then fields are shortened; the mode label outlives the directory. While a picker, selector, or overlay has focus, the status bar returns to its own row. The two extensions share only a global key (`Symbol.for("@stagefright5/pi-status-line/v1")`); neither imports the other. Clickable statuses (such as Background Bash's jobs indicator) work here too: a click on one runs its action without moving the caret or starting a selection.
+- One full padding row in the draft colour above and below the draft keeps it vertically centred; the bar sits directly on the footer, which is exactly one row and the last row on screen. Native scroll or working indicators replace the top padding row and stay readable.
+- The one-cell mode rail in the left inset shows `▎` in the theme's `accent` color, or `bashMode` for `!`/`!!` commands, on each draft row (not the padding rows). It needs `editorPaddingX` ≥ 1 and is never part of the draft.
+- An empty draft shows `/ commands  $ skills  ! shell  @ files` right-aligned in the draft row (dropped from the end on narrow terminals); they disappear on the first keystroke. There is no placeholder prompt text.
+- The darker footer row reads `<dir> <mode> <hints>`: the directory, then `shell` or `shell · no context` for `!`/`!!` drafts, then `⌃Z undo  ⌃Y redo` right after an undo (until you edit again) or the `↓ N more` overflow indicator. Footer text is drawn closer to the footer colour than draft text is to the draft surface (in truecolor themes; hues are kept, so context warnings stay distinguishable).
+- With [Compact Status Bar](../status-bar/README.md) loaded, its line fills the footer: `<dir · branch>  <mode>  <hints> · <extension statuses> … model · context · cost`, and Pi's separate footer row disappears. When space runs out the hints go first, then fields are shortened; the mode label outlives the directory. While a picker, selector, or overlay has focus, the status bar returns to its own row. The two extensions share only a global key (`Symbol.for("@stagefright5/pi-status-line/v1")`); neither imports the other. Clickable statuses (such as Background Bash's jobs indicator) work here too: a click on one runs its action without moving the caret or starting a selection.
 - Native scroll indicators replace the top or bottom row where content is hidden. Theme changes apply at render time, including with Obsidian Ice.
-- On exit, Pi erases the cursor by writing a plain space; the extension redraws that one cell in the composer color so the printed transcript has no black hole.
+- On exit, Pi erases the cursor by writing a plain space; the extension redraws that one cell in the composer color to preserve the background color in the printed transcript.
 
 ## Slash-command history
 
@@ -123,7 +123,7 @@ Loading several full resources and substituting the whole draft into prompt temp
 
 ## Compatibility and limitations
 
-This extension develops against pi and pi-tui **1.3.0**. The composer uses protected editor-border hooks and a validated native menu-layout shim. Older runtime compatibility is not covered by this version's tests.
+Development and tests use pi and pi-tui 1.3.0. The composer uses protected editor-border hooks and a validated native menu-layout shim. Older runtime compatibility is not covered by this version's tests.
 
 Cursor/paste restoration, history retention, composer-owned selection, above-composer autocomplete placement, inline `/` autocomplete, and Enter selection without submission use compatibility shims because pi-tui does not currently expose complete public APIs for those operations. Private access is isolated in `editor-compat.ts` and runtime-validated rather than asserted through an invented SDK type. If internals change:
 

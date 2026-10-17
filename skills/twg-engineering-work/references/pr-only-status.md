@@ -4,7 +4,7 @@ description: >
   user or repository over a bounded time window.
 ---
 
-# PR-Only Status
+# PR-Only status
 
 Use this reference for PR-only summaries, review queues, and pull-request status
 rollups. For summaries that also include Jira, docs, meetings, planning, or

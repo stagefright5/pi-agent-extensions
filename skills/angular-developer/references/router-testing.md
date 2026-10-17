@@ -1,14 +1,12 @@
 # Testing with the RouterTestingHarness
 
-When testing components that involve routing, it is crucial **not to mock the Router or related services**. Instead, use the `RouterTestingHarness`, which provides a robust and reliable way to test routing logic in an environment that closely mirrors a real application.
+Do not mock the Router or related services in routing tests. Use `RouterTestingHarness` to test the actual route configuration, guards, and resolvers.
 
-Using the harness ensures you are testing the actual router configuration, guards, and resolvers, leading to more meaningful tests.
-
-## Setting Up for Router Testing
+## Setting up for router testing
 
 The `RouterTestingHarness` is the primary tool for testing routing scenarios. You also need to provide your test routes using the `provideRouter` function in your `TestBed` configuration.
 
-### Example Setup
+### Example setup
 
 ```ts
 import { TestBed } from "@angular/core/testing";
@@ -38,16 +36,16 @@ describe("Dashboard Component Routing", () => {
 });
 ```
 
-### Key Concepts
+### Key concepts
 
 1.  **`provideRouter([...])`**: Provide a test-specific routing configuration. This should include the routes necessary for the component-under-test to function correctly.
 2.  **`RouterTestingHarness.create()`**: Asynchronously creates and initializes the harness and performs an initial navigation to the root URL (`/`).
 
-## Writing Router Tests
+## Writing router tests
 
 Once the harness is created, you can use it to drive navigation and make assertions on the state of the router and the activated components.
 
-### Example: Testing Navigation
+### Example: testing navigation
 
 ```ts
 it("should navigate to a hero detail when a hero is selected", async () => {
@@ -79,7 +77,7 @@ it("should get the activated component directly", async () => {
 });
 ```
 
-### Best Practices
+### Best practices
 
 - **Navigate with the Harness:** Always use `harness.navigateByUrl()` to simulate navigation. This method returns a promise that resolves with the instance of the activated component.
 - **Access the Router State:** Use `harness.router` to access the live router instance and assert on its state (e.g., `harness.router.url`).

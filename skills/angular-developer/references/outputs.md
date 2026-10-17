@@ -1,4 +1,4 @@
-# Outputs (Custom Events)
+# Outputs (custom events)
 
 Outputs allow a child component to emit custom events that a parent component can listen to. Angular recommends using the new `output()` function for modern applications.
 
@@ -26,7 +26,7 @@ export class CustomSlider {
 }
 ```
 
-### Usage in Template
+### Usage in template
 
 Bind to the output event using parentheses `()`. If the event emits data, access it using the special `$event` variable.
 
@@ -34,7 +34,7 @@ Bind to the output event using parentheses `()`. If the event emits data, access
 <custom-slider (panelClosed)="savePanelState()" (valueChanged)="logValue($event)" />
 ```
 
-## Configuration Options
+## Configuration options
 
 The `output` function accepts a config object to specify an alias.
 
@@ -47,7 +47,7 @@ export class CustomSlider {
 }
 ```
 
-## Programmatic Subscription
+## Programmatic subscription
 
 When creating components dynamically, you can subscribe to outputs programmatically:
 
@@ -62,7 +62,7 @@ const subscription = componentRef.instance.valueChanged.subscribe((val) => {
 subscription.unsubscribe();
 ```
 
-## Decorator-based Outputs (@Output)
+## Decorator-based outputs (@Output)
 
 The legacy API uses the `@Output()` decorator with an `EventEmitter`. It remains supported but is not recommended for new code.
 
@@ -78,7 +78,7 @@ export class LegacyExample {
 }
 ```
 
-## Best Practices
+## Best practices
 
 - **Prefer `output()`**: Use the function-based `output()` instead of `@Output()` and `EventEmitter`.
 - **Naming**: Use `camelCase` for output names. Avoid prefixing with `on` (e.g., use `valueChanged` instead of `onValueChanged`).

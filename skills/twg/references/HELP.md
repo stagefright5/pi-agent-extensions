@@ -2,13 +2,13 @@
 description: Discover unloaded TWG reference guidance and inspect exact command contracts locally.
 ---
 
-# Help Discovery
+# Help discovery
 
 TWG separates skill discovery from command discovery. Skills explain product
 semantics and workflow strategy. Command help explains exact commands,
 arguments, flags, choices, defaults, and examples.
 
-## Skill Discovery
+## Skill discovery
 
 Agents already receive installed top-level skill names and descriptions.
 Use explicit discovery when the detailed reference inside a product or workflow
@@ -39,7 +39,7 @@ This is content retrieval, not automatic host-agent activation. After selecting
 a skill, use ordinary command help for the rest of the workflow. Rediscover only
 when the user's intent materially changes.
 
-## Primary Flow
+## Primary flow
 
 Use `twg help` directly for commands. Do not extract a help file path from
 stdout. With no arguments it emits the compact YAML command map for routing.
@@ -110,7 +110,7 @@ Use rendered text help only when the user specifically asks for human help:
 twg -o text help describe "jira workitem query"
 ```
 
-## Command Selection Rules
+## Command selection rules
 
 - Keep guidance and command discovery separate: `discover-skills` returns an
   owning skill and selected reference; `twg help <terms>` returns commands.
@@ -125,16 +125,16 @@ twg -o text help describe "jira workitem query"
   project key, resolve that value before executing the command.
 - Keep experimental commands out of parallel batches until help confirms the
   shape.
-- After search/Rovo returns candidates, hydrate selected candidates through the
-  exact executable `get` contract for that surface. Use `query` for filters; do
+- After search/Rovo returns candidates, fetch selected candidates through the
+  exact executable `get` contract for that command. Use `query` for filters; do
   not pass candidate keys to namespace commands.
 - Prefer typed `resolve`, `user`, `org-tree`, `teams`, `work query`, `work search`,
   `projects`, `goals`, `jira`, `confluence`, `docs`, `pull-requests`, and
-  `context` surfaces for ordinary status, org, person, dependency, or context
-  tasks. If typed surfaces are incomplete, state the coverage gap instead of
+  `context` commands for ordinary status, org, person, dependency, or context
+  tasks. If typed commands are incomplete, state the coverage gap instead of
   probing implementation-only schema details.
 
-## Common Discovery Patterns
+## Common discovery patterns
 
 | Need                                         | Discovery path                                                                                                                                                                                      |
 | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -157,10 +157,10 @@ output recipes, selector boundaries, and the distinction between positional
 For org, team, leadership, and dependency synthesis, do not fall back to
 implementation-only exploration just because the prompt says "graph",
 "dependency", or "relationship." Use typed context and product-native hydration
-first; if those surfaces are incomplete, state the coverage gap instead of
+first; if those commands are incomplete, state the coverage gap instead of
 probing implementation-only labels or schema details.
 
-## Compatibility Alias Guard
+## Compatibility alias guard
 
 Compatibility aliases such as `user-search`, `page`, and `issue` may exist to
 rescue stale prompts. Do not use them in examples or plans. Prefer the canonical

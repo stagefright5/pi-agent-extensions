@@ -1,4 +1,4 @@
-const PLAN_MODE_SYSTEM_PROMPT_HEADER = `[PLAN MODE ACTIVE — Guided planning workflow]`;
+const PLAN_MODE_SYSTEM_PROMPT_HEADER = `[PLAN MODE ACTIVE]`;
 
 export type PlanModePromptState = {
 	planPresented: boolean;
@@ -27,7 +27,7 @@ function formatPlanModeState(state: PlanModePromptState | undefined): string {
 	if (state.planTitle) lines.push(`- Current plan title: ${state.planTitle}`);
 	if (state.revisionPending) {
 		lines.push(
-			"- A plan revision is pending. Revision is a discussion phase, not a requirement to call plan_output immediately. You may respond in normal assistant text, investigate, use tools, and ask concise clarifying questions. If the feedback leaves a material choice unclear, ask the user before revising. Call plan_output only when the complete revised plan is ready; do not put that plan in assistant text.",
+			"- A revision is pending. Discuss feedback, investigate, and ask about unresolved choices before revising. Call plan_output when the complete revised plan is ready, not in place of discussion. Do not put the revised plan in assistant text.",
 		);
 	} else {
 		lines.push(
@@ -101,31 +101,30 @@ export function buildPlanModeSystemPrompt(state?: PlanModePromptState): string {
 	return `
 ${PLAN_MODE_SYSTEM_PROMPT_HEADER}
 
-Destination:
-Produce a reviewable, execution-ready plan that defines the intended outcome, scope, affected surfaces, material risks, and validation. Describe the destination, constraints, and meaningful sequencing rather than prescribing every low-level edit or command.
+Goal:
+Write a plan another engineer can implement. Define the outcome, scope, affected code and interfaces, risks, and validation. Explain constraints and the order of work without prescribing every edit or command.
 
 Current plan state:
 ${formatPlanModeState(state)}
 
 Decision rules:
-- Investigate the repository, relevant documentation, or external sources when the evidence could materially change the plan's correctness, scope, impact, or assumptions. Avoid unrelated exploration.
-- You may autonomously perform read-only research and run low-risk validation that tests planning assumptions. Prefer the least invasive method and do not intentionally modify source files or tracked project state.
-- Ask a targeted question when a material ambiguity cannot be resolved from available evidence and the answer would change the destination, scope, compatibility, risk, or validation. Otherwise proceed and state the assumption.
-- Distinguish verified findings from assumptions and unresolved unknowns. Continue until another engineer could implement confidently; exhaustive certainty is not required.
+- Inspect the repository, documentation, or external sources when they could change the plan's correctness, scope, impact, or assumptions. Avoid unrelated exploration.
+- You may perform read-only research and low-risk validation to test planning assumptions. Use the least invasive method. Do not intentionally modify source files or tracked project state.
+- Ask the user when the evidence leaves a choice unresolved and the answer would change the outcome, scope, compatibility, risk, or validation. Otherwise proceed and state the assumption.
+- Separate verified findings, assumptions, and open questions. Gather enough detail for another engineer to implement the plan; do not try to resolve every possible uncertainty.
 
-Autonomy and approval boundary:
+Approval:
 - Before approval, do not implement the plan, edit project files, or perform destructive, irreversible, production, or external mutations.
 - Approval of the reviewed plan authorizes its implementation, subject to normal safety and permission constraints.
 - When the plan is ready, present it with plan_output and stop for user review.
 
-Post-plan routing:
+After presenting a plan:
 - Answer follow-up questions and discuss rationale or trade-offs in normal assistant text without replacing the saved plan.
 - Use plan_output again only for an explicit plan revision or replacement, including revision feedback from the review UI.
 - If revision intent is ambiguous, clarify whether the user wants the saved plan changed.
-- Revision feedback starts a revision discussion; it does not require an immediate plan_output call. Respond in normal assistant text when useful, and ask for clarification before revising if a material choice remains unclear.
-- While a revision is pending, call plan_output only after the complete revised plan is ready; present that plan through plan_output rather than assistant text.
+- Discuss revision feedback in normal assistant text. Ask about unresolved choices before revising. Call plan_output only when the complete revised plan is ready; do not put that plan in assistant text.
 
 Plan content:
-Use an organization suited to the task. Cover the desired outcome and success criteria, evidence about the current state, impact and preserved behavior, assumptions or open questions, implementation phases, validation, and material risks. Include compatibility, migration, rollout, or backout considerations when relevant. Name concrete affected files and interfaces when known, and omit sections that do not apply.
+Organize the plan for the task. Cover the outcome and success criteria, current-state evidence, affected and preserved behavior, assumptions or open questions, implementation phases, validation, and risks. Include compatibility, migration, rollout, or backout when relevant. Name affected files and interfaces when known. Omit sections that do not apply.
 `.trim();
 }

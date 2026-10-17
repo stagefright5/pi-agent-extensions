@@ -1,4 +1,4 @@
-# Side Effects with `effect` and `afterRenderEffect`
+# Side effects with `effect` and `afterRenderEffect`
 
 In Angular, an **effect** is an operation that runs whenever one or more signal values it tracks change.
 
@@ -12,10 +12,9 @@ Effects are intended for syncing signal state to imperative, non-signal APIs.
 - Syncing state to `localStorage` or `sessionStorage`.
 - Performing custom rendering to a `<canvas>` or 3rd-party charting library.
 
-**CRITICAL RULE: DO NOT use effects to propagate state.**
-If you find yourself using `.set()` or `.update()` on a signal _inside_ an effect to keep two signals in sync, you are making a mistake. This causes `ExpressionChangedAfterItHasBeenChecked` errors and infinite loops. **Always use `computed()` or `linkedSignal()` for state derivation.**
+Do not use effects to propagate state. Calling `.set()` or `.update()` inside an effect to synchronize signals can cause `ExpressionChangedAfterItHasBeenChecked` errors or infinite loops. Use `computed()` or `linkedSignal()` to derive state.
 
-## Basic Usage
+## Basic usage
 
 Effects execute asynchronously during the change detection process. They always run at least once.
 
@@ -40,13 +39,13 @@ export class Example {
 }
 ```
 
-## DOM Manipulation with `afterRenderEffect`
+## DOM manipulation with `afterRenderEffect`
 
 Standard `effect` runs _before_ Angular updates the DOM. If you need to manually inspect or modify the DOM based on a signal change (e.g., integrating a 3rd party UI library), use `afterRenderEffect`.
 
 `afterRenderEffect` runs after Angular has finished rendering the DOM.
 
-### Render Phases
+### Render phases
 
 To prevent reflows (forced layout thrashing), `afterRenderEffect` forces you to divide your DOM reads and writes into specific phases.
 

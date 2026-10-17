@@ -2,7 +2,7 @@
 description: Review areas, evidence requirements, severities, outcomes, and test rules.
 ---
 
-# Code review — method and evidence
+# Code review method and evidence
 
 ## Execution
 

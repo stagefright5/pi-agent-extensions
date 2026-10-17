@@ -5,18 +5,18 @@ description: >
   year-bounded summaries across work, code, docs, meetings, and notifications.
 ---
 
-# Personal Work Summary
+# Personal work summary
 
 Use this reference with `twg-status-rollups` for bounded personal or
 person-scoped work summaries. This is workflow guidance, not a `twg work
-summary` command. Compose the summary from existing surfaces, starting with
+summary` command. Compose the summary from existing commands, starting with
 bounded `work query` evidence.
 
 This reference is for person-scoped summaries. For org/team leadership readouts
 based primarily on merged/open PR evidence, use the `pr-tree` fast path in
 `twg-status-rollups` instead.
 
-## Use When
+## Use when
 
 - "Summarize this person's work this week."
 - "What did this person work on in a time window?"
@@ -32,7 +32,7 @@ based primarily on merged/open PR evidence, use the `pr-tree` fast path in
 Use `twg-engineering-work` instead when the user asks only for PR queues, stale
 reviews, review bottlenecks, repo contributors, hot areas, or PR-only status.
 
-## First Move
+## First move
 
 Resolve the subject and time window before querying:
 
@@ -63,18 +63,18 @@ Resolve the subject and time window before querying:
   scalar shell variable because shells can pass the whole selector as one
   argument or lose it across calls.
 - If live help does not advertise subject flags for a follow-up command, omit
-  that command or use hydrated artifacts from the baseline instead of silently
+  that command or use retrieved artifacts from the baseline instead of silently
   querying the operator. Native docs, meetings, and video commands may need
   their own user/account options rather than `--scope`.
 
-## Evidence Plan
+## Evidence plan
 
-Start broad, then hydrate only what changes the answer:
+Start broad, then fetch only what changes the answer:
 
 For personal project discovery, use `twg projects query --scope me --include-inferred`
 (`owner` by default; use `--role contributor` for
 collaborative work). Check `projectType`, `meta.coverage`, and `warnings`;
-hydrate inferred evidence through its Jira or Confluence links.
+fetch inferred evidence through its Jira or Confluence links.
 `[Paid: Enriched]`; may consume Rovo credits.
 
 1. Baseline activity:
@@ -101,10 +101,10 @@ hydrate inferred evidence through its Jira or Confluence links.
    most 25 times per call.
    Inspect the returned inline/compact evidence before opening details; a shape
    or stats summary is not a complete inventory. Each item carries `activityAt`,
-   the timestamp of the relationship that matched the window — use it for
+   the timestamp of the relationship that matched the window. Use it for
    recency and to show why an item is in the window, not `createdAt`. Treat
    per-section limits as a preview, track sections or relationships not covered,
-   and hydrate candidates whose detail could change identity, scope, priority,
+   and fetch candidates whose detail could change identity, scope, priority,
    freshness, decisions, blockers, or next actions. Use supported scoped native
    evidence for a material uncovered gap; do not turn a partial preview into a
    tenant-wide inventory.
@@ -121,10 +121,10 @@ hydrate inferred evidence through its Jira or Confluence links.
    propagate the same exclusive calendar window to PR follow-ups as
    `--updated-since <from> --updated-before <to>`.
 3. PR activity:
-   for selected central PRs only, hydrate provider-native details when a
+   for selected central PRs only, fetch provider-native details when a
    supported route exists. Use Bitbucket PR detail/activity/comment/task commands
    for Bitbucket PRs. For GitHub or other third-party PRs surfaced from exact
-   URLs, ARIs, or existing evidence, hydrate metadata by the TWG GraphPullRequest
+   URLs, ARIs, or existing evidence, fetch metadata by the TWG GraphPullRequest
    ARI when available. Treat that as metadata coverage unless a provider-native
    route or verified TWG activity relationship returns comments, reviews,
    checks, or timeline activity. If detailed PR activity is unavailable for that
@@ -138,7 +138,7 @@ hydrate inferred evidence through its Jira or Confluence links.
    add docs/query or docs/search, meetings/videos, Jira workitem details,
    projects, goals, or context commands only when they explain momentum,
    blockers, decisions, ownership, or stakeholder impact.
-   Follow the per-surface recipes in `../../twg/references/USER-IDENTIFIERS.md`:
+   Follow the per-command recipes in `../../twg/references/USER-IDENTIFIERS.md`:
    artifact queries accept canonical selectors or exact hierarchy actor sets,
    whereas `context user` takes one positional identity and has narrow 3P
    conversation/mention coverage when its installed help advertises 3P support.
@@ -148,10 +148,10 @@ hydrate inferred evidence through its Jira or Confluence links.
    state and recorded commitments, deadlines, risks, or decisions. Absence from
    a recent activity window is not evidence that an active project is irrelevant.
 
-## Short Window And Restart Rules
+## Short window and restart rules
 
 For a standup or short project update, use one bounded account-scoped work
-query for the person, project, and window. Hydrate only a blocker, decision, or
+query for the person, project, and window. Fetch only a blocker, decision, or
 ownership gap that changes today's action. If it finds no qualifying work, make
 at most one project-identity lookup, then stop. Report the person, project,
 window, and relationship scope checked. Do not replace an empty personal result
@@ -159,7 +159,7 @@ with tenant-wide Jira, Confluence, context, or PR inventories, and do not claim
 there was no work when coverage was incomplete.
 
 For restart, OOO catch-up, or handoff, treat counts, returned projects, status,
-and recorded owners as context—not proof of personal priority. Establish
+and recorded owners as context, not proof of personal priority. Establish
 priority from explicit priority, supported commitments or deadlines, risk,
 decisions, and direct execution or discussion evidence. Reviewer activity,
 comment volume, and counts do not override an explicit priority or create a
@@ -178,7 +178,7 @@ another person. For a 3P-only conversation/mention gap, use `context user <3p-ar
 instead, without presenting those relationships as collaboration scores.
 Stop when those claims are supported or a remaining gap is
 unavailable, and disclose incomplete coverage. Do not reopen broad inventories,
-hydrate every PR, force one candidate per source section, or invent a second
+fetch every PR, force one candidate per source section, or invent a second
 workstream with weak support.
 
 Common command shapes when a summary also covers a team:
@@ -214,9 +214,9 @@ Different results across canonical, actor-set, or artifact queries establish
 different observed coverage, not the cause. Report the scopes checked; do not
 attribute a discrepancy to a missing alias without supporting evidence.
 
-## Stop Conditions
+## Stop conditions
 
-- Do not exhaustively hydrate every artifact in a broad window.
+- Do not exhaustively fetch every artifact in a broad window.
 - Stop after the evidence identifies the main themes, blockers, and next
   actions.
 - If the same backend, auth, ACL, or command-contract failure repeats twice,

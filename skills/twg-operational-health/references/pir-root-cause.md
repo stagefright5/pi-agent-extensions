@@ -4,14 +4,14 @@ description: >
   postmortems, causal analysis, 5-why, contributing factors, and action items.
 ---
 
-# PIR Root Cause And Learning
+# PIR root cause and learning
 
 Use this reference after mitigation, or when the user asks to draft/evaluate an
 incident PIR, SEV review, post-incident review, or postmortem; identify root
 cause; run 5-whys; compare against actual PIRs/postmortems; or propose
 P0/P1/P2 action items.
 
-## Post-Incident Learning Model
+## Post-Incident learning model
 
 Use phase names rather than local shorthand. There is no universal
 `T1`/`T2`/`T3` incident timeline standard that a non-Atlassian reader should be
@@ -33,7 +33,7 @@ incident comms, post-incident review, remediation, or equivalent evidence
 explains the causal mechanism. Preserve useful but unresolved branches as
 post-incident review gaps.
 
-## Discovery Sequence
+## Discovery sequence
 
 1. Pair the incident and post-incident review. Verify linkage when it is not
    obvious. Infer site/cloud/workspace from strong evidence before asking:
@@ -42,16 +42,16 @@ post-incident review gaps.
    well-supported and state the source. Ask for the site/cloud/workspace,
    incident key, or review key only when evidence is weak or conflicting, such
    as bare keys with no host, multiple plausible sites, or an unverified linkage.
-2. Use live help for the current command shape before hydrating JSM, Jira, or
+2. Use live help for the current command shape before fetching JSM, Jira, or
    other incident-review records. Do not hard-code product-specific flags in
    the skill.
-3. Hydrate the selected incident/review pair with full fields and comments.
+3. Fetch the selected incident/review pair with full fields and comments.
 4. Discover field labels before interpreting opaque custom field IDs.
 5. Fetch the post-incident document only when fields/comments do not contain
-   enough narrative. Hydrate linked action items and remediation PRs for
+   enough narrative. Fetch linked action items and remediation PRs for
    prevention recommendations.
 
-## Evidence Hierarchy
+## Evidence hierarchy
 
 Prefer evidence in this order:
 
@@ -68,7 +68,7 @@ Approved PIR descriptions may be null. That is normal. Look at full fields,
 comments, linked PIR docs, issue links, and action items before concluding that
 root-cause evidence is missing.
 
-## Mitigation Versus Root Cause
+## Mitigation versus root cause
 
 Always separate:
 
@@ -84,9 +84,9 @@ Mitigation equals root cause only when the mitigation directly removes the
 causal mechanism and the evidence explains why. A feature flag off, rollback,
 or scale-out is usually just the handoff from investigation to PIR analysis.
 
-## 5-Why Frame
+## 5-Why frame
 
-Use 5-why as a scaffold, not a ritual:
+Use these 5-why questions to guide the analysis:
 
 1. Why did customers/service see the symptom?
 2. Why did that component behave that way?
@@ -97,7 +97,7 @@ Use 5-why as a scaffold, not a ritual:
 Stop when the next answer becomes speculative. Mark unresolved branches as PIR
 gaps rather than smoothing them into a false single cause.
 
-## Action Item Design
+## Action item design
 
 Classify actions by purpose and priority:
 

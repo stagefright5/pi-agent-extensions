@@ -2,7 +2,7 @@
 
 ## 0.2.0
 
-### Minor Changes
+### Minor changes
 
 - a24723a: Add named profiles for multiple Jenkins credentials and controllers. Provide one command interface for profile setup, discovery, job inspection, builds, and console output. Preserve existing single-connection configs and script invocations, shorten the skill workflow, and test profile selection and migration without a live controller.
 
@@ -32,7 +32,7 @@
 
 ## 0.1.2
 
-### Patch Changes
+### Patch changes
 
 - 20125b0: Generate package licenses and publication metadata from shared workspace defaults. Publish staged runtime-only packages with generated installation instructions and repository links, while preserving build-free source development. Keep package catalogues and Pi resource indexes synchronized and validate published tarball contents.
 

@@ -1,15 +1,15 @@
-# Route Guards
+# Route guards
 
 Route guards control whether a user can navigate to or leave a route.
 
-## Types of Guards
+## Types of guards
 
 - **`CanActivate`**: Can the user access this route? (e.g., Auth check).
 - **`CanActivateChild`**: Can the user access children of this route?
 - **`CanDeactivate`**: Can the user leave this route? (e.g., Unsaved changes).
 - **`CanMatch`**: Should this route even be considered for matching? (e.g., Feature flags). If it returns `false`, the router continues checking other routes.
 
-## Creating a Guard
+## Creating a guard
 
 Guards are typically functional since Angular 15.
 
@@ -27,7 +27,7 @@ export const authGuard: CanActivateFn = (route, state) => {
 };
 ```
 
-## Applying Guards
+## Applying guards
 
 Add them to the route configuration as an array. They execute in order.
 
@@ -41,12 +41,12 @@ Add them to the route configuration as an array. They execute in order.
 }
 ```
 
-## Return Values
+## Return values
 
 - `boolean`: `true` to allow, `false` to block.
 - `UrlTree` or `RedirectCommand`: Redirect to a different route.
 - `Observable` or `Promise`: Resolves to the above types.
 
-## Security Note
+## Security note
 
 **Client-side guards are NOT a substitute for server-side security.** Always verify permissions on the server.

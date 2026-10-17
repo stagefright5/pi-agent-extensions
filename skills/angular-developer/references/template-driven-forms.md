@@ -1,8 +1,8 @@
-# Template-Driven Forms
+# Template-Driven forms
 
 Template-driven forms use two-way data binding (`[(ngModel)]`) to update the data model in the component as changes are made in the template and vice versa. They are ideal for simple forms and use directives in the HTML template to manage form state and validation.
 
-## Core Directives
+## Core directives
 
 Template-driven forms rely on the `FormsModule` which provides these key directives:
 
@@ -32,9 +32,9 @@ export class UserForm {
 }
 ```
 
-## Building the Form Template
+## Building the form template
 
-### Two-Way Binding with `[(ngModel)]`
+### Two-Way binding with `[(ngModel)]`
 
 Use `[(ngModel)]` on input elements. **Every element using `[(ngModel)]` MUST have a `name` attribute.** Angular uses the `name` attribute to register the control with the parent `NgForm`.
 
@@ -60,7 +60,7 @@ Use `[(ngModel)]` on input elements. **Every element using `[(ngModel)]` MUST ha
 </form>
 ```
 
-## Form and Control State
+## Form and control state
 
 Angular automatically applies CSS classes to controls and forms based on their state:
 
@@ -83,7 +83,7 @@ You can use these classes to provide visual feedback in your CSS:
 }
 ```
 
-## Validation and Error Messages
+## Validation and error messages
 
 To display error messages conditionally, export the `ngModel` directive to a template reference variable (e.g., `#nameCtrl="ngModel"`).
 
@@ -100,12 +100,12 @@ To display error messages conditionally, export the `ngModel` directive to a tem
 }
 ```
 
-## Submitting the Form
+## Submitting the form
 
 1. Use the `(ngSubmit)` event on the `<form>` element.
 2. Bind the submit button's disabled state to the overall form validity using the `NgForm` template reference variable (e.g., `[disabled]="!userForm.form.valid"`).
 
-## Resetting the Form
+## Resetting the form
 
 To programmatically reset the form to its pristine state (clearing values and validation flags), use the `reset()` method on the `NgForm` instance.
 

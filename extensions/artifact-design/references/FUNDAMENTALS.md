@@ -1,74 +1,132 @@
 # Design fundamentals
 
-> Derived verbatim from the `artifact-design` skill bundled with Claude Code 2.1.250.
-> Reproduced for reference; unmodified except for this header. Upstream owns this text.
-> Re-sync: extract the blob at `---\nname: artifact-design` from the Claude Code binary.
+> Adapted from the `artifact-design` skill bundled with Claude Code 2.1.250.
+> Anthropic owns the source text. This version edits its wording for clarity.
+> To compare with upstream, extract the blob at `---\nname: artifact-design` from the Claude Code binary.
 
-Approach this as the design lead at a small studio known for their versatility, giving every client a visual identity pitched at the treatment the task actually calls for. Make deliberate choices about palette, typography, and layout that are specific to this subject, and avoid templated designs.
+Choose colors, typography, and layout for the subject and the task. Do not reuse a generic design unchanged.
 
 ## Read the request first
 
-Calibrate treatment, not whether to design. A doc deserves the same craft as a landing page - what changes is the treatment that craft is delivered in. Format is not part of this read: author HTML, and publish Markdown only when a loaded skill explicitly instructs it - a Markdown publish keeps its filename as its title and takes almost none of the craft below, and is never a way to save time.
+Plans, memos, and demos need typographic hierarchy, consistent spacing, and a coordinated palette. They rarely need a large hero section or elaborate decoration. Landing pages, games, and tools for repeated use may need a more distinctive visual identity.
 
-Many requests call for a more utilitarian treatment: a plan, a memo, a demo. Make it polished: include real typographic hierarchy, considered spacing, and a proper palette, but avoid over-designing. Most pages do not need a flashy, gigantic hero. Keep flourishes tasteful and limited.
+Author HTML. Publish Markdown only when a loaded skill explicitly requires it. Markdown publishing retains the filename as the title and does not support most of the design guidance below. Do not choose it merely to save time.
 
-Some requests call for an editorial treatment: a landing page, a game, an app or tool they'll keep or share.
-
-When unsure: a well-composed page is never the wrong answer; an over-designed visual identity sometimes is.
-
-Fundamentals below apply to everything. The editorial process after that runs only when the read above says so.
+Apply the fundamentals to every artifact. Use the editorial process at the end only when the request calls for it. When unsure, prioritize readable layout over decoration.
 
 ## Fundamentals for every artifact
 
-**Honor what's already there** Look for an existing design system first - CLAUDE.md, a tokens or theme file, existing component styles. When one exists, apply it; everything below fills gaps and never overrides. Precedence is always: the user's own words, then the project's existing system, then your choices.
+### Follow the existing design system
 
-**Ground it in the subject.** If the subject isn't already clear, pin it: one concrete subject, its audience, and the page's single job. The subject's own world - its materials, instruments, vernacular - is where distinctive choices come from. Build with real content throughout, never lorem.
+Check `CLAUDE.md`, token and theme files, and existing component styles. Apply them before making new choices. Follow the user's instructions first, the project's design system second, and this guidance for remaining decisions.
 
-**Pair typefaces** Typography carries the page even when the page isn't about typography. Google Fonts is the one font host the Artifact CSP admits - link it directly (`<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=...&display=swap">`); a face from anywhere else must be inlined as a @font-face data URI or it falls back silently. Either way, declare a real fallback stack. Keep running text near 65 characters wide; set a type scale and stay on it; give headings `text-wrap: balance`, body text room to breathe, and uppercase labels a touch of letter-spacing.
+### Identify the subject and audience
 
-**Load libraries, don't paste them.** When the page genuinely needs a library - React, a charting or highlighting package - load its UMD build from cdnjs (only the script - a library's stylesheet still has to be inlined) with one pinned `<script src="https://cdnjs.cloudflare.com/ajax/libs/...">` placed before the inline script that uses its global, instead of inlining the library's source or hand-writing a stand-in; the Artifact tool's description lists the few other script hosts the CSP admits. The page's own CSS and JS, its images and its data ship with the page. Most pages need no library at all - reach for one only when it carries real weight.
+State the page's subject, intended readers, and purpose. Use relevant terminology and imagery to guide the design. Build with real content, never lorem ipsum.
 
-**Choose neutrals, don't default to them.** A pure mid-grey reads as unconsidered; a grey with a slight hue bias toward the page's accent reads as chosen. Pure white and near-black are fine grounds when they suit the subject - the point is that the neutral was picked, not inherited.
+### Pair typefaces
 
-**Design both themes.** The page renders in the viewer's theme, and the viewer has three states, not two: an explicit choice stamps `data-theme="dark"` / `data-theme="light"` on the root element, and the default "system" setting stamps *nothing* - most viewers see the un-stamped document, where only `prefers-color-scheme` separates light from dark. Structure the CSS token-level for all three: the bare `:root` block defines the complete light palette (for a deliberately dark-first design, swap light and dark consistently through this whole pattern); `@media (prefers-color-scheme: dark)` redefines only the tokens, guarded as `:root:not([data-theme="light"])` so an explicit light choice beats a dark OS; `:root[data-theme="dark"]` redefines them again so the toggle also wins in the other direction. Style components through the tokens, never directly inside a media or `[data-theme]` block - a color whose only definition sits behind `[data-theme]` never applies in the un-stamped state, and the page renders one theme's text on the other theme's ground. Two more rules keep each theme resolving as a set: the artifact composites over a ground the viewer paints in *its* theme, so `body` must set an explicit `background` from a token - a transparent body silently borrows the host's ground; and every element that sets a color takes it from the same token set as the surface behind it, never a literal that only works in one theme. Before publishing, scan the stylesheet for any color declared only inside a media or `[data-theme]` block - that is the classic unreadable-artifact bug. Give the second theme the same care as the first - don't naively invert; keep contrast legible and the accent working on both grounds. A design that deliberately commits to one visual world (a neon arcade screen, a letterpress invitation) may stay single-theme - then skip the media query and stamps entirely but still paint the background and every color explicitly, so the page holds on either host ground; make it a choice, not an omission.
+Choose complementary display and body faces. Google Fonts is the only external font host the Artifact CSP permits. Link it directly:
 
-**Let layout do the spacing.** Lay out sibling groups with flex or grid and `gap`, not per-element margins that silently collapse or double. Wide content - tables, code, diagrams - gets `overflow-x: auto` on its own container so the page body never scrolls sideways. Reach for `font-variant-numeric: tabular-nums` wherever digits line up in columns.
+```html
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=...&display=swap" />
+```
 
-**Avoid AI-generated design** AI-generated design currently clusters around a few looks: warm cream (#F4F1EA) with a serif display and terracotta accent; near-black with a lone acid-green or vermilion pop; broadsheet hairline rules with dense columns; a purple-to-blue gradient hero on white; Inter or Space Grotesk as the "safe" face; emoji as section markers; everything centered; `rounded-lg` everywhere; accent bar/rail on rounded cards. Where the user pins down a visual direction, follow it exactly - their words always win, including when they ask for one of these looks. Where nothing is specified, don't spend that freedom on one of these defaults.
+Inline fonts from other sources as `@font-face` data URIs or they will fall back silently. Always declare a fallback stack.
 
-**Build cleanly** Be cognizant of overlapping elements, cascade collisions, silent font fallbacks; visual bugs hide in the gap between source and output. Close every non-void element, double-quote attributes, give keyboard focus a visible state, respect `prefers-reduced-motion`. For generative or decorative graphics, reach for Canvas or WebGL rather than hand-authoring long SVG path data.
+Keep running text near 65 characters wide. Use a consistent type scale, `text-wrap: balance` on headings, readable body line-height, and slight letter-spacing on uppercase labels.
 
-**CSS rules** When writing the CSS, watch your selector specificities. It is easy to generate classes that cancel each other out - a type-based selector like `.section` fighting an element-based one like `.cta` over padding and margins between sections. Structure the cascade so it doesn't silently undo your spacing.
+### Load libraries only when needed
 
-**Writing the copy** Words are design material, not decoration. Write from the user's side of the screen - name things by what people recognize, not how the system is built (a person manages *notifications*, not *webhook config*). Active voice; a control says exactly what happens ("Publish", then a toast that says "Published"). Errors explain what went wrong and how to fix it - no apologies, no vagueness. Specific beats clever.
+If the page needs React, a charting library, or a syntax highlighter, load a pinned UMD build from cdnjs before the inline script that uses its global. Inline the library's stylesheet. Do not paste its source or write a substitute. The Artifact tool's description lists other permitted script hosts.
 
-**Name the page like a product, not a caption.** The `<title>` is the artifact's name in the gallery and the browser tab, and it sets the reader's first impression of care. Give the page a real name: a short noun phrase, typically two to four words, specific to the subject - or, for a page that exists to answer one question, that question itself, which is then the page's name. Stop at the name - a title that carries its own explainer after a dash or colon reads as generated filler. The name must also identify the page among many: in the gallery it sits beside dozens of other artifacts, and a generic category label that could sit on any of them fails as a name just as surely as an appended explainer. When a candidate title pairs the name with a generic word - a greeting, a category, a page-type label - the name is the half to keep; a trim that drops the identity and keeps the generic word produces exactly the title that could sit on any page. And the rule removes explainers, it does not impose brevity: a multi-word title that already reads as one specific name is finished, and shortening it further only makes it generic. The one-sentence publish `description` is where the explanation belongs; the gallery shows it right under the title.
+Bundle the page's own CSS, JavaScript, images, and data. Most pages need no library.
 
-**Structure is information** Structural devices, numbering, eyebrows, dividers, labels, should encode something true about the content, not decorate it. Many generic designs use numbered markers (01 / 02 / 03), but that's only appropriate if the content actually is a sequence - like a real process or a typed timeline where order carries information the reader needs. Question if choices like numbered markers actually make sense before incorporating them.
+### Choose neutral colors
 
-**When it's a UI, not a document** A dashboard or tool is scanned and operated, not read top-to-bottom, so the craft shifts from typography to information design. Surface the summary before the detail; encode state in form as well as number - a pill, a chip, a severity stripe - so what needs attention reads at a glance. Semantic color (good / warning / critical) is separate from the accent hue and doesn't count as your accent. Give sparklines and charts the same care as type: an area fill, a faint grid, an emphasized endpoint. What's interactive should look interactive.
+Choose neutrals to match the subject and accent color rather than defaulting to mid-gray. A slight hue tint can connect gray backgrounds to the accent. Pure white and near-black are also valid choices.
 
-**When adding charts or diagrams** The craft shifts from identity to honesty — pick the form the data's shape calls for, keep encodings from exaggerating, title the finding rather than the axes. Load the `dataviz` skill for the specifics; this skill continues to govern the page the chart sits in.
+### Support the viewer's theme
 
-## Process
+The viewer has three theme states. Explicit light or dark sets `data-theme="light"` or `data-theme="dark"` on the root element. System mode sets no attribute and uses `prefers-color-scheme`.
 
-Before writing code, sketch a short design plan - a compact token system with color, type, and layout:
-- **Color**: describe the palette as 4-6 named hex values.
-- **Type**: typefaces for 2+ roles - a characterful display face used with restraint, a complementary body face, and a utility face for captions or data if needed.
-- **Layout**: a layout concept in one or two sentences.
+Define theme tokens in this order:
 
-Then build, following the plan and deriving every color and type decision from it.
+1. Put the complete light palette on bare `:root`.
+2. Redefine only tokens under `@media (prefers-color-scheme: dark)`, guarded by `:root:not([data-theme="light"])`. An explicit light choice must override a dark OS preference.
+3. Redefine tokens under `:root[data-theme="dark"]` so explicit dark overrides a light OS preference.
+
+For a dark-first design, swap light and dark consistently throughout this pattern. Style components with tokens, not directly inside media or `[data-theme]` blocks. A color defined only in a theme block is unavailable in the unstamped system state.
+
+Set an explicit `body` background from a token. Otherwise the host's background shows through and may belong to the opposite theme. Every element's colors must use the same token set as its background. Avoid literal colors that work in only one theme.
+
+Before publishing, check for colors defined only in theme blocks. Test contrast and accent colors in both themes; do not merely invert the palette.
+
+An intentionally single-theme design, such as a neon arcade screen or letterpress invitation, may omit the media query and theme attributes. It must still set the background and every color explicitly so it works over either host background.
+
+### Use layout for spacing
+
+Use flex or grid with `gap` for sibling groups instead of margins that can collapse or double. Give tables, code blocks, and diagrams their own `overflow-x: auto` containers. The page body must not scroll sideways. Use `font-variant-numeric: tabular-nums` where digits align in columns.
+
+### Avoid stock generated designs
+
+Unless the user requests them, avoid these repeated defaults:
+
+- Warm cream `#F4F1EA` with a serif display face and terracotta accent.
+- Near-black with one acid-green or vermilion accent.
+- Broadsheet hairline rules and dense columns.
+- Purple-to-blue gradient heroes on white.
+- Inter or Space Grotesk chosen without regard to the subject.
+- Emoji section markers, centered layouts throughout, `rounded-lg` on every element, or accent rails on rounded cards.
+
+Follow an explicit user direction even when it uses one of these styles.
+
+### Check the rendered page
+
+Inspect overlapping elements, cascade conflicts, and font fallbacks. Close non-void elements, double-quote attributes, provide visible keyboard focus, and respect `prefers-reduced-motion`. For generative or decorative graphics, prefer Canvas or WebGL over long hand-authored SVG paths.
+
+Check selector specificity so component and section rules do not override each other's spacing.
+
+### Write concrete copy
+
+Name controls using terms readers recognize, such as "notifications" rather than "webhook config". Use active voice. A control should name its action, such as "Publish", and its success message should confirm it, such as "Published". Errors should explain the failure and how to fix it, without apologies or vague claims.
+
+### Name the page
+
+The `<title>` appears in the gallery and browser tab. Use a subject-specific noun phrase, usually two to four words, or the question the page answers. Do not append an explanation after a dash or colon. Put that explanation in the one-sentence publish `description`.
+
+The name must distinguish the page from other artifacts. Remove generic greetings or category labels, not the identifying words. Do not shorten an already specific multi-word name until it becomes generic.
+
+### Make structure meaningful
+
+Use numbering only for actual sequences, ordered processes, or timelines. Labels, dividers, and other structural elements should communicate content relationships rather than decorate the page.
+
+### Design tools for scanning and interaction
+
+For dashboards and tools, show summaries before detail. Indicate state with shapes or labels as well as numbers. Keep success, warning, and critical colors separate from the accent palette. Give charts and sparklines readable fills, grids, and endpoints. Make interactive elements look interactive.
+
+### Match charts to the data
+
+Choose chart types that fit the data. Avoid scales or encodings that exaggerate differences, and title the finding rather than naming the axes. Load the `dataviz` skill for chart-specific guidance. This skill still governs the surrounding page.
+
+## Design plan
+
+Before writing code:
+
+- Define four to six named hex colors.
+- Choose typefaces for at least two roles, such as display and body. Add a utility face for captions or data when needed.
+- Describe the layout in one or two sentences.
+
+Use that plan for every color and type decision during implementation.
 
 ## When the request is editorial
 
-The stance shifts: the client has already rejected proposals that felt templated, and is paying for a distinctive point of view. Make opinionated calls, and take one real aesthetic risk where it serves the work.
+Choose a distinctive visual direction based on the subject. Take one aesthetic risk when it improves the result.
 
-Review the design plan against the subject before building: if any part of it reads like the generic default you would produce for any similar page, revise that part, and note what you changed and why. Only after you've confirmed the plan's uniqueness do you write the code, following the revised plan exactly.
+Before building, revise any part of the plan that could fit an unrelated page unchanged. Record what changed and why, then implement the revised plan.
 
-**Principles** 
-
-- The hero is a thesis: open with the most characteristic thing in the subject's world - headline, image, live demo, interactive moment. 
-- Typography carries the personality of the page. Pair the display and body faces deliberately, not the same families you would reach for on any other project, and set a clear type scale with intentional weights, widths, and spacing. Make the type treatment itself a memorable part of the design, not a neutral delivery vehicle for the content. 
-- Leverage motion deliberately. Think about where and if animation can serve the subject: a page-load sequence, a scroll-triggered reveal, hover micro-interactions, ambient atmosphere. An orchestrated moment usually lands harder than scattered effects; choose what the direction calls for. However, sometimes less is more, and extra animation contributes to the feeling that the design is AI-generated. 
-- Match complexity to the vision. Maximalist directions need elaborate execution; minimal directions need precision in spacing, type, and detail. Elegance is executing the chosen vision well.
-- Spend your boldness in one place; keep everything around it quiet. If the accent fights the ground, shift it toward analogous or drop saturation rather than replacing it.
+- Open with a subject-specific headline, image, demonstration, or interaction.
+- Choose display and body faces for this page, with a clear type scale, weights, widths, and spacing.
+- Use animation only when it supports the subject or interaction. Prefer a coordinated sequence to scattered effects, and omit animation when it adds no value.
+- Match implementation detail to the direction. Minimal designs need precise spacing and typography; dense designs need enough work to remain readable.
+- Concentrate emphasis in one area and keep surrounding elements subdued. If the accent conflicts with the background, adjust its hue toward the background or reduce saturation before replacing it.

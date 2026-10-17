@@ -2,7 +2,7 @@
 description: Choose HTML or Markdown body formats, load the database CSV and whiteboard SVG specs, preserve macros, encode mentions, diagrams, and avoid unsafe conversions.
 ---
 
-# Confluence Body Formats
+# Confluence body formats
 
 Use only formats advertised by the exact command and content type.
 
@@ -25,7 +25,7 @@ For mentions, resolve the person and use a real Atlassian account ID:
 <span data-type="mention" data-user-id="AAID">@Display Name</span>
 ```
 
-For arbitrary macros, use extension HTML — never storage XML like `<ac:structured-macro>`. Native Confluence macros use `data-extension-type="com.atlassian.confluence.macro.core"`; third-party/app macros use the same pattern with the exact type/key/params captured from an existing page. Omit `macroId`; Confluence generates it.
+For arbitrary macros, use extension HTML. Never use storage XML like `<ac:structured-macro>`. Native Confluence macros use `data-extension-type="com.atlassian.confluence.macro.core"`; third-party/app macros use the same pattern with the exact type/key/params captured from an existing page. Omit `macroId`; Confluence generates it.
 
 ```html
 <div
@@ -53,7 +53,7 @@ Markdown is suitable for new prose and repository-authored documentation when
 the command supports it. It may not preserve every macro or storage-format
 construct during round trips.
 
-## Specialized Formats
+## Specialized formats
 
 Whiteboards and databases use their own specialized helper information. Do not
 reuse page/blog/live-doc HTML or markdown guidance for these content types.

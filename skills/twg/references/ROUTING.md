@@ -2,12 +2,12 @@
 description: Choose among resolve, search, context, responsibility, product commands, and cross-product work queries.
 ---
 
-# TWG Routing
+# TWG routing
 
-Use this reference when the product or surface is uncertain. Exact command
+Use this reference when the product or command is uncertain. Exact command
 syntax comes from live `twg help`.
 
-## Discovery Surfaces
+## Discovery commands
 
 - `resolve` handles stable IDs, URLs, keys, ARIs, exact names, and people.
 - Product-native commands provide authoritative fields and mutations.
@@ -24,12 +24,12 @@ syntax comes from live `twg help`.
   documents remain on `docs search`.
 - Exact Jira and Atlas keys should go to the product-native get command first:
   `jira workitem get <key>`, `goals get <key>`, or `projects get <key>`.
-  Query surfaces are for discovery, filtering, or compatibility shortcuts.
+  Query commands are for discovery, filtering, or compatibility shortcuts.
 
-Use search results as candidates, not final facts. Hydrate the few selected
+Use search results as candidates, not final facts. Fetch the few selected
 anchors with native reads or typed context.
 
-## Product Boundaries
+## Product boundaries
 
 | Product          | Use it for                                                                                                                  |
 | ---------------- | --------------------------------------------------------------------------------------------------------------------------- |
@@ -46,16 +46,16 @@ anchors with native reads or typed context.
 Do not confuse Jira projects with Atlas projects or Compass components. Do not
 use Jira workitem commands for JSM approval semantics.
 
-## Query Languages
+## Query languages
 
 - JQL: exact Jira workitem filters. See the Jira skill's querying reference.
 - CQL: exact Confluence content filters. See the Confluence skill's querying
   reference.
 - AQL: Assets queries after schema and attribute discovery.
 - TQL or product-specific query languages: use only when advertised by live
-  help for the selected surface.
+  help for the selected command.
 
-## Cross-Product Handoffs
+## Cross-Product handoffs
 
 - Known Jira or Confluence object: native read plus context when relationships
   matter.

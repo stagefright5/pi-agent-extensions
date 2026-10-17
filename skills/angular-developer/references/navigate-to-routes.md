@@ -1,8 +1,8 @@
-# Navigate to Routes
+# Navigate to routes
 
 Angular provides both declarative and programmatic ways to navigate between routes.
 
-## Declarative Navigation (`RouterLink`)
+## Declarative navigation (`RouterLink`)
 
 Use the `RouterLink` directive on anchor elements.
 
@@ -26,7 +26,7 @@ export class Nav {
 - **Absolute Paths**: Start with `/` (e.g., `/settings`).
 - **Relative Paths**: No leading `/`. Use `../` to go up a level.
 
-## Programmatic Navigation (`Router`)
+## Programmatic navigation (`Router`)
 
 Inject the `Router` service to navigate via TypeScript code.
 
@@ -62,7 +62,7 @@ this.router.navigateByUrl("/products/123?view=details");
 this.router.navigateByUrl("/login", { replaceUrl: true });
 ```
 
-## URL Parameters
+## URL parameters
 
 - **Route Params**: Part of the path (e.g., `/user/123`).
 - **Query Params**: After the `?` (e.g., `/search?q=query`).

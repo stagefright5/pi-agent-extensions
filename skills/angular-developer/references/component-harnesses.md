@@ -1,20 +1,19 @@
-# Testing with Component Harnesses
+# Testing with component harnesses
 
-Component harnesses are the standard, preferred way to interact with components in tests. They provide a robust, user-centric API that makes tests less brittle and easier to read by insulating them from changes to a component's internal DOM structure.
+Use component harnesses to interact with components in tests. Their methods let tests avoid depending on internal HTML and CSS classes.
 
-## Why Use Harnesses?
+## Why use harnesses?
 
-- **Robustness:** Tests don't break when you refactor a component's internal HTML or CSS classes.
-- **Readability:** Tests describe interactions from a user's perspective (e.g., `button.click()`, `slider.getValue()`) instead of through DOM queries (`fixture.nativeElement.querySelector(...)`).
-- **Reusability:** The same harness can be used in both unit tests and E2E tests.
+- Call methods such as `button.click()` and `slider.getValue()` instead of querying internal DOM elements.
+- Reuse the same harness in unit and E2E tests.
 
 Angular Material provides a test harness for every component in its library.
 
-## Using a Harness in a Unit Test
+## Using a harness in a unit test
 
 The `TestbedHarnessEnvironment` is the entry point for using harnesses in unit tests.
 
-### Example: Testing with a `MatButtonHarness`
+### Example: testing with a `MatButtonHarness`
 
 ```ts
 import { TestbedHarnessEnvironment } from "@angular/cdk/testing/testbed";
@@ -46,7 +45,7 @@ describe("MyButtonContainerComponent", () => {
 });
 ```
 
-### Key Concepts
+### Key concepts
 
 1.  **`HarnessLoader`**: An object used to find and create harness instances. Get a loader for your component's fixture using `TestbedHarnessEnvironment.loader(fixture)`.
 

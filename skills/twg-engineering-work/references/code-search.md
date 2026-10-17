@@ -1,8 +1,8 @@
 ---
-description: Discover and navigate implementations across available indexed code surfaces, then hydrate a bounded source-backed result set.
+description: Discover and navigate implementations across available indexed code sources, then fetch a bounded source-backed result set.
 ---
 
-# Code Search And Navigation
+# Code search and navigation
 
 Choose the route from anchor precision:
 
@@ -13,13 +13,13 @@ Choose the route from anchor precision:
 - Unknown repository or conceptual behavior: begin with one hybrid
   `search-code search` using the concrete topic, symbol, or behavior.
 - Cross-repository or reverse-dependency question: search every available
-  indexed SCM surface unless the user explicitly limits a code host.
+  indexed code host unless the user explicitly limits a code host.
 
 Honor an explicitly named repository or code host as the requested scope.
 Widen beyond it only when the user asks for cross-repository coverage, the
 repository identity is ambiguous, or scoped evidence is demonstrably
 incomplete. For unscoped discovery, omit `--app` so available indexed code
-surfaces participate; do not assume Bitbucket is the only source. Preserve the
+sources participate; do not assume Bitbucket is the only source. Preserve the
 requested scope when a connector is unavailable and report the indexing gap.
 
 Apply scope requirements by operation:
@@ -44,11 +44,11 @@ metadata for selection; a result cap is not a reason to claim completeness.
 
 Treat search results as a batch. Do not rerun the same symbol separately for
 each repository, code host, authorization mode, or usage pattern. Select a
-small, diverse set of direct consumers, hydrate the call-site files needed to
+small, diverse set of direct consumers, fetch the call-site files needed to
 establish each integration role, and fetch a manifest only when the call-site
 evidence does not establish the package. Stop when another result would repeat
 an already verified integration role, not while a material role is unverified.
-After discovery establishes repository metadata and paths, hydrate independent
+After discovery establishes repository metadata and paths, fetch independent
 source files concurrently in one orchestration/tool
 round when the execution environment supports it. Do not wait for one file
 before requesting another unless its result determines the next path.
@@ -60,7 +60,7 @@ the owner, host, or repository name.
 
 Rank a bounded set of source-backed implementation locations. If the anchored
 search is incomplete, returns only generated documentation, or exposes only one
-part of the requested capability, widen across available indexed surfaces while
+part of the requested capability, widen across available indexed sources while
 the next result can close that material gap. Fetch only selected source files
 needed for symbol and behavior context. Prefer commit-pinned links. Treat
 mirrors and duplicate paths as one implementation, preserve their source links,

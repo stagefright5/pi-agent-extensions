@@ -115,7 +115,6 @@ export function renderList(
 		let primaryWidth = nameWidth;
 		const secondary = row.secondary ? singleLine(row.secondary) : "";
 		if (!columnLayout && secondary) {
-			// Right-aligned metadata keeps most of the row for the primary text.
 			secondaryRoom = Math.min(visibleWidth(secondary), Math.floor(room * 0.35));
 			primaryWidth = Math.max(1, room - secondaryRoom - (secondaryRoom ? 2 : 0));
 		}

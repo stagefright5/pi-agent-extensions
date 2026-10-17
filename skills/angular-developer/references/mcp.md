@@ -1,20 +1,20 @@
-# Angular CLI MCP Server
+# Angular CLI MCP server
 
 The Angular CLI includes a Model Context Protocol (MCP) server that enables AI assistants (like Cursor, Gemini CLI, JetBrains AI, etc.) to interact directly with the Angular CLI. It provides tools for project analysis, guided migrations, and running builds/tests.
 
-## Available Tools (Default)
+## Available tools (default)
 
 When the MCP server is enabled, AI agents have access to the following tools:
 
 | Name                        | Description                                                                                               |
 | :-------------------------- | :-------------------------------------------------------------------------------------------------------- |
 | `ai_tutor`                  | Launches an interactive AI-powered Angular tutor.                                                         |
-| `get_best_practices`        | Retrieves the Angular Best Practices Guide (crucial for standalone components, typed forms, etc.).        |
+| `get_best_practices`        | Retrieves Angular guidance on standalone components, typed forms, and other APIs.                         |
 | `list_projects`             | Lists all applications and libraries in the workspace by reading `angular.json`.                          |
 | `onpush_zoneless_migration` | Analyzes code and provides a plan to migrate it to `OnPush` change detection (prerequisite for zoneless). |
 | `search_documentation`      | Searches the official documentation at `https://angular.dev`.                                             |
 
-## Experimental Tools
+## Experimental tools
 
 Some tools must be enabled explicitly using the `--experimental-tool` (or `-E`) flag.
 
@@ -91,7 +91,7 @@ Create `.vscode/mcp.json`:
 }
 ```
 
-## Command Options
+## Command options
 
 You can pass arguments to the MCP server in the `args` array of your configuration:
 

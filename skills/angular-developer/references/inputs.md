@@ -2,7 +2,7 @@
 
 Inputs allow data to flow from a parent component to a child component. Angular recommends using the signal-based `input` API for modern applications.
 
-## Signal-based Inputs
+## Signal-based inputs
 
 Declare inputs using the `input()` function. This returns an `InputSignal`.
 
@@ -25,13 +25,13 @@ export class User {
 }
 ```
 
-### Usage in Template
+### Usage in template
 
 ```html
 <app-user [name]="userName" [age]="25" />
 ```
 
-## Configuration Options
+## Configuration options
 
 The `input` function accepts a config object:
 
@@ -51,7 +51,7 @@ export class CustomButton {
 }
 ```
 
-## Model Inputs (Two-Way Binding)
+## Model inputs (two-way binding)
 
 Use `model()` to create an input that supports two-way data binding.
 
@@ -79,7 +79,7 @@ export class CustomCounter {
 <custom-counter [(value)]="myProperty" />
 ```
 
-## Decorator-based Inputs (@Input)
+## Decorator-based inputs (@Input)
 
 The legacy API remains supported but is not recommended for new code.
 
@@ -93,7 +93,7 @@ export class Legacy {
 }
 ```
 
-## Best Practices
+## Best practices
 
 - **Prefer Signals**: Use `input()` instead of `@Input()` for better reactivity and type safety.
 - **Required Inputs**: Use `input.required()` for mandatory data to get build-time errors.

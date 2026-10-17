@@ -1,8 +1,8 @@
-# Component Host Elements
+# Component host elements
 
 The **host element** is the DOM element that matches a component's selector. The component's template renders inside this element.
 
-## Binding to the Host Element
+## Binding to the host element
 
 Use the `host` property in the `@Component` decorator to bind properties, attributes, styles, and events to the host element. This is the **preferred approach** over legacy decorators.
 
@@ -30,7 +30,7 @@ export class CustomSlider {
 }
 ```
 
-## Legacy Decorators
+## Legacy decorators
 
 `@HostBinding` and `@HostListener` are supported for backwards compatibility but should be avoided in new code.
 
@@ -48,7 +48,7 @@ export class CustomSlider {
 }
 ```
 
-## Binding Collisions
+## Binding collisions
 
 If both the component (host binding) and the consumer (template binding) bind to the same property:
 
@@ -56,7 +56,7 @@ If both the component (host binding) and the consumer (template binding) bind to
 2. **Static vs Dynamic**: The dynamic binding wins.
 3. **Dynamic vs Dynamic**: The component's host binding wins.
 
-## Injecting Host Attributes
+## Injecting host attributes
 
 Use `HostAttributeToken` with the `inject` function to read static attributes from the host element at construction time.
 

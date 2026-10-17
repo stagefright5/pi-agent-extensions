@@ -1,16 +1,16 @@
 # Obsidian UI
 
-A restrained graphite-and-ice interface for pi: off-white text, cyan focus, soft violet syntax, subtle message surfaces, and compact tool presentation. No font patches, decorative animation, or added user-message prefixes.
+A dark pi theme with off-white text, cyan focus indicators, violet syntax colors, and compact tool rows. It does not require font patches or add animation or user-message prefixes.
 
 [Back to the extension workspace](../../README.md)
 
 ## Theme
 
-Select **obsidian-ice** in `/settings`. The package exposes `themes/obsidian-ice.json` as a pi theme. Selecting another theme changes the palette without disabling compact tool presentation.
+Select `obsidian-ice` in `/settings`. The package exposes `themes/obsidian-ice.json` as a pi theme. Selecting another theme changes the palette without disabling compact tool presentation.
 
 The terminal still controls its overall background, font, and native selection behavior. This palette is designed for a dark terminal; it does not modify Ghostty or other terminal settings. The contrast tests cover normal text, syntax, secondary metadata, and selection/search text at **4.5:1**, plus meaningful borders, mode indicators, selection markers, and the scrollbar thumb at **3:1**. Tests measure pi's emitted colors in both truecolor and 256-color modes rather than assuming RGB values survive palette approximation.
 
-User messages and the companion composer share a dark, cool-charcoal surface (`#2e3337`); normal tool calls use near-black blue-charcoal (`#191e22`). This deliberately avoids medium-gray cards. The subtle cool tint becomes separate dark grayscale entries in 256-color mode instead of collapsing both surfaces to black. Separate surface-separation regression checks require **1.25:1 between user and tool surfaces** and **1.1:1 between normal tool surfaces and the reference terminal background**, with darkness limits to prevent the gray-card treatment returning. These are design thresholds, not WCAG requirements for adjacent backgrounds. Tool errors retain their rose-tinted surface and status indicators.
+User messages and the companion composer share a dark, cool-charcoal surface (`#2e3337`); normal tool calls use near-black blue-charcoal (`#191e22`). The two backgrounds map to separate dark grayscale entries in 256-color mode. Regression checks require 1.25:1 contrast between user and tool backgrounds and 1.1:1 between normal tool rows and the reference terminal background. They also limit background brightness. These are design thresholds, not WCAG requirements for adjacent backgrounds. Tool errors retain their rose-tinted surface and status indicators.
 
 Selection/search and scrollbar-track surfaces also use a narrow cool tint so 256-color conversion does not turn them into unexpectedly bright blue-gray backgrounds. Secondary text uses silver; decorative separators can remain subtle. The matching composer has no horizontal rules or side rails; shortcut/shell/overflow labels remain readable within its filled surface.
 
@@ -32,13 +32,13 @@ Renderer state is scoped to each call; there are no timers or background process
 
 ## Matching composer, footer, and browser
 
-The companion packages in this workspace own their respective UI surfaces:
+Companion packages provide the composer, footer, and output browser:
 
 - [Prompt Truly Mine](../prompt-truly-mine/README.md): matching user-message surface and text colors, without horizontal rules, leading glyphs, side rails, or added content indentation.
-- [Compact Status Bar](../status-bar/README.md): balanced metadata with context and extension-status priority on narrow terminals.
+- [Compact Status Bar](../status-bar/README.md): context and extension-status priority on narrow terminals.
 - [Tool Output Browser](../tool-output-browser/README.md): open-sided, lightly framed output panels.
 
-Obsidian UI does not compete for their editor/footer factories. Each companion also works with other pi themes.
+Obsidian UI does not replace their editor or footer factories. Each companion also works with other pi themes.
 
 ## Compatibility
 
@@ -60,6 +60,6 @@ pi install npm:@stagefright5/pi-obsidian-ui
 
 For source development, load this directory with `pi -e ./extensions/obsidian-ui` or expose it through the workspace's development symlink. A plain extension-directory symlink does not expose nested theme files: link `themes/obsidian-ice.json` into `~/.pi/agent/themes/obsidian-ice.json` separately, then select it in `/settings`. Do not create the extra theme link when package discovery already exposes the theme. Run `/reload` after source changes.
 
-## Backout
+## Uninstall
 
 Select your previous theme (for example `dark`) in `/settings`, disable this extension through `pi config`, and reload. For a linked development installation, remove only the theme-file symlink you created if it is no longer needed. Companion chrome changes are independent; revert their presentation changes separately to restore their old appearance. No session migration is needed.

@@ -37,7 +37,7 @@ npm run dev      # http://localhost:5173
 npm run build    # -> dist/artifact.html, validated
 ```
 
-## What the dev harness gives you
+## Dev server checks
 
 |                        |                                                                                                                                            |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -60,20 +60,21 @@ node scripts/validate.mjs some-artifact.html
 
 ## Contents
 
-| Path                             |                                                                            |
-| -------------------------------- | -------------------------------------------------------------------------- |
-| `SKILL.md`                       | The skill itself                                                           |
-| `references/FUNDAMENTALS.md`     | Design fundamentals, verbatim from Claude Code's bundled `artifact-design` |
-| `references/DEV-SERVER.md`       | Dev server, harness and validator detail                                   |
-| `references/GLOSSARY-SIDEBAR.md` | Pinned collapsible filterable glossary pattern                             |
-| `scripts/`                       | scaffold, preview, build, validate                                         |
-| `template/`                      | The scaffolded project                                                     |
+| Path                             |                                                                      |
+| -------------------------------- | -------------------------------------------------------------------- |
+| `SKILL.md`                       | The skill itself                                                     |
+| `references/FUNDAMENTALS.md`     | Design guidance adapted from Claude Code's bundled `artifact-design` |
+| `references/DEV-SERVER.md`       | Dev server, harness and validator detail                             |
+| `references/GLOSSARY-SIDEBAR.md` | Pinned collapsible filterable glossary pattern                       |
+| `scripts/`                       | scaffold, preview, build, validate                                   |
+| `template/`                      | The scaffolded project                                               |
 
 ## Attribution
 
-`references/FUNDAMENTALS.md` is reproduced verbatim from the `artifact-design` skill
-bundled with Claude Code 2.1.250. Anthropic owns that text. Everything else is original
-to this package, including the Vite toolchain, harness, validator and glossary pattern.
+`references/FUNDAMENTALS.md` is adapted from the `artifact-design` skill bundled
+with Claude Code 2.1.250, with wording edited for clarity. Anthropic owns the source
+text. The Vite toolchain, harness, validator, and glossary pattern are original
+to this package.
 
 The glossary pattern is proposed upstream as
 [anthropics/claude-code#90263](https://github.com/anthropics/claude-code/issues/90263).

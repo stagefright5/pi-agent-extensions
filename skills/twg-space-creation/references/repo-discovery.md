@@ -23,7 +23,7 @@ Then inspect representative evidence:
 
 - **Purpose and people:** README, product or project briefs, ownership files,
   support docs, contribution policy, AGENTS, and package descriptions.
-- **Architecture and surface:** manifests, entrypoints, routes/commands/APIs,
+- **Architecture and interfaces:** manifests, entrypoints, routes/commands/APIs,
   schemas, packages, services, adapters, workers, storage, and UI boundaries.
 - **Build and verification:** package scripts, build files, test layers, CI jobs,
   lint/typecheck/contract/E2E guidance.
@@ -40,10 +40,10 @@ configuration.
 
 Show source paths and counts in the proposal so the user can judge weight:
 
-- `Purpose — README plus 2 project briefs; supports an orientation hub`
-- `Decisions — 23 decision records; recommend index + links`
-- `Operations — 2 runbooks plus 3 ownership records; relevant to maintainers`
-- `Research — 4 findings under research/; relevant to the product workflow`
+- The README and two project briefs support an orientation hub.
+- The 23 decision records need an index with links.
+- Two runbooks and three ownership records provide maintainer guidance.
+- Four findings under `research/` support the product workflow.
 
 Counts explain a branch; they do not require one page per file.
 

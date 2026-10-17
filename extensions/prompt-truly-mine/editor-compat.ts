@@ -126,7 +126,6 @@ export function flash(tui: object, message: string): void {
 	}
 }
 
-/** Validate the native [top, text, bottom, menu] layout before moving its tail. */
 /**
  * The native autocomplete list's visible window, validated against the rows the editor just
  * rendered (items plus an optional scroll row, or a single no-match row). Returns undefined when

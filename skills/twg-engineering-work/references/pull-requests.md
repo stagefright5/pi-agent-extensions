@@ -4,7 +4,7 @@ description: >
   mentioned PRs, and one PR's checks, tasks, comments, diffs, and review activity.
 ---
 
-# Finding And Reading PRs
+# Finding and reading PRs
 
 Use this reference to find pull requests and read their state, checks, and
 review activity. For PR-only status summaries of a person or repository, use
@@ -29,7 +29,7 @@ options not shown here.
 `twg pull-requests query --state open` and `twg pr-tree --state open` include
 draft PRs. Use `twg pull-requests query --state draft` for drafts only.
 
-## Read One PR
+## Read one PR
 
 | Need                             | Route                                                                        |
 | -------------------------------- | ---------------------------------------------------------------------------- |

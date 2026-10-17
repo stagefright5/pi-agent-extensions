@@ -37,8 +37,8 @@ OpenAI Fast registers its status in the shared contract's model-status slot (`re
 - Normal context usage appears dimmed.
 - Usage above 70% appears as a warning.
 - Usage above 90% appears as an error.
-- The footer uses subtle dot separators, accent-colored branch names, and quiet metadata.
-- It shortens the directory first, then the provider label before sacrificing other fields.
+- The footer uses dot separators, accent-colored branch names, and dimmed metadata.
+- It shortens the directory first, then the provider label before shortening other fields.
 - At narrow widths, context (including warning/error color) and extension statuses take priority over model, cost, and location. Overlong status text is ellipsized, never allowed to overflow the terminal.
 - Tested against pi 1.3.0 at tiny widths and 40/80/120/160 columns, including ANSI and wide Unicode text.
 
@@ -50,8 +50,8 @@ Plan Mode uses the extension-status area to show its active state, plan title, i
 
 An extension can make its status clickable by registering an action under the same id it passes to `ctx.ui.setStatus` (`registerStatusAction` in the shared `status-line.ts` contract). [Background Bash](../bg-bash/README.md) uses this for its jobs indicator.
 
-- **Mouse** (fullscreen `tuiMode`): click the status. The footer hit-tests the columns recorded during the latest layout; nothing is re-laid out.
-- **Keyboard:** `Alt+S` highlights the first clickable status and shows its action (`⏎ jobs`). `←`/`→` or `Tab`/`Shift+Tab` move between clickable statuses, `Enter` runs the action, `Esc` or `Alt+S` leaves. Any other key leaves and reaches pi unchanged. The key listener exists only while navigating.
+- In fullscreen `tuiMode`, click a status with the mouse. The footer hit-tests the columns recorded during the latest layout; nothing is re-laid out.
+- `Alt+S` highlights the first clickable status and shows its action (`⏎ jobs`). `←`/`→` or `Tab`/`Shift+Tab` move between clickable statuses, `Enter` runs the action, `Esc` or `Alt+S` leaves. Any other key leaves and reaches pi unchanged. The key listener exists only while navigating.
 
 The footer is drawn on every frame, so the line is laid out only when an input changes (width, segments, directory, branch, statuses, context, model, cost, theme, or focus) and reused otherwise.
 
@@ -61,9 +61,9 @@ The extension runs only when `ctx.mode === "tui"`. It installs the custom footer
 
 Because pi supports only one custom footer at a time, another footer extension loaded later can replace this one.
 
-## Inside the Prompt Truly Mine composer
+## Inside the prompt truly mine composer
 
-When [Prompt Truly Mine](../prompt-truly-mine/README.md) is loaded, its composer draws this status line inside its own footer bar and this footer returns no rows, saving a screen row. The contract lives in `@stagefright5/pi-extension-utils`, vendored into each published consumer. Its global key (`Symbol.for("@stagefright5/pi-status-line/v1")`) remains compatible with older packages, and each extension still works alone. Whenever the composer is not focused or cannot draw it (a picker, selector, or overlay is open, or the terminal is too small), this footer shows the line again in the same frame. The composer passes its own segments, most important first (its mode label, then undo/redo hints or an overflow indicator). They follow the directory and branch, before extension statuses. When space runs out the last segment goes first, before any field is shortened, and the first segment outlives the directory on narrow terminals.
+When [Prompt Truly Mine](../prompt-truly-mine/README.md) is loaded, its composer draws this status line inside its own footer bar and this footer returns no rows, saving a screen row. The contract lives in `@stagefright5/pi-extension-utils`, vendored into each published consumer. Its global key (`Symbol.for("@stagefright5/pi-status-line/v1")`) remains compatible with older packages, and each extension still works alone. Whenever the composer is not focused or cannot draw it (a picker, selector, or overlay is open, or the terminal is too small), this footer shows the line again in the same frame. The composer passes its own segments, most important first (its mode label, then undo/redo hints or an overflow indicator). They follow the directory and branch, before extension statuses. When space runs out the last segment goes first, before any field is shortened, and the first segment remains visible longer than the directory on narrow terminals.
 
 <!-- package-tools:install:start -->
 

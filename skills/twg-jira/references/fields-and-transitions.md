@@ -2,9 +2,9 @@
 description: Discover required and custom Jira fields, build valid values, and perform workflow transitions safely.
 ---
 
-# Jira Fields And Transitions
+# Jira fields and transitions
 
-## Custom And Required Fields
+## Custom and required fields
 
 Jira field configuration varies by project, work type, screen, and operation.
 Discover metadata before create or update:

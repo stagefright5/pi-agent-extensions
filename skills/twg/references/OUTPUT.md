@@ -2,7 +2,7 @@
 description: Handle agent JSON envelopes, compact summaries, output files, and large TWG payloads.
 ---
 
-# Agent Output
+# Agent output
 
 Agent invocations should call the installed `twg` binary directly:
 
@@ -23,7 +23,7 @@ when the caller has not explicitly chosen `--output-summary`, `--output-file`, o
 `--output text`. Use `--output-summary none` when a script needs structured output
 directly on stdout inside an agent runtime.
 
-## Envelope Shape
+## Envelope shape
 
 Large direct agent invocations usually print a YAML summary like:
 
@@ -83,7 +83,7 @@ output_files:
 Act on `error.repair` and `error.retry.guidance` directly. Bulk diagnostics
 (`backendFailure`, `traceId`, `feedback`) stay in `output_files.stdout`.
 
-## Reading Rule
+## Reading rule
 
 The YAML summary is a pointer, not the answer.
 
@@ -106,15 +106,14 @@ The YAML summary is a pointer, not the answer.
   evidence, read the JSON file even when the summary looks plausible.
 
 **`stdout_shape` samples are statistical, not exhaustive.** The shape shows a
-merged schema with a small number of example string values per field — it is not a
-complete inventory. For `context` commands this matters most: external artifact links
+merged schema with a small number of example string values per field. It is not a complete inventory. For `context` commands this matters most: external artifact links
 (Figma, GitHub, Google Docs, and other third-party app URLs) appear toward the
 **tail** of relationship arrays and are the entries most likely to be absent from
 `stdout_shape` samples. If the goal is relationship or URL discovery, always read
 `output_files.stdout` rather than treating shape samples as the full result. The
 related workflow guidance lives in `twg-context-discovery/SKILL.md`.
 
-## Output Budget Controls
+## Output budget controls
 
 Use these flags to keep agent stdout manageable:
 
@@ -188,7 +187,7 @@ When comparing many compact files, avoid a sequence of one-file filters such as
 read the compact summaries directly and only filter the few raw files that will
 change the answer.
 
-## When To Pass `--output-file`
+## When to pass `--output-file`
 
 Default: do not pass it. Agent defaults already write a full JSON payload and report
 the path in `output_files.stdout`.
@@ -203,7 +202,7 @@ twg context jira workitem PROJ-123 --output-file "$TMPDIR/ctx_PROJ-123.json"
 
 Use `$TMPDIR`, not hard-coded `/tmp`, because agent sandboxes vary.
 
-## Large Payload Strategy
+## Large payload strategy
 
 | Payload size         | What to do                                                        |
 | -------------------- | ----------------------------------------------------------------- |

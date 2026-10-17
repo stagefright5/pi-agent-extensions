@@ -1,8 +1,8 @@
-# Signal Forms
+# Signal forms
 
-Signal Forms are the recommended approach for handling forms in modern Angular applications (v21+). They provide a reactive, type-safe, and model-driven way to manage form state using Angular Signals.
+Use Signal Forms for new Angular v21+ forms. They derive form state from a signal model.
 
-**CRITICAL**: You MUST use Angular's new Signal Forms API for all form-related functionality. Do NOT use null as a value or type of any fields.
+Use the Signal Forms API for all forms covered by this guide. Do not use `null` as a field value or type.
 
 ## Imports
 
@@ -31,7 +31,7 @@ import {
 } from "@angular/forms/signals";
 ```
 
-## Creating a Form
+## Creating a form
 
 Use the `form()` function with a Signal model. The structure of the form is derived directly from the model.
 
@@ -108,11 +108,11 @@ userForm = form(this.userModel, (schemaPath) => {
 });
 ```
 
-## FieldState vs FormField: The Parental Requirement
+## Accessing field state
 
-It's important to understand the difference between **FormField** (the structure) and **FieldState** (the actual data/signals).
+`FormField` provides the structure; `FieldState` provides the data and signals.
 
-**RULE**: You must **CALL** a field as a function to access its state signals (valid, touched, dirty, hidden, etc.).
+Call a field as a function to access state signals such as `valid`, `touched`, `dirty`, and `hidden`.
 
 ```ts
 // f is a FormField (structural)
@@ -136,7 +136,7 @@ Similarly in a template:
 @if (bookingForm.hotelDetails().hidden()) { ... }
 ```
 
-## Disabled / Readonly / Hidden
+## Disabled / readonly / hidden
 
 Control field status using rules in the schema.
 
@@ -166,7 +166,8 @@ import { FormField } from "@angular/forms/signals";
 All props on state, such as `disabled`, `hidden`, `readonly` and `name` are bound automatically.
 Do _NOT_ bind the `name` field.
 
-**CRITICAL: FORBIDDEN ATTRIBUTES**
+### Attributes managed by `[formField]`
+
 When using `[formField]`, you MUST NOT set the following attributes in the template (either static or bound):
 
 - `min`, `max` (Use validators in the schema instead)
@@ -174,7 +175,7 @@ When using `[formField]`, you MUST NOT set the following attributes in the templ
 - `[attr.min]`, `[attr.max]`
 - `[disabled]`, `[readonly]` (Already handled by `[formField]`)
 
-**Exception**: Static `value` on `<input type="radio">` and `<input type="checkbox">` is **allowed and required** — it identifies which option the input represents, not the bound field value.
+Static `value` is required on `<input type="radio">` and `<input type="checkbox">`. It identifies the option, not the bound field value.
 
 ```html
 <!-- CORRECT: value on radio specifies which option this button represents -->
@@ -202,12 +203,12 @@ Do NOT do this: `<input min="1" [formField]>` or `<input [value]="val" [formFiel
 <input [formField]="userForm.name" />
 ```
 
-## Reactive Forms
+## Reactive forms
 
 **Do NOT import** `FormControl`, `FormGroup`, `FormArray`, or `FormBuilder` from `@angular/forms`. Signal Forms replace these concepts entirely.
 Signal forms does NOT have a builder.
 
-## Accessing State
+## Accessing state
 
 Each field in the form is a function that returns its state.
 
@@ -234,8 +235,6 @@ const isHidden = this.userForm().hidden();
 const isReadonly = this.userForm().readonly();
 ```
 
-IMPORTANT!: Make sure to call the field to get it state.
-
 ```ts
 form().invalid()
 form.field().dirty()
@@ -256,7 +255,7 @@ form.client.addresses.length  // No "()"
 
 Use the `submit()` function. It automatically marks all fields as touched before running the action.
 
-**CRITICAL**: The callback to `submit()` MUST be `async` and MUST return a Promise.
+The `submit()` callback must be `async` and return a Promise.
 
 ```ts
 import { submit } from '@angular/forms/signals';
@@ -278,7 +277,7 @@ onSubmit() {
 }
 ```
 
-## Handling Errors
+## Handling errors
 
 `field().errors()` returns the errors array of ValidationError:
 
@@ -294,7 +293,7 @@ When there are no errors, return undefined
 
 ### Context
 
-Functions passed to rules like `validate()`, `disabled()`, `applyWhen` take a context object. It is **CRITICAL** to understand its structure:
+Callbacks for `validate()`, `disabled()`, and `applyWhen` receive this context object:
 
 ```ts
 validate(
@@ -317,7 +316,7 @@ validate(
 );
 ```
 
-### IMPORTANT: Paths are NOT Signals
+### Paths are not signals
 
 Inside the `form()` callback, `schemaPath` and its children (e.g., `schemaPath.user.name`) are **NOT** signals and are **NOT** callable.
 
@@ -332,10 +331,10 @@ applyWhen(p.ssn, ({ stateOf }) => stateOf(p.ssn).touched(), (ssnField) => { ... 
 applyWhen(p.ssn, ({ valueOf }) => valueOf(p.ssn) !== '', (ssnField) => { ... });
 ```
 
-### Multiple Items
+### Multiple items
 
 - Use `applyEach` for applying rules per item.
-- **CRITICAL**: `applyEach` callback takes ONLY ONE argument (the item path), NOT two:
+- The `applyEach` callback takes one argument, the item path:
 
 ```ts
 // CORRECT - single argument
@@ -354,9 +353,9 @@ applyEach(s.items, (item, index) => {
 - To remove an item from an array, just remove appropriate item from the array in the data.
 - **`select` binding**: You CAN bind to `<select [formField]="form.country">`. Ensure options have `value` attributes.
 
-### Nested @for Loops
+### Nested @for loops
 
-**CRITICAL**: Angular does NOT have `$parent`. In nested loops, store outer index in a variable:
+Angular has no `$parent`. Store the outer index in a variable for nested loops:
 
 ```html
 <!-- WRONG - $parent does not exist -->
@@ -371,7 +370,7 @@ applyEach(s.items, (item, index) => {
 } }
 ```
 
-### Disabling Form Button
+### Disabling form button
 
 ```html
 <button [disabled]="form().invalid() || form().pending()" />
@@ -383,14 +382,12 @@ Do NOT use `[disabled]` on an input. `[formField]` will do this.
 Do NOT use `[readonly]` on an input. `[formField]` will do this.
 If you need to disable or readonly a field, use `disabled()` or `readonly()` rules in the schema.
 
-### Async Validation
+### Async validation
 
 Do not use `validate()` for async, instead use `validateAsync()`:
 
-**CRITICAL**:
-
-1. The `params` option MUST be a function that returns the value to validate.
-2. The `onError` handler is **REQUIRED** - it is NOT optional!
+1. `params` must be a function that returns the value to validate.
+2. `onError` is required.
 
 ```ts
 import { resource } from "@angular/core";
@@ -438,9 +435,9 @@ validateAsync(s.username, {
 });
 ```
 
-### Using Resource
+### Using resource
 
-**CRITICAL**: In Angular's `resource()`, use `params` for the input signal.
+In `resource()`, use `params` for the input signal.
 
 ```ts
 // CORRECT
@@ -471,7 +468,7 @@ userForm = form(this.userModel, (s) => {
 });
 ```
 
-### Conditional Validation
+### Conditional validation
 
 ```ts
 form(
@@ -509,7 +506,7 @@ form(
 );
 ```
 
-## Common Pitfalls (DO NOT DO THESE)
+## Common mistakes
 
 | Error Scenario         | WRONG (Common Mistake)                        | RIGHT (Correct Way)                                                              |
 | :--------------------- | :-------------------------------------------- | :------------------------------------------------------------------------------- |
@@ -538,7 +535,7 @@ form(
 | **Validate syntax**    | `validate(s.field, { value } => ...)`         | `validate(s.field, ({ value }) => ...)`                                          |
 | **Checkbox Array**     | `[formField]="form.tags"` (string[])          | Checkboxes ONLY bind to `boolean`                                                |
 
-## Big Form Example
+## Big form example
 
 ### `src/app/app.ts`
 
@@ -740,7 +737,7 @@ export class App {
 </form>
 ```
 
-## Recovering from Build Errors
+## Recovering from build errors
 
 If you encounter build errors, here are the most common fixes:
 

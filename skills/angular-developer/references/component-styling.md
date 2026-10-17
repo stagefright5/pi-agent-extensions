@@ -1,8 +1,8 @@
-# Component Styling
+# Component styling
 
-Angular components can define styles that apply specifically to their template, enabling encapsulation and modularity.
+Angular components can scope styles to their templates.
 
-## Defining Styles
+## Defining styles
 
 Styles can be defined inline or in separate files.
 
@@ -21,7 +21,7 @@ Styles can be defined inline or in separate files.
 export class Photo {}
 ```
 
-## View Encapsulation
+## View encapsulation
 
 Every component has a view encapsulation setting that determines how styles are scoped.
 
@@ -44,7 +44,7 @@ import { ViewEncapsulation } from '@angular/core';
 export class GlobalStyled {}
 ```
 
-## Special Selectors
+## Special selectors
 
 ### `:host`
 
@@ -73,7 +73,7 @@ Targets the host element based on some condition in its ancestry.
 Disables view encapsulation for a specific rule, allowing it to "leak" into child components.
 **Note: The Angular team strongly discourages the use of `::ng-deep`.** It is supported only for backwards compatibility.
 
-## Styles in Templates
+## Styles in templates
 
 You can use `<style>` elements directly in a component's template. View encapsulation rules still apply.
 
@@ -86,6 +86,6 @@ You can use `<style>` elements directly in a component's template. View encapsul
 <div class="dynamic-class">Hello</div>
 ```
 
-## External Styles
+## External styles
 
 Using `<link>` or `@import` in CSS is treated as external styles. **External styles are not affected by emulated view encapsulation.**

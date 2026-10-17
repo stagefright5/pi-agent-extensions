@@ -6,7 +6,7 @@ Plan Mode adds interactive planning using pi 1.3.0's public extension and TUI AP
 
 [Back to the extension workspace](../../README.md)
 
-Plan Mode guides the agent to inspect relevant evidence and resolve ambiguity that could affect the plan. The agent then writes a plan ready for implementation and waits for approval before implementing it.
+The agent inspects relevant evidence, asks about unresolved choices, writes a plan, and waits for approval before implementing it.
 
 ## Start and reopen
 
@@ -21,7 +21,7 @@ Activating Plan Mode starts a fresh planning state in the current session. Deact
 ## Workflow
 
 1. Enable Plan Mode and describe the task.
-2. The agent inspects relevant repository context or external documentation. It asks only questions whose answers could change the plan in a meaningful way.
+2. The agent inspects relevant repository context or external documentation. It asks only questions whose answers could change the plan.
 3. The agent presents the complete plan through the `plan_output` tool.
 4. Plan Mode saves `plan.md` and commits the iteration to a dedicated local Git repository. The review overlay opens after the agent settles, never from inside tool execution.
 5. Approve the plan, request a revision, inspect its history, or close the overlay to continue discussing it.
@@ -34,7 +34,7 @@ Closing review with `Escape` displays a read-only copy of the plan in the main c
 
 While active, Plan Mode instructs the agent to:
 
-- gather evidence that can affect correctness, scope, impact, assumptions, or validation in a meaningful way
+- gather evidence that can change correctness, scope, impact, assumptions, or validation
 - perform only read-only research and low-risk validation before approval
 - identify intended outcomes, constraints, affected parts of the system, behavior to preserve, risks, and validation
 - distinguish verified findings from assumptions and unresolved unknowns
@@ -48,13 +48,13 @@ After presenting a plan, the agent answers ordinary questions in regular assista
 
 ## Review shortcuts
 
-The review, diff, summary, and Q&A views share one card, drawn in the same panel colour as the [Pi Picker](../../packages/pi-picker/README.md) overlays. It is darker than the composer, so the card stays apart from the composer bar below it:
+The review, diff, summary, and Q&A views use the same panel color as [Pi Picker](../../packages/pi-picker/README.md), darker than the composer:
 
 - The header shows what you are viewing, the plan title, the iteration, and how far you have scrolled. The plan file path sits below it, then a thin rule.
 - The document is inset from both edges. A thin bar in the right margin shows where you are in a long plan.
 - Below another rule, the footer lists the actions. Approve is highlighted; copy and close sit on the right. On narrow screens the secondary actions are hidden from the legend but their keys still work.
 
-While the agent writes a plan, its `plan_output` row shows the plan growing (lines, characters, and the section being written). A long plan can take a minute to arrive; the review opens as soon as it is saved.
+While the agent writes a plan, its `plan_output` row shows line and character counts and the current section. The review opens when the plan is saved.
 
 Inside the plan review overlay:
 
@@ -97,7 +97,7 @@ New plans use `getAgentDir()/plans`, respecting `PI_CODING_AGENT_DIR`. Resumed s
 
 The containing directory is a dedicated Git repository. Plan Mode creates a seed commit, then commits changed plan content. Unique directories prevent same-second title collisions. Diffs compare the active branch's saved iteration text, including identical iterations, rather than assuming Git HEAD matches the active session branch.
 
-`plan_output` is model-only and sequential, registered inactive, and enabled only in TUI plan mode. Mode changes preserve the other active tools. Calls outside plan mode are rejected. A session-local queue and the SDK file-mutation queue serialize saves. State advances only after storage succeeds; failed saves are real tool errors, not successful “plan presented” results. New-repository failures are cleaned up, and failed edits restore the previous file. Cancelled tool batches do not automatically open a review; `/plan-review` can reopen any successfully saved plan.
+`plan_output` is model-only and sequential, registered inactive, and enabled only in TUI plan mode. Mode changes preserve the other active tools. Calls outside plan mode are rejected. A session-local queue and the SDK file-mutation queue serialize saves. State advances only after storage succeeds; failed saves return tool errors. New-repository failures are cleaned up, and failed edits restore the previous file. Cancelled tool batches do not automatically open a review; `/plan-review` can reopen any successfully saved plan.
 
 Plan Mode saves only small workflow flags and metadata through `pi.appendEntry()`: active/revision state, title, directory, and workflow reset boundaries. Each successful `plan_output` result stores that iteration in `details`; Q&A is reconstructed from user/assistant messages. Ordinary messages no longer append full plan/Q&A snapshots. Legacy snapshots remain readable.
 
@@ -126,7 +126,7 @@ Closing review appends a display-only custom entry with an entry renderer, never
 - [`index.ts`](./index.ts) owns tool/event registration, branch state, and workflow lifecycle.
 - [`state.ts`](./state.ts) reconstructs branch state, including legacy snapshots.
 - [`planning.ts`](./planning.ts) contains the planning prompt and routing helpers.
-- [`plan-ui.ts`](./plan-ui.ts) provides native Markdown/editor/loader components, bounded ScrollView-based viewing, and normalized mouse handling.
+- [`plan-ui.ts`](./plan-ui.ts) provides Markdown, editor, and loader components, a ScrollView-based viewer, and mouse handling.
 - [`plan-store.ts`](./plan-store.ts) serializes saves, commits plans, and generates diffs.
 - [`utils.ts`](./utils.ts) generates plan-title slugs.
 

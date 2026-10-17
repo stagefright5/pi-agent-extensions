@@ -20,7 +20,7 @@ Run `twg <command>`. On shell `command not found`, use `$HOME/.local/bin/twg`
 tell user to add that directory to PATH. Do not treat auth or command errors as
 PATH failures.
 
-## Use When
+## Use when
 
 - A Jira key, issue URL, project key, board, sprint, filter, or dashboard is the
   primary anchor.
@@ -33,7 +33,7 @@ PATH failures.
 Do not load this skill merely because Jira appears as one supporting artifact
 inside a cross-product answer.
 
-## First Route
+## First route
 
 | Intent                         | Route                                 |
 | ------------------------------ | ------------------------------------- |
@@ -53,7 +53,7 @@ inside a cross-product answer.
 Run one focused `twg help describe "<exact path>"` before an unfamiliar or
 consequential mutation.
 
-## Jira Semantics
+## Jira semantics
 
 - "Issue" and "workitem" refer to the same Jira object in user language.
 - Jira projects/spaces are not Atlas projects. Use Jira for issue containers,
@@ -70,7 +70,7 @@ consequential mutation.
   once. Never loop `get` over a key list. When the fields are queryable, use
   `jira workitem query --jql <jql> --fields <fields>` and skip hydration.
 
-## Safe Reads And Writes
+## Safe reads and writes
 
 - Resolve the site and workitem key before mutation.
 - Read current state before update, transition, link, comment, or delete.

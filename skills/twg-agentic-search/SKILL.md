@@ -58,34 +58,34 @@ twg rovo search "<query>" --output json --output-summary auto --agent-fields @ev
 Use `@compact` to shortlist candidates and `@evidence` when snippets, URLs, and
 provenance need more detail.
 
-## Evidence Rules
+## Evidence rules
 
 - Treat search snippets as candidates, not facts.
 - Treat ranking, recency, activity volume, and similarity as discovery signals,
   not proof of authority, identity, validity, or currentness. Verify the
   selected source's key/URL/title and canonical or supersession relationship
-  from hydrated evidence before replacing an explicit anchor.
-- Hydrate a small, diverse primary-source set before final claims. For document
+  from retrieved evidence before replacing an explicit anchor.
+- Fetch a small, diverse primary-source set before final claims. For document
   discovery, cover distinct roles such as requirements, architecture/design,
   and current delivery rather than redundant pages. Use product-native
   commands such as `twg confluence content get`, `twg jira workitem get`,
   `twg jira workitem query`, `twg bb pull-requests get <id>`,
   `twg bb repo get`, or the relevant product command for the result URL/type.
-  When a native key or URL is known, hydrate it directly; use another search or
+  When a native key or URL is known, fetch it directly; use another search or
   a document-body fetch only when the native result lacks a material field or
   narrative needed for the answer.
 - For document or PRD discovery, select a small, diverse set across needed
-  roles. Hydrate one per role; add another only for a material conflict, missing
+  roles. Fetch one per role; add another only for a material conflict, missing
   field, current-delivery question, or requested relationship. Stop when roles,
   current delivery, and conflicts are supported or unavailable.
 - Prefer official spaces, owned project pages, current Jira issues, and recent
   decision records over personal drafts or stale chat mentions, unless the user
   explicitly asked for informal signal.
-- Compare hydrated evidence for conflicts, recency, ownership, and authority.
+- Compare retrieved evidence for conflicts, recency, ownership, and authority.
 - Use one authoritative source when it fully supports the claim. Treat the
   source-count limit as a default, not a quota: add a narrow follow-up only for
   a material unresolved conflict, missing field, or requested relationship.
-- Do not rerun an `@evidence` search for a candidate that can be hydrated through
+- Do not rerun an `@evidence` search for a candidate that can be retrieved through
   its product-native URL or ID, or refetch one source under another projection
   merely to increase context. Use a different native projection when it supplies
   a missing material field or relationship, and explain the remaining gap.
@@ -94,6 +94,6 @@ provenance need more detail.
 
 ## Output
 
-Lead with the answer or best-supported conclusion. Cite hydrated titles/URLs and
+Lead with the answer or best-supported conclusion. Cite retrieved titles/URLs and
 include the source app, date or status when available, and why each source was
 trusted. Separate confirmed facts, likely interpretations, conflicts, and gaps.
