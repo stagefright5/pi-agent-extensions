@@ -29,6 +29,7 @@ export {
 	Picker,
 	type PickerAction,
 	type PickerContext,
+	type PickerHeight,
 	type PickerKeys,
 	type PickerOptions,
 	type PickerRow,

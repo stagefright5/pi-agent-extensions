@@ -51,6 +51,7 @@ const BUDGETS: Record<string, number> = {
 	"keystroke 100k": 10,
 	"open 10k": 30,
 	frame: 2,
+	"frame live preview": 2,
 };
 
 const results: { name: string; p50: number; p95: number; budget?: number }[] = [];
@@ -87,6 +88,7 @@ for (const size of [1_000, 10_000, 100_000]) {
 		}
 		record("open 10k", opens);
 		record("frame", renderBench(index));
+		record("frame live preview", renderBench(index, true));
 	}
 }
 

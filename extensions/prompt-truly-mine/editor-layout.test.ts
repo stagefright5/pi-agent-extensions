@@ -5,7 +5,7 @@ import { CURSOR_MARKER, renderFakeCursor, visibleWidth, type TUI, type TuiMouseE
 import { UndoRedoEditor } from "./index.ts";
 import { getNativeAutocompleteHeight } from "./editor-compat.ts";
 import { composerPalette, truecolorAfter } from "./composer-style.ts";
-import { statusLineChannel } from "./status-line.ts";
+import { registerStatusAction, statusLineChannel } from "./status-line.ts";
 
 const host = new URL(".", import.meta.resolve("@earendil-works/pi-coding-agent"));
 const { KeybindingsManager } = await import(new URL("core/keybindings.js", host).href);
@@ -315,4 +315,62 @@ test("a lent status line fills the footer only while the focused composer draws 
 	editor.handleInput("\x1b[5~");
 	footer();
 	assert.match(lent.at(-1)?.[1] ?? "", /↓ \d+ more/u, "overflow stays readable after the directory");
+});
+
+test("clicking a clickable status in the hosted footer runs its action; other clicks fall through", async (t) => {
+	const { getThemeByName } = await import(new URL("modes/interactive/theme/theme.js", host).href);
+	const palette = getThemeByName("dark");
+	const editor = new UndoRedoEditor(
+		tui,
+		theme,
+		new KeybindingsManager(),
+		() => false,
+		undefined,
+		identity,
+		() => palette,
+	);
+	editor.setPaddingX(1);
+	editor.focused = true;
+	const channel = statusLineChannel();
+	const left = "~/repo · main · ";
+	const jobs = "● 1 running";
+	// Like the status bar: regions are relative to the start of the lent line.
+	channel.render = (width) => {
+		channel.regions = [{ id: "bg-bash", start: left.length, end: left.length + jobs.length }];
+		return (left + jobs).padEnd(width);
+	};
+	let opened = 0;
+	const unregister = registerStatusAction("bg-bash", { label: "jobs", activate: () => opened++ });
+	t.after(() => {
+		unregister();
+		channel.render = undefined;
+		channel.host = undefined;
+		channel.regions = undefined;
+	});
+	editor.setText("draft");
+	const rows = editor.render(80);
+	const footerY = rows.length - 1;
+	const line = plain(rows[footerY]!);
+	const lead = line.indexOf("~");
+	assert.equal(lead, 1, "the hosted line starts after the inset");
+	const at = (x: number, type: TuiMouseEvent["type"] = "click"): TuiMouseEvent => ({
+		...click(x, footerY, rows.length),
+		type,
+	});
+	const jobsX = line.indexOf("●");
+	assert.deepEqual(editor.handleMouse(at(jobsX, "press")), { handled: true, render: false }, "press is swallowed");
+	assert.equal(opened, 0, "press alone does not open");
+	assert.deepEqual(editor.handleMouse(at(jobsX)), { handled: true, render: false });
+	assert.equal(opened, 1);
+	assert.deepEqual(editor.handleMouse(at(lead + left.length + jobs.length - 1)), { handled: true, render: false });
+	assert.equal(opened, 2, "the last column of the status is inside the region");
+	editor.handleMouse(at(lead + left.length - 1));
+	editor.handleMouse(at(lead + left.length + jobs.length));
+	editor.handleMouse(click(jobsX, footerY - 1, rows.length));
+	assert.equal(opened, 2, "columns around the status and other rows fall through");
+	assert.equal(editor.getText(), "draft", "a status click never edits the draft");
+	editor.focused = false;
+	editor.render(80);
+	assert.equal(editor.handleMouse(at(jobsX))?.render, undefined, "unfocused: the composer no longer hosts it");
+	assert.equal(opened, 2);
 });

@@ -68,6 +68,14 @@ export interface PickerOptions<T> {
 	row?(item: T): PickerRow;
 	/** Full text for the preview pane; omit for no preview. */
 	preview?(item: T): string;
+	/**
+	 * Version of an item's preview text. Wrapped preview lines are cached per item, query, and width;
+	 * return a new value when the text changes (for example a live log) to re-wrap it. Omit for
+	 * static previews.
+	 */
+	previewKey?(item: T): string;
+	/** Open the preview at its end and keep following new lines until scrolled up (for logs). */
+	previewTail?: boolean;
 	filters?: readonly FilterGroup<T>[];
 	initialFilters?: Readonly<Record<string, readonly string[]>>;
 	actions: readonly PickerAction<T>[];
@@ -82,11 +90,27 @@ export interface PickerOptions<T> {
 	nextKeys?: readonly KeyId[];
 	/** Footer message shown until the first key (for example load warnings). */
 	notice?: { text: string; tone?: "info" | "warning" | "error" };
-	/** Total rows to render; defaults to 80% of the terminal height. */
-	height?(): number;
+	/**
+	 * Total rows to render: a function returning rows, or a `PickerHeight` (fraction of the terminal,
+	 * optionally shrinking to fit the items). Defaults to 80% of the terminal height.
+	 */
+	height?: (() => number) | PickerHeight;
 	/** Close the host overlay (Esc, or an action calling `context.close()`). */
 	onClose(): void;
 }
+
+export interface PickerHeight {
+	/** Largest height: a fraction of the terminal rows when ≤ 1, otherwise rows. Default 0.8. */
+	max?: number;
+	/** Smallest height in rows when fitting. Default 8. */
+	min?: number;
+	/** Shrink to the items (title, input, filters, one row per item, footer) instead of always using `max`. */
+	fit?: boolean;
+}
+
+/** Rows the picker draws besides its list: title, input, rule, footer (plus the filter row). */
+const CHROME_ROWS = 4;
+const MIN_HEIGHT = 8;
 
 const PAGE_LIMIT = 200;
 const SIDE_BY_SIDE_WIDTH = 100;
@@ -217,6 +241,12 @@ export class Picker<T> implements Component, Focusable {
 		}
 	}
 
+	/** Positive moves toward the end. Tail previews store the distance from the end. */
+	private scrollPreview(delta: number): void {
+		const next = this.previewScroll + (this.options.previewTail ? -delta : delta);
+		this.previewScroll = Math.max(0, next);
+	}
+
 	private matchesKey(data: string, key: PickerAction<T>["key"]): boolean {
 		return key.includes(".") ? this.options.keybindings.matches(data, key) : matchesKey(data, key as KeyId);
 	}
@@ -295,8 +325,8 @@ export class Picker<T> implements Component, Focusable {
 			this.move(1);
 		else if (kb.matches(data, "tui.select.pageUp")) this.move(-Math.max(1, this.listRows - 1));
 		else if (kb.matches(data, "tui.select.pageDown")) this.move(Math.max(1, this.listRows - 1));
-		else if (matchesKey(data, "shift+up")) this.previewScroll = Math.max(0, this.previewScroll - 3);
-		else if (matchesKey(data, "shift+down")) this.previewScroll += 3;
+		else if (matchesKey(data, "shift+up")) this.scrollPreview(-3);
+		else if (matchesKey(data, "shift+down")) this.scrollPreview(3);
 		else if (this.options.multiSelect && matchesKey(data, "tab")) {
 			const item = this.selectedItem;
 			if (item !== undefined) {
@@ -367,10 +397,23 @@ export class Picker<T> implements Component, Focusable {
 		}));
 	}
 
+	/** Total rows for this frame. Fitting uses the item count, not the matches, so typing never resizes. */
+	private resolveHeight(): number {
+		const option = this.options.height;
+		if (typeof option === "function") return Math.max(MIN_HEIGHT, option());
+		const rows = this.options.tui.terminal.rows;
+		const ratio = option?.max ?? 0.8;
+		const max = Math.max(MIN_HEIGHT, ratio <= 1 ? Math.floor(rows * ratio) : Math.floor(ratio));
+		if (!option?.fit) return max;
+		const min = Math.min(max, Math.max(MIN_HEIGHT, option.min ?? MIN_HEIGHT));
+		const content = CHROME_ROWS + (this.filterState ? 1 : 0) + Math.max(1, this.index.size);
+		return Math.max(min, Math.min(max, content));
+	}
+
 	render(width: number): string[] {
 		if (width <= 0) return [];
 		const palette = this.palette;
-		const height = Math.max(8, this.options.height?.() ?? Math.floor(this.options.tui.terminal.rows * 0.8));
+		const height = this.resolveHeight();
 		const panel = (line: string) => paintRow(truncateToWidth(line, width, ""), width, palette.text, palette.panel);
 		const lines: string[] = [];
 
@@ -429,25 +472,31 @@ export class Picker<T> implements Component, Focusable {
 		if (sideBySide || stacked) {
 			const previewWidth = sideBySide ? width - listWidth - 3 : width - 2;
 			const previewHeight = sideBySide ? this.listRows : bodyHeight - this.listRows - 1;
-			const key = `${this.result.ids[this.selected]}\u0000${query.phrase}`;
-			const previewRanges = query.tokens.length
-				? (() => {
-						const folded = fold(previewText!);
-						return matchRanges(previewText!, folded.text, folded.map, query);
-					})()
-				: [];
-			const { lines: all, firstMatch } = this.preview.lines(
-				key,
-				previewText!,
-				previewRanges,
-				Math.max(1, previewWidth),
-				palette,
-			);
-			// Open the preview at the first match.
-			if (this.previewScroll === 0 && firstMatch > previewHeight - 2)
+			const version = item !== undefined ? (this.options.previewKey?.(item) ?? "") : "";
+			const key = `${this.result.ids[this.selected]}\u0000${query.phrase}\u0000${version}`;
+			const wrapWidth = Math.max(1, previewWidth);
+			// Match ranges are only needed to build lines that are not cached yet.
+			const { lines: all, firstMatch } =
+				this.preview.cached(key, wrapWidth) ??
+				this.preview.lines(
+					key,
+					previewText!,
+					query.tokens.length
+						? (() => {
+								const folded = fold(previewText!);
+								return matchRanges(previewText!, folded.text, folded.map, query);
+							})()
+						: [],
+					wrapWidth,
+					palette,
+				);
+			const maxScroll = Math.max(0, all.length - previewHeight);
+			// Tail previews count `previewScroll` up from the end, so new lines stay in view.
+			if (!this.options.previewTail && this.previewScroll === 0 && firstMatch > previewHeight - 2)
 				this.previewScroll = Math.max(0, firstMatch - 2);
-			this.previewScroll = Math.max(0, Math.min(this.previewScroll, Math.max(0, all.length - previewHeight)));
-			const visible = all.slice(this.previewScroll, this.previewScroll + previewHeight);
+			this.previewScroll = Math.max(0, Math.min(this.previewScroll, maxScroll));
+			const top = this.options.previewTail ? maxScroll - this.previewScroll : this.previewScroll;
+			const visible = all.slice(top, top + previewHeight);
 			while (visible.length < previewHeight) visible.push("");
 			if (sideBySide) {
 				for (let row = 0; row < this.listRows; row++) {

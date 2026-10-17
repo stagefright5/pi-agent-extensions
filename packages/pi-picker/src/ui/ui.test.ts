@@ -302,3 +302,106 @@ test("large lists search asynchronously and render a busy marker meanwhile", asy
 	await new Promise((resolve) => setTimeout(resolve, 200));
 	assert.match(plain(picker.render(100)[0]!), / 6667\/60000 $/u);
 });
+
+test("previewKey re-wraps changed preview text; without it the cached lines stay", () => {
+	let body = "first version";
+	let version = 1;
+	const make = (withKey: boolean) =>
+		createPicker<{ id: number }>({
+			tui: fakeTui(),
+			theme: () => theme,
+			keybindings: new KeybindingsManager(),
+			title: "Live",
+			items: [{ id: 1 }],
+			text: () => "job",
+			preview: () => body,
+			...(withKey ? { previewKey: () => String(version) } : {}),
+			actions: [],
+			onClose() {},
+		});
+	const keyed = make(true);
+	const unkeyed = make(false);
+	assert.ok(
+		keyed
+			.render(140)
+			.map(plain)
+			.some((line) => line.includes("first version")),
+	);
+	assert.ok(
+		unkeyed
+			.render(140)
+			.map(plain)
+			.some((line) => line.includes("first version")),
+	);
+	body = "second version";
+	version++;
+	assert.ok(
+		keyed
+			.render(140)
+			.map(plain)
+			.some((line) => line.includes("second version")),
+	);
+	assert.ok(
+		unkeyed
+			.render(140)
+			.map(plain)
+			.some((line) => line.includes("first version")),
+	);
+});
+
+test("previewTail opens at the end, follows new lines, and Shift+Up scrolls back", () => {
+	let count = 80;
+	const body = () => Array.from({ length: count }, (_, i) => `log ${i}`).join("\n");
+	const picker = createPicker<{ id: number }>({
+		tui: fakeTui(),
+		theme: () => theme,
+		keybindings: new KeybindingsManager(),
+		title: "Live",
+		items: [{ id: 1 }],
+		text: () => "job",
+		preview: body,
+		previewKey: () => String(count),
+		previewTail: true,
+		actions: [],
+		onClose() {},
+	});
+	picker.focused = true;
+	const has = (text: string) =>
+		picker
+			.render(140)
+			.map(plain)
+			.some((line) => new RegExp(`${text}\\b`).test(line));
+	assert.ok(has("log 79") && !has("log 0"));
+	count = 90;
+	assert.ok(has("log 89"), "follows appended lines");
+	for (let i = 0; i < 4; i++) picker.handleInput("\x1b[1;2A");
+	assert.ok(!has("log 89"), "scrolled back from the end");
+});
+
+test("height: functions still work; PickerHeight caps at a fraction and fits the items", () => {
+	const make = (height: Parameters<typeof createPicker<{ id: number }>>[0]["height"], count: number, rows = 40) =>
+		createPicker<{ id: number }>({
+			tui: fakeTui(rows),
+			theme: () => theme,
+			keybindings: new KeybindingsManager(),
+			title: "Sized",
+			items: Array.from({ length: count }, (_, id) => ({ id })),
+			text: (item) => `item ${item.id}`,
+			height,
+			actions: [],
+			onClose() {},
+		});
+	assert.equal(make(() => 17, 3).render(80).length, 17, "function heights are unchanged");
+	assert.equal(make(undefined, 3).render(80).length, 32, "default stays 80%");
+	assert.equal(make({ max: 0.5 }, 3).render(80).length, 20, "max as a fraction");
+	assert.equal(make({ max: 12 }, 3).render(80).length, 12, "max above 1 means rows");
+	assert.equal(make({ fit: true, max: 0.5 }, 3).render(80).length, 8, "3 items: chrome + items, at least 8");
+	assert.equal(make({ fit: true, max: 0.5, min: 14 }, 3).render(80).length, 14, "min keeps room for a preview");
+	assert.equal(make({ fit: true, max: 0.5 }, 11).render(80).length, 15, "11 items + 4 chrome rows");
+	assert.equal(make({ fit: true, max: 0.5 }, 500).render(80).length, 20, "never taller than max");
+	assert.equal(make({ fit: true, max: 0.5, min: 30 }, 3, 20).render(80).length, 10, "min never exceeds max");
+	const typing = make({ fit: true, max: 0.5 }, 11);
+	typing.focused = true;
+	for (const char of "item 1") typing.handleInput(char);
+	assert.equal(typing.render(80).length, 15, "typing never resizes the panel");
+});

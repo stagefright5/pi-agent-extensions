@@ -40,11 +40,20 @@ The `fast` status is consumed by this indicator rather than duplicated beside th
 - The footer uses subtle dot separators, accent-colored branch names, and quiet metadata.
 - It shortens the directory first, then the provider label before sacrificing other fields.
 - At narrow widths, context (including warning/error color) and extension statuses take priority over model, cost, and location. Overlong status text is ellipsized, never allowed to overflow the terminal.
-- Tested against pi 1.2.0 at tiny widths and 40/80/120/160 columns, including ANSI and wide Unicode text.
+- Tested against pi 1.3.0 at tiny widths and 40/80/120/160 columns, including ANSI and wide Unicode text.
 
 Cost follows pi's cumulative accounting across all session branches, not just current context. It is cached between session-entry changes rather than rescanning history on every frame.
 
 Plan Mode uses the extension-status area to show its active state, plan title, iteration count, and work status.
+
+## Clickable statuses
+
+An extension can make its status clickable by registering an action under the same id it passes to `ctx.ui.setStatus` (`registerStatusAction` in the shared `status-line.ts` contract). [Background Bash](../bg-bash/README.md) uses this for its jobs indicator.
+
+- **Mouse** (fullscreen `tuiMode`): click the status. The footer hit-tests the columns recorded during the latest layout; nothing is re-laid out.
+- **Keyboard:** `Alt+S` highlights the first clickable status and shows its action (`⏎ jobs`). `←`/`→` or `Tab`/`Shift+Tab` move between clickable statuses, `Enter` runs the action, `Esc` or `Alt+S` leaves. Any other key leaves and reaches pi unchanged. The key listener exists only while navigating.
+
+The footer is drawn on every frame, so the line is laid out only when an input changes (width, segments, directory, branch, statuses, context, model, cost, theme, or focus) and reused otherwise.
 
 ## Scope and lifecycle
 

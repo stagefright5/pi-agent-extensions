@@ -52,6 +52,10 @@ const { ids, total } = searcher.search("auth tests");
 | action keys (e.g. `Ctrl+Y`)    | Run on marked items, or the selected item                   |
 | `Esc`                          | Cancel a pending confirmation, then clear marks, then close |
 
+The panel is 80% of the terminal by default. Pass `height: { max, min, fit }` to change it: `max` is a fraction of the terminal rows (or rows when above 1), and `fit: true` shrinks the panel to its items (one row each, plus title, input, filters, and footer) down to `min` rows; typing never resizes it. A function returning rows still works.
+
+Preview lines are wrapped once per item, query, and width. For live content such as a log, pass `previewKey(item)` returning a version that changes with the text, so only a changed preview is re-wrapped; `previewTail: true` opens the preview at its end and keeps following new lines until you scroll up.
+
 Space types a space, so multi-word queries work; marking uses `Tab`. Actions can require a second press (`confirm`), notify in the footer, remove items, or close the picker. The preview opens at the first match.
 
 `renderInlinePanel` draws a suggestion panel for a host-owned list (Prompt Truly Mine passes Pi's native autocomplete state): aligned names, highlighted query, visible selection, word-boundary `…`, and a position/keys row.
@@ -60,14 +64,15 @@ Space types a space, so multi-word queries work; marking uses `Tab`. Actions can
 
 `pnpm bench:picker` generates long prompt-like items from a small vocabulary (a stress case: most items fuzzy-match early letters), types eight queries one keystroke at a time, and fails when a p95 exceeds its budget. Results on an Apple-silicon Mac:
 
-| Benchmark                                     | p50 ms | p95 ms | Budget |
-| --------------------------------------------- | -----: | -----: | -----: |
-| Keystroke, 1k items                           |   0.15 |   0.27 |    ≤ 1 |
-| Keystroke, 10k items                          |   0.59 |   1.21 |  ≤ 1.5 |
-| Keystroke, 100k items                         |   3.82 |   8.57 |   ≤ 10 |
-| Open, 10k items (index + first list)          |  12.38 |  20.65 |   ≤ 30 |
-| Frame (160×48 picker with preview, 10k items) |   0.55 |   0.64 |    ≤ 2 |
+| Benchmark                                      | p50 ms | p95 ms | Budget |
+| ---------------------------------------------- | -----: | -----: | -----: |
+| Keystroke, 1k items                            |   0.15 |   0.27 |    ≤ 1 |
+| Keystroke, 10k items                           |   0.59 |   1.21 |  ≤ 1.5 |
+| Keystroke, 100k items                          |   3.82 |   8.57 |   ≤ 10 |
+| Open, 10k items (index + first list)           |  12.38 |  20.65 |   ≤ 30 |
+| Frame (160×48 picker with preview, 10k items)  |   0.55 |   0.64 |    ≤ 2 |
+| Frame, live 300-line tail re-wrapped per frame |   0.70 |   0.75 |    ≤ 2 |
 
 ## Compatibility
 
-Developed against pi/pi-tui 1.2.0 and verified with 1.3.0. Pure TypeScript source, loaded by Pi's `jiti` like the extensions.
+Developed against pi/pi-tui 1.3.0. Pure TypeScript source, loaded by Pi's `jiti` like the extensions.

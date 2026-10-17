@@ -86,7 +86,7 @@ The composer chrome, aligned to the draft inset:
 - **Mode rail:** the one-cell left inset shows `▎` in the theme's `accent` color, or `bashMode` for `!`/`!!` commands, on each draft row (not the padding rows). It needs `editorPaddingX` ≥ 1 and is never part of the draft.
 - **Input hints:** an empty draft shows `/ commands  $ skills  ! shell  @ files` right-aligned in the draft row (dropped from the end on narrow terminals); they disappear on the first keystroke. There is no placeholder prompt text.
 - **Footer bar:** one darker row reading `<dir> <mode> <hints>`: the directory, then `shell` or `shell · no context` for `!`/`!!` drafts, then `⌃Z undo  ⌃Y redo` right after an undo (until you edit again) or the `↓ N more` overflow indicator. Footer text is drawn closer to the footer colour than draft text is to the draft surface (in truecolor themes; hues are kept, so context warnings stay distinguishable).
-- **Status line:** with [Compact Status Bar](../status-bar/README.md) loaded, its line fills the footer: `<dir · branch>  <mode>  <hints> · <extension statuses> … model · context · cost`, and Pi's separate footer row disappears. When space runs out the hints go first, then fields are shortened; the mode label outlives the directory. While a picker, selector, or overlay has focus, the status bar returns to its own row. The two extensions share only a global key (`Symbol.for("@stagefright5/pi-status-line/v1")`); neither imports the other.
+- **Status line:** with [Compact Status Bar](../status-bar/README.md) loaded, its line fills the footer: `<dir · branch>  <mode>  <hints> · <extension statuses> … model · context · cost`, and Pi's separate footer row disappears. When space runs out the hints go first, then fields are shortened; the mode label outlives the directory. While a picker, selector, or overlay has focus, the status bar returns to its own row. The two extensions share only a global key (`Symbol.for("@stagefright5/pi-status-line/v1")`); neither imports the other. Clickable statuses (such as Background Bash's jobs indicator) work here too: a click on one runs its action without moving the caret or starting a selection.
 - Native scroll indicators replace the top or bottom row where content is hidden. Theme changes apply at render time, including with Obsidian Ice.
 - On exit, Pi erases the cursor by writing a plain space; the extension redraws that one cell in the composer color so the printed transcript has no black hole.
 
@@ -123,7 +123,7 @@ Loading several full resources and substituting the whole draft into prompt temp
 
 ## Compatibility and limitations
 
-This extension develops against pi and pi-tui **1.2.0**; the editor and history integration tests also pass against **1.3.0**. The composer uses protected editor-border hooks and a validated native menu-layout shim. Older runtime compatibility is not covered by this version's tests.
+This extension develops against pi and pi-tui **1.3.0**. The composer uses protected editor-border hooks and a validated native menu-layout shim. Older runtime compatibility is not covered by this version's tests.
 
 Cursor/paste restoration, history retention, composer-owned selection, above-composer autocomplete placement, inline `/` autocomplete, and Enter selection without submission use compatibility shims because pi-tui does not currently expose complete public APIs for those operations. Private access is isolated in `editor-compat.ts` and runtime-validated rather than asserted through an invented SDK type. If internals change:
 

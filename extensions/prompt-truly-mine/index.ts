@@ -58,7 +58,7 @@ import {
 } from "./inline-context.ts";
 
 import { readableScrollChrome } from "./editor-chrome.ts";
-import { statusLineChannel, type StatusLineHost } from "./status-line.ts";
+import { activateStatusAt, statusAt, statusLineChannel, type StatusLineHost } from "./status-line.ts";
 import { SearchIndex, Searcher } from "@stagefright5/pi-picker";
 import {
 	composerPalette,
@@ -283,6 +283,10 @@ export class UndoRedoEditor extends CustomEditor implements StatusLineHost {
 	private undoHistory: Snapshot[] = [];
 	/** Whether the latest render drew the lent status line in the footer strip. */
 	private hostedStatus = false;
+	/** Columns before the hosted status line in the footer strip, while hosting. */
+	private footerLead: number | undefined;
+	/** Rows returned by the latest render; the footer strip is the last one. */
+	private renderedHeight = 0;
 	private redoHistory: Snapshot[] = [];
 	private lastEditWasTyping = false;
 	private compactViewport = false;
@@ -440,6 +444,13 @@ export class UndoRedoEditor extends CustomEditor implements StatusLineHost {
 	}
 
 	override handleMouse(event: TuiMouseEvent): TuiMouseEventResult | undefined {
+		const status = this.statusColumn(event);
+		if (status !== undefined) {
+			// Clickable footer statuses (for example running jobs) act on click; the press and release
+			// around it must not move the caret or start a selection.
+			if (event.type === "click") activateStatusAt(status);
+			return { handled: true, render: false };
+		}
 		if (this.compactViewport) return event.type === "click" ? { handled: true, focus: true } : undefined;
 		// The legend row and no-match row are display-only.
 		if (event.y >= this.menuItemRows && event.y < this.menuHeight) return { handled: true };
@@ -464,6 +475,15 @@ export class UndoRedoEditor extends CustomEditor implements StatusLineHost {
 		return result;
 	}
 
+	/** Column within the hosted status line under a left-button event on the footer strip, if clickable. */
+	private statusColumn(event: TuiMouseEvent): number | undefined {
+		if (this.footerLead === undefined || !this.hostsStatusLine() || event.button !== "left") return undefined;
+		if (event.type !== "press" && event.type !== "release" && event.type !== "click") return undefined;
+		if (event.y !== this.renderedHeight - 1) return undefined;
+		const column = event.x - this.footerLead;
+		return statusAt(column) === undefined ? undefined : column;
+	}
+
 	/** The status bar's footer steps aside only while this composer is focused and drawing its line. */
 	hostsStatusLine(): boolean {
 		return this.focused && this.hostedStatus;
@@ -473,6 +493,8 @@ export class UndoRedoEditor extends CustomEditor implements StatusLineHost {
 		this.menuHeight = 0;
 		this.composerHeight = 0;
 		this.hostedStatus = false;
+		this.footerLead = undefined;
+		this.renderedHeight = 0;
 		if (width <= 0) return [];
 		const padding = Math.min(this.getPaddingX(), Math.max(0, Math.floor((width - 1) / 2)));
 		this.compactViewport = width - padding * 2 - (padding ? 0 : 1) < 2;
@@ -562,6 +584,7 @@ export class UndoRedoEditor extends CustomEditor implements StatusLineHost {
 		// Item rows keep native order; only the trailing legend row has no native counterpart.
 		this.menuItemRows = view ? (view.items.length ? view.end - view.start : 0) : menu.length;
 		this.trackExitCursorCell(painted, theme);
+		this.renderedHeight = menu.length + painted.length;
 		// Keep the composer at the bottom as suggestions open, filter, and close.
 		return [...menu, ...painted];
 	}
@@ -615,6 +638,8 @@ export class UndoRedoEditor extends CustomEditor implements StatusLineHost {
 			? composerPalette(theme)
 			: { fg: (_token: string, value: string) => this.labelColor(value), bold: (value: string) => value };
 		const inset = Math.min(this.getPaddingX(), Math.max(0, Math.floor((width - 1) / 2)));
+		// renderFooter starts a hosted line after the same lead; clicks map back through it.
+		if (status) this.footerLead = Math.min(inset, width);
 		// A hosted status line keeps the overflow indicator readable in its centre gap.
 		const indicator =
 			hiddenLineCount > 0
