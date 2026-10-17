@@ -195,109 +195,37 @@ export function extractReferencedCommands(text: string, commands: readonly Compo
 	return [...selected.values()];
 }
 
-export function parseCommandArgs(argsString: string): string[] {
-	const args: string[] = [];
-	let current = "";
-	let inQuote: '"' | "'" | null = null;
+export const INLINE_CONTEXT_REFERENCES_MARKER = "pi-extension:inline-context:v2";
 
-	for (const character of argsString) {
-		if (inQuote) {
-			if (character === inQuote) {
-				inQuote = null;
-			} else {
-				current += character;
-			}
-		} else if (character === '"' || character === "'") {
-			inQuote = character;
-		} else if (/\s/.test(character)) {
-			if (current) {
-				args.push(current);
-				current = "";
-			}
-		} else {
-			current += character;
-		}
-	}
-
-	if (current) args.push(current);
-	return args;
-}
-
-export function substitutePromptArguments(content: string, args: readonly string[]): string {
-	const allArgs = args.join(" ");
-	return content.replace(
-		/\$\{(\d+|ARGUMENTS|@):-([^}]*)\}|\$\{@:(\d+)(?::(\d+))?\}|\$(ARGUMENTS|@|\d+)/g,
-		(_match, defaultTarget, defaultValue, sliceStart, sliceLength, simple) => {
-			if (defaultTarget) {
-				const value =
-					defaultTarget === "@" || defaultTarget === "ARGUMENTS"
-						? allArgs
-						: args[Number.parseInt(defaultTarget, 10) - 1];
-				return value || defaultValue;
-			}
-
-			if (sliceStart) {
-				const start = Math.max(0, Number.parseInt(sliceStart, 10) - 1);
-				if (sliceLength) {
-					return args.slice(start, start + Number.parseInt(sliceLength, 10)).join(" ");
-				}
-				return args.slice(start).join(" ");
-			}
-
-			if (simple === "ARGUMENTS" || simple === "@") return allArgs;
-			return args[Number.parseInt(simple, 10) - 1] ?? "";
-		},
-	);
-}
-
-function escapeXmlAttribute(value: string): string {
-	return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
-}
-
-function displayName(resource: LoadedContextResource): string {
-	return resource.source === "skill" ? resource.name.replace(/^skill:/, "") : `prompt:${resource.name}`;
-}
-
-function formatResourceSection(resource: LoadedContextResource, originalArgs: readonly string[]): string {
+function describeReference(resource: LoadedContextResource): string {
 	if (resource.source === "skill") {
-		const skillName = resource.name.replace(/^skill:/, "");
-		return [
-			`## Skill: ${skillName}`,
-			"",
-			`Location: ${resource.path}`,
-			`References are relative to ${resource.baseDir}.`,
-			"",
-			resource.body.trim(),
-		].join("\n");
+		const name = resource.name.replace(/^skill:/, "");
+		return `- Skill \`${name}\`: ${resource.path} (relative paths inside it resolve against ${resource.baseDir})`;
 	}
-
-	return [
-		`## Prompt template: ${resource.name}`,
-		"",
-		`Location: ${resource.path}`,
-		"",
-		substitutePromptArguments(resource.body.trim(), originalArgs),
-	].join("\n");
+	return `- Prompt template \`/${resource.name}\`: ${resource.path} (its $ARGUMENTS, $@, and $1, $2, \u2026 placeholders refer to the request above)`;
 }
 
-export function formatContextBundle(originalText: string, resources: readonly LoadedContextResource[]): string {
+/**
+ * Keep the user's request first and verbatim. Referenced skills and prompt templates follow as
+ * file pointers, so the agent reads the request before loading each resource with its own tools.
+ */
+export function formatContextReferences(originalText: string, resources: readonly LoadedContextResource[]): string {
 	if (resources.length === 0) return originalText;
-
-	const args = parseCommandArgs(originalText);
-	const names = resources.map(displayName);
-	const bundleName = names.join(", ");
-	const location = resources.length === 1 ? resources[0]!.path : "multiple";
-	const sections = resources.map((resource) => formatResourceSection(resource, args));
-	const content = [
-		`<!-- ${INLINE_CONTEXT_BUNDLE_MARKER} -->`,
-		`${resources.length} context resource${resources.length === 1 ? " was" : "s were"} explicitly selected. Apply the relevant instructions to the unchanged user task below.`,
+	return [
+		originalText,
 		"",
-		sections.join("\n\n---\n\n"),
+		`<!-- ${INLINE_CONTEXT_REFERENCES_MARKER} -->`,
+		"<context-references>",
+		`The request above references ${resources.length === 1 ? "this resource" : "these resources"}. Read each file before acting on the request, then apply it to the request above.`,
+		...resources.map(describeReference),
+		"</context-references>",
 	].join("\n");
-
-	return `<skill name="${escapeXmlAttribute(bundleName)}" location="${escapeXmlAttribute(location)}">\n${content}\n</skill>\n\n${originalText}`;
 }
 
-export function isExpandedContextBundle(text: string): boolean {
-	return text.startsWith("<skill ") && text.includes(`<!-- ${INLINE_CONTEXT_BUNDLE_MARKER} -->`);
+/** True for text this extension already rewrote, including the older prepended bundle format. */
+export function hasContextReferences(text: string): boolean {
+	return (
+		text.includes(`<!-- ${INLINE_CONTEXT_REFERENCES_MARKER} -->`) ||
+		(text.startsWith("<skill ") && text.includes(`<!-- ${INLINE_CONTEXT_BUNDLE_MARKER} -->`))
+	);
 }

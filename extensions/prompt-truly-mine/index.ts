@@ -15,6 +15,7 @@ import { readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import {
 	CustomEditor,
+	copyToClipboard,
 	parseFrontmatter,
 	stripFrontmatter,
 	type ExtensionAPI,
@@ -26,6 +27,7 @@ import {
 	decodeKittyPrintable,
 	CURSOR_MARKER,
 	renderFakeCursor,
+	stripTerminalSequences,
 	Key,
 	matchesKey,
 	truncateToWidth,
@@ -43,28 +45,72 @@ import {
 	encodeComposableCompletionPrefix,
 	extractReferencedCommands,
 	findSlashCompletionContext,
-	formatContextBundle,
-	isExpandedContextBundle,
+	formatContextReferences,
+	hasContextReferences,
 	promoteInlineExtensionCommand,
 	type ComposableCommand,
 	type InlineCommand,
 	type LoadedContextResource,
 } from "./inline-context.ts";
 
-import { composerHeader, readableScrollChrome } from "./editor-chrome.ts";
+import { readableScrollChrome } from "./editor-chrome.ts";
+import { SearchIndex, Searcher } from "@stagefright5/pi-picker";
+import {
+	composerPalette,
+	halfRow,
+	INPUT_HINTS,
+	paintRow,
+	renderFooter,
+	renderMenuPanel,
+	renderPlaceholder,
+	withRail,
+	type FooterHint,
+} from "./composer-style.ts";
 
 type EditorFactory = NonNullable<ReturnType<ExtensionContext["ui"]["getEditorComponent"]>>;
 
 import {
 	captureEditorSnapshot,
+	copyOnSelectEnabled,
+	expandPasteMarkers,
+	flash,
+	getEditorHistory,
+	getAutocompleteView,
+	getNativeAutocompleteHeight,
+	getVisibleVisualRows,
+	repairExitCursorCell,
+	setEditorHistory,
 	makeSelectedContextCompletionComposable,
 	requestInlineContextAutocomplete,
 	restoreEditorSnapshotViaInternalState,
 	restorePasteData,
 	type Snapshot,
 } from "./editor-compat.ts";
+import {
+	highlightRow,
+	lineRangeAt,
+	orderedRange,
+	positionAtColumn,
+	selectedText,
+	wordRangeAt,
+	type TextPosition,
+	type TextRange,
+} from "./editor-selection.ts";
 
 const MAX_HISTORY = 200;
+// Survives extension-module replacement during /reload within one Pi process.
+const RETAINED_HISTORY = Symbol.for("@stagefright5/pi-prompt-truly-mine/history");
+
+/** Newer sources first; repeated prompts appear once in seeded recall. */
+function seedHistory(editor: UndoRedoEditor, persisted: readonly string[]): void {
+	const merged = [...(getEditorHistory(editor) ?? []), ...retainedHistory(), ...persisted].map((text) => text.trim());
+	setEditorHistory(editor, [...new Set(merged.filter(Boolean))]);
+}
+
+function retainedHistory(): string[] {
+	const value = Reflect.get(globalThis, RETAINED_HISTORY);
+	return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
+}
 const REDO_KEYS = [Key.ctrlShift("z"), Key.ctrl("y")] as const;
 
 function sameSnapshot(a: Snapshot, b: Snapshot): boolean {
@@ -127,6 +173,28 @@ function getComposableCommands(pi: ExtensionAPI): ComposableCommand[] {
 	);
 }
 
+/** The typed text behind a completion prefix: `/mo` → `mo`, `@src/x` → `src/x`. */
+export function completionQuery(prefix: string): string {
+	return (decodeComposableCompletionPrefix(prefix) ?? prefix).replace(/^[/@]/u, "");
+}
+
+type Suggestions = Awaited<ReturnType<AutocompleteProvider["getSuggestions"]>>;
+
+/**
+ * Re-rank Pi's suggestions with the shared engine (word starts and consecutive letters first; ties
+ * keep Pi's order). Items Pi matched but the shared engine does not stay, after the ranked ones.
+ */
+export function rankSuggestions(suggestions: Suggestions): Suggestions {
+	if (!suggestions || suggestions.items.length < 2) return suggestions;
+	const query = completionQuery(suggestions.prefix);
+	if (!query.trim()) return suggestions;
+	const items = suggestions.items;
+	const index = new SearchIndex((item: (typeof items)[number]) => item.label || item.value, items);
+	const ranked = Array.from(new Searcher(index).search(query, { limit: items.length }).ids, (id) => items[id]!);
+	const seen = new Set(ranked);
+	return { ...suggestions, items: [...ranked, ...items.filter((item) => !seen.has(item))] };
+}
+
 function createInlineContextAutocompleteProvider(
 	current: AutocompleteProvider,
 	getCommands: () => InlineCommand[],
@@ -140,15 +208,15 @@ function createInlineContextAutocompleteProvider(
 
 			const context = findSlashCompletionContext(lines, cursorLine, cursorCol);
 			if (!context || context.isInitialCommand) {
-				return current.getSuggestions(lines, cursorLine, cursorCol, options);
+				return rankSuggestions(await current.getSuggestions(lines, cursorLine, cursorCol, options));
 			}
 
 			const items = buildContextCompletionItems(getCommands(), context.query);
 			if (items.length === 0) return null;
-			return {
+			return rankSuggestions({
 				items,
 				prefix: encodeComposableCompletionPrefix(context.prefix),
-			};
+			});
 		},
 
 		applyCompletion(lines, cursorLine, cursorCol, item, prefix) {
@@ -195,6 +263,12 @@ export class UndoRedoEditor extends CustomEditor {
 	private redoHistory: Snapshot[] = [];
 	private lastEditWasTyping = false;
 	private compactViewport = false;
+	private menuHeight = 0;
+	private menuItemRows = 0;
+	private composerHeight = 0;
+	private selectionAnchor: TextPosition | undefined;
+	private selectionFocus: TextPosition | undefined;
+	private selecting = false;
 	private readonly appKeybindings: KeybindingsManager;
 	private readonly isComposableCommand: (value: string) => boolean;
 
@@ -206,6 +280,8 @@ export class UndoRedoEditor extends CustomEditor {
 		options?: EditorOptions,
 		private readonly labelColor: (text: string) => string = (text) => text,
 		private readonly getSurfaceTheme?: () => Theme,
+		private readonly onSlashSubmit?: (text: string) => void,
+		private readonly copyText: (text: string) => Promise<void> = copyToClipboard,
 	) {
 		super(tui, theme, keybindings, options);
 		this.appKeybindings = keybindings;
@@ -213,6 +289,13 @@ export class UndoRedoEditor extends CustomEditor {
 	}
 
 	override handleInput(data: string): void {
+		if (this.selectionRange()) {
+			const copy = this.appKeybindings.matches(data, "tui.input.copy");
+			if (copy) this.copySelection();
+			this.clearSelection();
+			if (copy) return;
+		}
+
 		if (this.isUndoKey(data)) {
 			this.undoPromptEdit();
 			return;
@@ -236,6 +319,12 @@ export class UndoRedoEditor extends CustomEditor {
 		const onSubmit = this.onSubmit;
 		const observeSubmit = (text: string) => {
 			submitted = true;
+			if (text.trim().startsWith("/")) {
+				// Built-in commands return before Pi adds ordinary input to history.
+				// Native addToHistory deduplicates the host's subsequent insertion.
+				this.addToHistory(text);
+				this.onSlashSubmit?.(text.trim());
+			}
 			onSubmit?.(text);
 		};
 		this.onSubmit = observeSubmit;
@@ -283,6 +372,7 @@ export class UndoRedoEditor extends CustomEditor {
 	}
 
 	override setText(text: string): void {
+		this.clearSelection();
 		const before = this.currentSnapshot();
 		super.setText(text);
 		if (text === before.text) restorePasteData(this, before);
@@ -295,6 +385,7 @@ export class UndoRedoEditor extends CustomEditor {
 	}
 
 	override insertTextAtCursor(text: string): void {
+		this.clearSelection();
 		const before = this.currentSnapshot();
 		super.insertTextAtCursor(text);
 		const after = this.currentSnapshot();
@@ -327,14 +418,32 @@ export class UndoRedoEditor extends CustomEditor {
 
 	override handleMouse(event: TuiMouseEvent): TuiMouseEventResult | undefined {
 		if (this.compactViewport) return event.type === "click" ? { handled: true, focus: true } : undefined;
+		// The legend row and no-match row are display-only.
+		if (event.y >= this.menuItemRows && event.y < this.menuHeight) return { handled: true };
 		const before = this.getCursor();
-		const result = super.handleMouse(event);
+		// Native hit testing expects [composer, menu]; render displays [menu, composer].
+		// Extra display rows (half-row padding, footer strip) map onto the native bottom border.
+		const y =
+			event.y < this.menuHeight
+				? event.y + this.composerHeight
+				: Math.min(event.y - this.menuHeight, Math.max(0, this.composerHeight - 1));
+		const local = { ...event, y };
+		// A captured drag may leave the composer; clamp it relative to the composer, not the menu.
+		const selection = this.selecting
+			? this.handleSelectionMouse({ ...event, y: event.y - this.menuHeight })
+			: y < this.composerHeight
+				? this.handleSelectionMouse(local)
+				: undefined;
+		if (selection) return selection;
+		const result = super.handleMouse(local);
 		const after = this.getCursor();
 		if (before.line !== after.line || before.col !== after.col) this.lastEditWasTyping = false;
 		return result;
 	}
 
 	override render(width: number): string[] {
+		this.menuHeight = 0;
+		this.composerHeight = 0;
 		if (width <= 0) return [];
 		const padding = Math.min(this.getPaddingX(), Math.max(0, Math.floor((width - 1) / 2)));
 		this.compactViewport = width - padding * 2 - (padding ? 0 : 1) < 2;
@@ -351,13 +460,95 @@ export class UndoRedoEditor extends CustomEditor {
 					this.renderBottomBorder(width, this.getLines().length - cursor.line - 1),
 				]
 			: super.render(width);
-		const lines = rows.map((line) => truncateToWidth(line, width, ""));
+		const range = this.compactViewport ? undefined : this.selectionRange();
+		const visible = range ? getVisibleVisualRows(this) : undefined;
+		if (range && visible) {
+			const lines = this.getLines();
+			visible.forEach(({ row, isLast }, index) => {
+				rows[index + 1] = highlightRow(rows[index + 1]!, lines, row, range, padding, width, isLast);
+			});
+		}
+		const nativeMenuHeight = this.compactViewport ? 0 : getNativeAutocompleteHeight(this, rows.length);
+		this.composerHeight = rows.length - nativeMenuHeight;
+		const fit = (line: string) => truncateToWidth(line, width, "");
+		const composer = rows.slice(0, this.composerHeight).map(fit);
+		const nativeMenu = rows.slice(this.composerHeight).map(fit);
 		const theme = this.getSurfaceTheme?.();
-		if (!theme) return lines;
+		if (!theme) {
+			this.menuHeight = this.menuItemRows = nativeMenu.length;
+			// Keep the composer at the bottom as suggestions open, filter, and close.
+			return [...nativeMenu, ...composer];
+		}
 		// Reuse user-message tokens: the draft and sent message share one visual surface.
-		// Only wrap native rows in ANSI styling; do not change text, spacing, cursor
-		// markers, autocomplete geometry, or add any prefix/padding.
-		return lines.map((line) => theme.style(line, { fg: "userMessageText", bg: "userMessageBg" }));
+		const surface = (line: string) => theme.style(line, { fg: "userMessageText", bg: "userMessageBg" });
+		if (this.compactViewport) {
+			this.menuHeight = this.menuItemRows = 0;
+			const lines = composer.map(surface);
+			this.trackExitCursorCell(lines, theme);
+			return lines;
+		}
+		const palette = composerPalette(theme);
+		const text = this.getText();
+		const [top = "", ...rest] = composer;
+		const content = rest.slice(0, -1);
+		const bottom = rest.at(-1) ?? "";
+		if (text === "" && content.length === 1 && !range) {
+			content[0] = renderPlaceholder(
+				width,
+				padding,
+				(this.focused ? CURSOR_MARKER : "") + renderFakeCursor(" "),
+				palette,
+			);
+		}
+		// A thin rail in the left inset carries the mode by color; the draft text never moves.
+		const rail = padding > 0 ? palette.fg(text.startsWith("!") ? "bashMode" : "accent", "\u258e") : undefined;
+		const railed = (line: string) => (rail ? withRail(line, rail) : line);
+		// Half-row padding keeps the draft and the footer labels vertically centred in their bars.
+		// Rows carrying native text (scroll or working indicators) stay full rows so they remain readable.
+		const painted = [
+			stripTerminalSequences(top).trim() ? surface(top) : halfRow(width, "\u2584", palette.surface),
+			...content.map((line) => surface(railed(line))),
+			halfRow(
+				width,
+				"\u2580",
+				palette.surface,
+				palette.footer,
+				rail ? palette.surface + rail + palette.footer : "",
+			),
+			paintRow(railed(bottom), width, palette.text, palette.footer),
+			halfRow(width, "\u2580", palette.footer),
+		];
+		const view = nativeMenu.length ? getAutocompleteView(this, nativeMenu.length) : undefined;
+		const menu = view
+			? renderMenuPanel(view, width, padding, palette, completionQuery(view.prefix)).map((row) =>
+					paintRow(fit(row.text), width, palette.text, row.selected ? palette.menuSelected : palette.menu),
+				)
+			: nativeMenu.map(surface);
+		this.menuHeight = menu.length;
+		// Item rows keep native order; only the trailing legend row has no native counterpart.
+		this.menuItemRows = view ? (view.items.length ? view.end - view.start : 0) : menu.length;
+		this.trackExitCursorCell(painted, theme);
+		// Keep the composer at the bottom as suggestions open, filter, and close.
+		return [...menu, ...painted];
+	}
+
+	/** The surface-styled glyph under the cursor, so exiting Pi never punches a hole in the composer. */
+	private exitCursorCell: string | undefined;
+
+	private trackExitCursorCell(lines: readonly string[], theme: Theme): void {
+		this.exitCursorCell = undefined;
+		if (!this.focused) return;
+		const [start = "", end = ""] = renderFakeCursor("\u0000").split("\u0000");
+		for (const line of lines) {
+			const at = line.indexOf(CURSOR_MARKER + start);
+			if (at < 0) continue;
+			const from = at + CURSOR_MARKER.length + start.length;
+			const to = line.indexOf(end, from);
+			const glyph = stripTerminalSequences(line.slice(from, to < 0 ? undefined : to)) || " ";
+			this.exitCursorCell = theme.style(glyph, { fg: "userMessageText", bg: "userMessageBg" });
+			break;
+		}
+		repairExitCursorCell(this.tui, () => (this.focused ? this.exitCursorCell : undefined));
 	}
 
 	protected override renderTopBorder(width: number, hiddenLineCount: number): string {
@@ -366,14 +557,116 @@ export class UndoRedoEditor extends CustomEditor {
 		if (hiddenLineCount > 0) {
 			return readableScrollChrome(super.renderTopBorder(width, hiddenLineCount), this.labelColor);
 		}
-		const hints: string[] = [];
-		if (this.undoHistory.length > 0) hints.push("ctrl+z undo");
-		if (this.redoHistory.length > 0) hints.push("ctrl+y redo");
-		return composerHeader(width, this.getText().startsWith("!") ? ["shell"] : [], hints, this.labelColor);
+		// The top padding row stays blank; mode and hints live in the footer strip.
+		return " ".repeat(Math.max(0, width));
 	}
 
 	protected override renderBottomBorder(width: number, hiddenLineCount: number): string {
-		return readableScrollChrome(super.renderBottomBorder(width, hiddenLineCount), this.labelColor);
+		if (hiddenLineCount > 0) {
+			return readableScrollChrome(super.renderBottomBorder(width, hiddenLineCount), this.labelColor);
+		}
+		const text = this.getText();
+		const mode = text.startsWith("!!") ? "shell · no context" : text.startsWith("!") ? "shell" : undefined;
+		// Discoverability hints by default; right after an undo, undo/redo takes their place.
+		const hints: readonly FooterHint[] =
+			this.redoHistory.length > 0
+				? [
+						...(this.undoHistory.length > 0 ? [{ key: "⌃Z", action: "undo" }] : []),
+						{ key: "⌃Y", action: "redo" },
+					]
+				: INPUT_HINTS;
+		const theme = this.getSurfaceTheme?.();
+		const palette = theme
+			? composerPalette(theme)
+			: { fg: (_token: string, value: string) => this.labelColor(value), bold: (value: string) => value };
+		const inset = Math.min(this.getPaddingX(), Math.max(0, Math.floor((width - 1) / 2)));
+		return renderFooter(width, inset, mode, hints, palette);
+	}
+
+	/**
+	 * Fullscreen selection over the composer copies source text only. The visual
+	 * inset, wrap breaks, header hints, and cursor never become copied characters.
+	 */
+	private handleSelectionMouse(event: TuiMouseEvent): TuiMouseEventResult | undefined {
+		if (event.button !== "left") return undefined;
+		if (event.type === "click") {
+			const count = event.clickCount ?? 1;
+			if (count < 2) {
+				this.clearSelection();
+				return undefined; // Native click positions the cursor.
+			}
+			const position = this.positionAt(event);
+			const range = position
+				? count === 2
+					? wordRangeAt(this.getLines(), position)
+					: lineRangeAt(this.getLines(), position.line)
+				: undefined;
+			if (!range) return { handled: true, focus: true };
+			this.selectionAnchor = range.start;
+			this.selectionFocus = range.end;
+			if (copyOnSelectEnabled(this.tui)) this.copySelection();
+			this.tui.requestRender();
+			return { handled: true, focus: true };
+		}
+		if (event.type === "press") {
+			const position = this.positionAt(event);
+			if (!position) return undefined; // Unknown native layout: retain screen selection.
+			this.clearSelection();
+			this.selectionAnchor = position;
+			this.selectionFocus = position;
+			this.selecting = true;
+			return { capture: true, focus: true };
+		}
+		if (!this.selecting) return undefined;
+		if (event.type === "drag") {
+			this.selectionFocus = this.positionAt(event) ?? this.selectionFocus;
+			this.tui.requestRender();
+			return { handled: true };
+		}
+		if (event.type === "release") {
+			this.selecting = false;
+			if (this.selectionRange() && copyOnSelectEnabled(this.tui)) this.copySelection();
+			this.tui.requestRender();
+			return { handled: true };
+		}
+		return undefined;
+	}
+
+	private positionAt(event: TuiMouseEvent): TextPosition | undefined {
+		const visible = getVisibleVisualRows(this);
+		if (!visible?.length) return undefined;
+		const padding = Math.min(this.getPaddingX(), Math.max(0, Math.floor((event.width - 1) / 2)));
+		const lines = this.getLines();
+		// Dragging over the header or footer selects to the visible edge.
+		if (event.y < 1) return positionAtColumn(lines, visible[0]!.row, 0, visible[0]!.isLast);
+		const last = visible.at(-1)!;
+		if (event.y > visible.length) return positionAtColumn(lines, last.row, Number.POSITIVE_INFINITY, true);
+		const target = visible[event.y - 1]!;
+		return positionAtColumn(lines, target.row, Math.max(0, event.x - padding), target.isLast);
+	}
+
+	private selectionRange(): TextRange | undefined {
+		return this.selectionAnchor && this.selectionFocus
+			? orderedRange(this.selectionAnchor, this.selectionFocus)
+			: undefined;
+	}
+
+	private clearSelection(): void {
+		const visible = this.selectionRange() !== undefined;
+		this.selectionAnchor = undefined;
+		this.selectionFocus = undefined;
+		this.selecting = false;
+		if (visible) this.tui.requestRender();
+	}
+
+	private copySelection(): void {
+		const range = this.selectionRange();
+		if (!range) return;
+		const text = expandPasteMarkers(this, selectedText(this.getLines(), range));
+		void this.copyText(text).then(
+			() => flash(this.tui, "Copied!"),
+			() => flash(this.tui, "Copy failed"),
+		);
 	}
 
 	private currentSnapshot(): Snapshot {
@@ -413,6 +706,7 @@ export class UndoRedoEditor extends CustomEditor {
 	}
 
 	private restoreSnapshot(snapshot: Snapshot): void {
+		this.clearSelection();
 		if (!restoreEditorSnapshotViaInternalState(this, snapshot)) {
 			// Never restore an orphaned paste marker if the private layout changes.
 			super.setText(snapshot.expandedText);
@@ -442,26 +736,32 @@ export class UndoRedoEditor extends CustomEditor {
 export default function promptTrulyMineExtension(pi: ExtensionAPI): void {
 	let previousEditorFactory: EditorFactory | undefined;
 	let installedEditorFactory: EditorFactory | undefined;
+	let installedEditor: UndoRedoEditor | undefined;
+	let persistedHistory: string[] = [];
+
+	// Optional: Prompt History Search offers its saved index on session start.
+	pi.events.on("prompt-history-search:recent", (value) => {
+		const prompts = value && typeof value === "object" ? Reflect.get(value, "prompts") : undefined;
+		if (!Array.isArray(prompts)) return;
+		persistedHistory = prompts.filter((entry): entry is string => typeof entry === "string");
+		if (installedEditor) seedHistory(installedEditor, persistedHistory);
+	});
 
 	pi.on("input", async (event, ctx) => {
-		if (isExpandedContextBundle(event.text)) return { action: "continue" as const };
+		if (hasContextReferences(event.text)) return { action: "continue" as const };
+		const resend = (text: string, expandPromptTemplates: boolean) => {
+			const content = event.images?.length ? [{ type: "text" as const, text }, ...event.images] : text;
+			if (event.streamingBehavior) {
+				pi.sendUserMessage(content, { deliverAs: event.streamingBehavior, expandPromptTemplates });
+			} else {
+				pi.sendUserMessage(content, { expandPromptTemplates });
+			}
+			return { action: "handled" as const };
+		};
 
 		const promotedExtension =
 			event.source === "extension" ? null : promoteInlineExtensionCommand(event.text, getInlineCommands(pi));
-		if (promotedExtension) {
-			const content = event.images?.length
-				? [{ type: "text" as const, text: promotedExtension.text }, ...event.images]
-				: promotedExtension.text;
-			if (event.streamingBehavior) {
-				pi.sendUserMessage(content, {
-					deliverAs: event.streamingBehavior,
-					expandPromptTemplates: true,
-				});
-			} else {
-				pi.sendUserMessage(content, { expandPromptTemplates: true });
-			}
-			return { action: "handled" as const };
-		}
+		if (promotedExtension) return resend(promotedExtension.text, true);
 
 		const availableCommands = getComposableCommands(pi);
 		const referencedCommands = extractReferencedCommands(event.text, availableCommands);
@@ -470,10 +770,11 @@ export default function promptTrulyMineExtension(pi: ExtensionAPI): void {
 		const resources = await loadContextResources(referencedCommands, ctx);
 		if (resources.length === 0) return { action: "continue" as const };
 
-		return {
-			action: "transform" as const,
-			text: formatContextBundle(event.text, resources),
-		};
+		const text = formatContextReferences(event.text, resources);
+		// Pi would expand a leading /skill:name or /template after input handlers run and put its
+		// content first. Resubmit without expansion so the request stays first in every position.
+		if (event.text.trimStart().startsWith("/")) return resend(text, false);
+		return { action: "transform" as const, text };
 	});
 
 	pi.on("session_start", (_event, ctx) => {
@@ -488,8 +789,8 @@ export default function promptTrulyMineExtension(pi: ExtensionAPI): void {
 			getComposableCommands(pi).some((command) => command.name === value);
 
 		previousEditorFactory = ctx.ui.getEditorComponent();
-		installedEditorFactory = (tui, theme, keybindings) =>
-			new UndoRedoEditor(
+		installedEditorFactory = (tui, theme, keybindings) => {
+			const editor = new UndoRedoEditor(
 				tui,
 				theme,
 				keybindings,
@@ -497,7 +798,20 @@ export default function promptTrulyMineExtension(pi: ExtensionAPI): void {
 				undefined,
 				(text) => ctx.ui.theme.fg("muted", text),
 				() => ctx.ui.theme,
+				(text) =>
+					pi.events.emit("prompt-truly-mine:slash-submit", {
+						text,
+						timestamp: Date.now(),
+						sessionPath: ctx.sessionManager.getSessionFile() ?? "",
+						sessionName: ctx.sessionManager.getSessionName(),
+						cwd: ctx.cwd,
+					}),
 			);
+			// Replacing the editor on reload/session switch must not discard Up/Down recall.
+			seedHistory(editor, persistedHistory);
+			installedEditor = editor;
+			return editor;
+		};
 		ctx.ui.setEditorComponent(installedEditorFactory);
 		// The host transfers getText(), which can contain editor-local paste IDs.
 		if (ctx.ui.getEditorText() !== draft) ctx.ui.setEditorText(draft);
@@ -505,6 +819,9 @@ export default function promptTrulyMineExtension(pi: ExtensionAPI): void {
 
 	pi.on("session_shutdown", (_event, ctx) => {
 		if (ctx.mode !== "tui") return;
+		const history = installedEditor ? getEditorHistory(installedEditor) : undefined;
+		if (history) Reflect.set(globalThis, RETAINED_HISTORY, history);
+		installedEditor = undefined;
 		if (installedEditorFactory && ctx.ui.getEditorComponent() === installedEditorFactory) {
 			const draft = ctx.ui.getEditorText();
 			ctx.ui.setEditorComponent(previousEditorFactory);

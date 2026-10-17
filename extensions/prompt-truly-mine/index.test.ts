@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
 	CustomEditor,
+	createEventBus,
 	ExtensionRunner,
 	initTheme,
 	ModelRegistry,
@@ -22,10 +23,17 @@ const { KeybindingsManager } = await import(new URL("core/keybindings.js", host)
 initTheme("dark", false);
 type Factory = NonNullable<ReturnType<ExtensionUIContext["getEditorComponent"]>>;
 
-async function fixture(t: test.TestContext, mode: "tui" | "rpc" = "tui") {
+async function fixture(t: test.TestContext, mode: "tui" | "rpc" = "tui", withHistory = false) {
 	const root = await mkdtemp(join(tmpdir(), "prompt-contract-"));
 	t.after(() => rm(root, { recursive: true, force: true }));
-	const loaded = await loadExtensions([fileURLToPath(new URL("./index.ts", import.meta.url))], root);
+	const events = createEventBus();
+	const slashSubmissions: unknown[] = [];
+	events.on("prompt-truly-mine:slash-submit", (data) => {
+		slashSubmissions.push(data);
+	});
+	const paths = [fileURLToPath(new URL("./index.ts", import.meta.url))];
+	if (withHistory) paths.unshift(fileURLToPath(new URL("../prompt-history-search/index.ts", import.meta.url)));
+	const loaded = await loadExtensions(paths, root, events);
 	assert.deepEqual(loaded.errors, []);
 	const models = await ModelRuntime.create({
 		authPath: join(root, "auth.json"),
@@ -135,6 +143,7 @@ async function fixture(t: test.TestContext, mode: "tui" | "rpc" = "tui") {
 		warnings,
 		sent,
 		commands,
+		slashSubmissions,
 		get editor() {
 			return editor;
 		},
@@ -163,21 +172,37 @@ test("real input runner preserves images and streaming delivery during inline pr
 	assert.equal(f.wrappers.length, 0);
 });
 
-test("context bundles retain images, load valid resources once, and warn for unreadable resources", async (t) => {
+test("context references keep the request first, retain images, list resources once, and warn for unreadable ones", async (t) => {
 	const f = await fixture(t, "rpc");
 	const images = [{ type: "image" as const, mimeType: "image/png", data: "image-content" }];
 	const result = await f.runner.emitInput("Use /review /review /skill:testing", images, "rpc");
 	assert.equal(result.action, "transform");
 	if (result.action !== "transform") return;
 	assert.deepEqual(result.images, images);
-	assert.equal((result.text.match(/## Prompt template: review/g) ?? []).length, 1);
-	assert.match(result.text, /Test every boundary/);
-	assert.ok(result.text.endsWith("Use /review /review /skill:testing"));
+	assert.ok(result.text.startsWith("Use /review /review /skill:testing\n\n"));
+	assert.equal((result.text.match(/Prompt template `\/review`/g) ?? []).length, 1);
+	assert.match(result.text, /Skill `testing`: \S+/u);
+	assert.doesNotMatch(result.text, /Test every boundary/u, "skill bodies are read by the agent, not inlined");
 	assert.equal((await f.runner.emitInput(result.text, images, "extension")).action, "continue");
 	await rm(f.commands[1]!.sourceInfo.path);
 	const partial = await f.runner.emitInput("Use /review /skill:testing", images, "rpc");
 	assert.equal(partial.action, "transform");
 	assert.match(f.warnings[0]!, /Could not load \/review/);
+});
+
+test("a leading /skill: or /template is resubmitted without native expansion so the request stays first", async (t) => {
+	const f = await fixture(t, "rpc");
+	const images = [{ type: "image" as const, mimeType: "image/png", data: "image-content" }];
+	for (const behavior of [undefined, "followUp"] as const) {
+		const result = await f.runner.emitInput("/skill:testing check the parser", images, "rpc", behavior);
+		assert.equal(result.action, "handled");
+		const [content, options] = f.sent.at(-1)!;
+		assert.deepEqual(options, { ...(behavior ? { deliverAs: behavior } : {}), expandPromptTemplates: false });
+		const [first, ...rest] = content as [{ type: "text"; text: string }, ...unknown[]];
+		assert.ok(first.text.startsWith("/skill:testing check the parser\n\n<!-- pi-extension:inline-context:v2 -->"));
+		assert.deepEqual(rest, images);
+		assert.equal((await f.runner.emitInput(first.text, images, "extension")).action, "continue");
+	}
 });
 
 test("editor installation and restoration retain pasted payloads and are idempotent", async (t) => {
@@ -228,14 +253,128 @@ test("leading resource selection inserts without submitting and remains undoable
 	f.editor.handleInput?.("\r");
 	assert.equal(f.editor.getText(), "/review ");
 	assert.deepEqual(submitted, []);
+	assert.deepEqual(f.slashSubmissions, []);
 	f.editor.handleInput?.("\x1a");
 	assert.equal(f.editor.getText(), "/");
 	f.editor.handleInput?.("\x19");
 	f.editor.handleInput?.("task");
 	f.editor.handleInput?.("\r");
 	assert.deepEqual(submitted, ["/review task"]);
+	assert.equal(f.slashSubmissions.length, 1);
 	f.editor.handleInput?.("\x1a");
 	assert.equal(f.editor.getText(), "");
+});
+
+test("slash submissions persist once before shutdown without becoming conversation messages", async (t) => {
+	const profile = await mkdtemp(join(tmpdir(), "slash-history-"));
+	const previous = process.env.PI_CODING_AGENT_DIR;
+	process.env.PI_CODING_AGENT_DIR = profile;
+	try {
+		const f = await fixture(t, "tui", true);
+		await f.runner.emit({ type: "session_start", reason: "startup" });
+		const commands = ["/settings", "/fast on", "/review task", "/skill:testing", "/reload", "/quit"];
+		for (const text of commands) {
+			f.editor.setText(text);
+			// Ordinary extension dispatch also adds to history; don't duplicate recall.
+			f.editor.onSubmit = (submitted) => {
+				f.editor.addToHistory?.(submitted);
+			};
+			f.editor.handleInput?.("\r");
+			await f.runner.emitInput(text, undefined, "interactive");
+		}
+		assert.equal(f.slashSubmissions.length, commands.length);
+		// Only the skill/template prompts reach the model (request first); commands never do.
+		assert.deepEqual(
+			f.sent.map(([content]) => String(content).split("\n")[0]),
+			["/review task", "/skill:testing"],
+		);
+		for (const text of [...commands].reverse()) {
+			f.editor.handleInput?.("\x1b[A");
+			assert.equal(f.editor.getText(), text);
+		}
+		await f.runner.emit({ type: "session_shutdown", reason: "reload" });
+		const saved = JSON.parse(await readFile(join(profile, "prompt-history-search", "index.json"), "utf8"));
+		assert.deepEqual(saved.prompts.map((p: { text: string }) => p.text).sort(), [...commands].sort());
+		assert.ok(saved.prompts.every((p: { timestamp: number; cwd: string }) => p.timestamp > 0 && p.cwd));
+	} finally {
+		if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
+		else process.env.PI_CODING_AGENT_DIR = previous;
+		await rm(profile, { recursive: true, force: true });
+	}
+});
+
+test("reload and session replacement retain Up/Down history, including slash commands", async (t) => {
+	Reflect.deleteProperty(globalThis, Symbol.for("@stagefright5/pi-prompt-truly-mine/history"));
+	const f = await fixture(t);
+	await f.runner.emit({ type: "session_start", reason: "startup" });
+	for (const text of ["first prompt", "/settings", "/model gpt"]) f.editor.addToHistory?.(text);
+	for (const reason of ["reload", "new"] as const) {
+		await f.runner.emit({ type: "session_shutdown", reason });
+		await f.runner.emit({ type: "session_start", reason: reason === "reload" ? "reload" : "new" });
+		const recalled: string[] = [];
+		for (let i = 0; i < 3; i++) {
+			f.editor.handleInput?.("\x1b[A");
+			recalled.push(f.editor.getText());
+		}
+		assert.deepEqual(recalled, ["/model gpt", "/settings", "first prompt"]);
+		f.editor.setText("");
+	}
+	Reflect.deleteProperty(globalThis, Symbol.for("@stagefright5/pi-prompt-truly-mine/history"));
+});
+
+test("a fresh process and reloads recall saved prompts from all projects, newest first", async (t) => {
+	const key = Symbol.for("@stagefright5/pi-prompt-truly-mine/history");
+	Reflect.deleteProperty(globalThis, key);
+	const profile = await mkdtemp(join(tmpdir(), "recall-history-"));
+	const previous = process.env.PI_CODING_AGENT_DIR;
+	process.env.PI_CODING_AGENT_DIR = profile;
+	t.after(async () => {
+		Reflect.deleteProperty(globalThis, key);
+		if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
+		else process.env.PI_CODING_AGENT_DIR = previous;
+		await rm(profile, { recursive: true, force: true });
+	});
+	const now = Date.now();
+	const saved = [
+		{ text: "older prompt in project B", timestamp: now - 3000, sessionPath: "", cwd: "/b" },
+		{ text: "/model gpt", timestamp: now - 2000, sessionPath: "", cwd: "/a" },
+		{ text: "older prompt in project B", timestamp: now - 1500, sessionPath: "", cwd: "/b" },
+		{ text: "newest prompt in project A", timestamp: now - 1000, sessionPath: "", cwd: "/a" },
+	];
+	await mkdir(join(profile, "prompt-history-search"), { recursive: true });
+	await writeFile(
+		join(profile, "prompt-history-search", "index.json"),
+		JSON.stringify({ version: 1, updatedAt: now, bootstrappedAt: now, prompts: saved }),
+	);
+	const f = await fixture(t, "tui", true);
+	const recall = (count: number) => {
+		const seen: string[] = [];
+		for (let i = 0; i < count; i++) {
+			f.editor.handleInput?.("\x1b[A");
+			seen.push(f.editor.getText());
+		}
+		f.editor.setText("");
+		return seen;
+	};
+	const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
+	await f.runner.emit({ type: "session_start", reason: "startup" });
+	await settle();
+	assert.deepEqual(recall(4), [
+		"newest prompt in project A",
+		"older prompt in project B",
+		"/model gpt",
+		"/model gpt", // Up stops at the oldest entry; duplicates were removed.
+	]);
+	f.editor.addToHistory?.("typed this run");
+	await f.runner.emit({ type: "session_shutdown", reason: "reload" });
+	await f.runner.emit({ type: "session_start", reason: "reload" });
+	await settle();
+	assert.deepEqual(recall(4), [
+		"typed this run",
+		"newest prompt in project A",
+		"older prompt in project B",
+		"/model gpt",
+	]);
 });
 
 test("inline completion preserves native forced paths and initial menus", async (t) => {

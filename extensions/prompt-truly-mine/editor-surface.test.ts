@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { stripVTControlCharacters as plain } from "node:util";
 import { CURSOR_MARKER, visibleWidth, type TUI } from "@earendil-works/pi-tui";
 import { UndoRedoEditor } from "./index.ts";
+import { composerPalette } from "./composer-style.ts";
 
 const host = new URL(".", import.meta.resolve("@earendil-works/pi-coding-agent"));
 const { KeybindingsManager } = await import(new URL("core/keybindings.js", host).href);
@@ -44,19 +45,42 @@ function pair(initial = getThemeByName("dark")) {
 		check(width: number) {
 			const expected = reference.render(width);
 			const actual = surfaced.render(width);
-			assert.deepEqual(
-				actual,
-				expected.map(
-					(line) =>
-						palette.getFgAnsi("userMessageText") +
-						palette.getBgAnsi("userMessageBg") +
-						line +
-						"\x1b[49m\x1b[39m",
-				),
-			);
-			assert.deepEqual(actual.map(plain), expected.map(plain));
-			assert.doesNotMatch(plain(actual[0] ?? ""), /[─│]/u);
-			assert.deepEqual(actual.map(visibleWidth), expected.map(visibleWidth));
+			const expectedComposer = expected.slice(Number(Reflect.get(reference, "menuHeight")));
+			const composer = actual.slice(Number(Reflect.get(surfaced, "menuHeight")));
+			const open = palette.getFgAnsi("userMessageText") + palette.getBgAnsi("userMessageBg");
+			const close = "\x1b[49m\x1b[39m";
+			const footer = palette.getFgAnsi("userMessageText") + composerPalette(palette).footer;
+			if (width < 3) {
+				// Compact viewport: no padding rows or footer strip, just the native rows on the surface.
+				assert.deepEqual(
+					composer,
+					expectedComposer.map((line) => open + line + close),
+				);
+			} else {
+				// [top pad, ...draft, surface→footer, footer, footer pad] vs native [top, ...draft, bottom].
+				assert.equal(composer.length, expectedComposer.length + 2);
+				const [top, ...rest] = composer;
+				const nativeTop = expectedComposer[0]!;
+				if (plain(nativeTop).trim())
+					assert.equal(top, open + nativeTop + close, "indicator rows stay readable");
+				else assert.match(plain(top!), /^\u2584+$/u);
+				const draft = rest.slice(0, expectedComposer.length - 2);
+				draft.forEach((line, index) => {
+					const native = expectedComposer[index + 1]!;
+					if (index === 0 && surfaced.getText() === "" && plain(line).includes("Ask Pi")) {
+						assert.equal(visibleWidth(line), visibleWidth(native), "placeholder keeps the row width");
+						return;
+					}
+					assert.equal(line, open + native + close, `draft row ${index} must stay byte-for-byte native`);
+				});
+				const [joint, strip, pad] = rest.slice(-3);
+				assert.match(plain(joint!), /^\u2580+$/u);
+				assert.match(plain(pad!), /^\u2580+$/u);
+				assert.ok(strip!.startsWith(footer) && strip!.endsWith(close), "footer keeps its strip");
+				assert.equal(plain(strip!).trimEnd(), plain(expectedComposer.at(-1)!).trimEnd());
+				for (const line of composer) assert.equal(visibleWidth(line), width);
+			}
+			assert.doesNotMatch(plain(composer[0] ?? ""), /[─│]/u);
 			assert.deepEqual(surfaced.getCursor(), reference.getCursor());
 			assert.equal(surfaced.getExpandedText(), reference.getExpandedText());
 			return actual;
@@ -113,11 +137,16 @@ test("surface preserves native autocomplete selection, content and geometry", as
 	for (const width of [40, 80, 120]) editors.check(width);
 	for (const editor of [editors.reference, editors.surfaced]) editor.handleInput("\x1b[B");
 	const rows = editors.check(80);
-	assert.ok(rows.some((line) => line.includes("another item")));
-	assert.ok(
-		rows.some((line) => line.includes("\x1b[36m")),
-		"native selection styling survives",
+	const menu = composerPalette(getThemeByName("dark"));
+	const panel = rows.slice(0, 3);
+	assert.deepEqual(
+		panel.map((line) => plain(line).trimEnd()),
+		["  help      menu untouched", "› settings  another item", panel.map(plain)[2]!.trimEnd()],
 	);
+	assert.match(plain(panel[2]!), /^ {2}2\/2 +↑↓ select {2}⇥ complete {2}esc close$/u);
+	assert.ok(panel[1]!.includes(menu.menuSelected), "the selected row is visibly highlighted");
+	assert.ok(!panel[0]!.includes(menu.menuSelected) && panel[0]!.includes(menu.menu));
+	for (const line of panel) assert.equal(visibleWidth(line), 80);
 	for (const editor of [editors.reference, editors.surfaced]) editor.handleInput("\x1b");
 });
 
@@ -129,8 +158,8 @@ test("surface preserves shell hints, paste, undo/redo and overflow across redraw
 		editor.handleInput("\x1a");
 	}
 	const rows = editors.check(80).map(plain);
-	assert.match(rows[0]!, /^  shell .*ctrl\+z undo · ctrl\+y redo  $/);
-	assert.equal(rows.at(-1), " ".repeat(80));
+	assert.match(rows[0]!, /^\u2584{80}$/u);
+	assert.match(rows.at(-2)!, /^shell +⌃Z undo {2}⌃Y redo$/u);
 	for (const editor of [editors.reference, editors.surfaced]) editor.handleInput("\x19");
 	editors.check(80);
 	assert.match(editors.surfaced.getExpandedText(), /pasted 世界/);

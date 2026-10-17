@@ -2,7 +2,7 @@
 
 Most of this extension was written with the pi agent CLI.
 
-Adds inline extension-command autocomplete and skill and prompt context tags to pi's prompt editor. Undo and redo restore both text and cursor position.
+Adds inline extension-command autocomplete and skill and prompt-template references to pi's prompt editor. Undo and redo restore both text and cursor position.
 
 [Back to the extension workspace](../../README.md)
 
@@ -37,44 +37,68 @@ Pi then dispatches the real extension command. Extension-generated user messages
 
 `@` attachment search, forced Tab path completion, prompt history, paste handling, image paste, and app shortcuts continue to delegate to pi's `CustomEditor`.
 
-## Context expansion
+## Context references
 
-When a draft is submitted, the extension finds every registered skill and prompt-template tag at the start or within the text. It then:
-
-1. loads each uniquely referenced source file
-2. strips its frontmatter
-3. expands prompt-template placeholders
-4. prepends one delimited context bundle
-5. appends the original draft unchanged, including every slash tag
-
-For this draft, the model receives the full skill and prompt-template content followed by the unchanged task:
+When a draft is submitted, the extension finds every registered skill and prompt-template tag, at the start or anywhere in the text. The model receives **your request first, byte-for-byte unchanged**, followed by a short list of the referenced files to read:
 
 ```text
 Implement this with /skill:angular-developer /review
+
+<!-- pi-extension:inline-context:v2 -->
+<context-references>
+The request above references these resources. Read each file before acting on the request, then apply it to the request above.
+- Skill `angular-developer`: ~/.agents/skills/angular-developer/SKILL.md (relative paths inside it resolve against ~/.agents/skills/angular-developer)
+- Prompt template `/review`: ~/.pi/agent/prompts/review.md (its $ARGUMENTS, $@, and $1, $2, … placeholders refer to the request above)
+</context-references>
 ```
 
-Repeated tags remain in the original task, but the extension loads each source file only once. Unknown tags and slash paths such as `/review/src` or `/ask/file.ts` remain ordinary text; a path prefix never invokes a command or loads a resource. If a registered resource becomes unreadable, the extension warns, loads the other valid resources, and preserves the draft.
+The agent then loads each file with its own `read` tool, after it has seen the request. This also works for skills hidden from the system prompt with `disable-model-invocation: true`, because the note carries the path. Prompt-template placeholders are resolved by the agent from the request; the extension does not substitute them.
 
-The combined bundle uses pi's existing collapsible skill-invocation envelope. Expanded content labels each section as a skill or prompt template and records its source path. Skill sections also state the base directory for resolving relative references.
+A draft that **starts** with `/skill:name` or `/template` is handled the same way. Pi would otherwise expand a leading skill or template before the request, so the extension resubmits the rewritten message with Pi's expansion turned off (images and steer/follow-up delivery are preserved).
 
-### Prompt-template arguments
-
-Every selected prompt template receives the complete original draft as its argument string. Argument parsing and substitution mirror pi's template behavior:
-
-- quoted text becomes one positional argument
-- `$1`, `$2`, and later positional placeholders are supported
-- `$@` and `$ARGUMENTS` receive all parsed arguments joined with spaces
-- default forms such as `${1:-default}` and `${ARGUMENTS:-default}` are supported
-- slices such as `${@:2}` and `${@:2:3}` are supported
-- substituted values are not recursively expanded
-
-The expanded template uses pi-style normalized arguments, while the separately appended user task remains byte-for-byte unchanged.
+Repeated tags are listed once. Unknown tags and slash paths such as `/review/src` or `/ask/file.ts` remain ordinary text; a path prefix never invokes a command or references a resource. If a registered resource is unreadable, the extension warns, lists the other valid resources, and preserves the draft. Messages already carrying the marker (including the older prepended-bundle format) are never rewritten twice.
 
 ## Copy-friendly composer
 
-The editor uses a clean filled surface without horizontal rules or a composer label. Shell commands retain a quiet `shell` mode indicator. There are **no added prompt glyphs, side borders, per-line prefixes, or content indentation**. Pi's dedicated border hooks provide blank top/bottom padding and space for labels without changing native editor geometry. The rendered editor, including its autocomplete menu, shares the active theme's `userMessageBg` and `userMessageText` colors with sent user messages. Only ANSI color wrappers are added to native rows: content, spacing, cursor markers, autocomplete selection styles, and row geometry are preserved. Native scroll indicators take precedence over decorative labels. The status bar continues to show thinking effort; the composer does not draw a separate colored border.
+The editor is a filled card without horizontal rules or per-line prefixes. The draft surface shares the active theme's `userMessageBg` and `userMessageText` colors with sent user messages; the footer strip and suggestion panel are a shade darker (derived at render time in truecolor, `toolPendingBg`/`selectedBg` otherwise). Native scroll indicators take precedence over decorative labels. The status bar continues to show thinking effort.
 
-Undo/redo hints (`ctrl+z undo` and `ctrl+y redo`) appear at the top right only when available and when they fit. The bottom padding stays blank, without a rule. Shortcut, shell, and overflow labels use the active theme's `muted` text color rather than a dim decorative-rule color. Theme changes are read at render time. Hints never overwrite the final autocomplete row. The chrome follows the selected theme, including Obsidian Ice.
+Autocomplete appears **above** the composer, so opening, filtering, or closing suggestions does not move the bottom-anchored prompt in fullscreen mode. Suggestions are re-ranked by the shared [Pi Picker](../../packages/pi-picker/README.md) engine (word starts and consecutive letters first; ties keep Pi's order; items only Pi matched stay at the end), and the typed text is highlighted in names and descriptions. The panel draws Pi's native suggestion state: names align with the draft inset, the selected row is highlighted with `› `, descriptions drop Pi's `[u]`/`[p]` scope tags and are cut at word boundaries with `…`, and a final row shows the position (`2/6`) and keys (`↑↓ select  ⇥ complete  esc close`). Keyboard navigation and mouse hit testing stay native; the legend row ignores clicks. If the native list shape changes, the native menu rows are shown instead.
+
+Horizontal spacing uses Pi's native `editorPaddingX` setting, in terminal character cells rather than pixels. Set `"editorPaddingX": 1` in `~/.pi/agent/settings.json` for equal one-cell left/right padding. Padding is visual only and never enters the submitted draft. Pi may draw the end-of-line cursor in the right padding cell. Very narrow terminals clamp padding to fit.
+
+In fullscreen mode, the composer owns mouse selection over its own rows, so the inset is never selected or copied:
+
+- Dragging highlights only draft cells and copies the source text, without the inset, soft-wrap line breaks, mode rail, footer labels, placeholder, or cursor.
+- Double-click selects a word; triple-click selects a logical line.
+- A single click still positions the cursor.
+- Copy follows Pi's `fullscreenCopyOnSelect` setting; with it off, use the copy key (`Ctrl+C` by default) while a selection is visible.
+- Collapsed paste placeholders copy their full pasted contents.
+- Typing or editing clears the selection.
+
+Regular (non-fullscreen) mode leaves selection to the terminal emulator, which cannot be prevented from copying displayed padding cells.
+
+The composer chrome, aligned to the draft inset:
+
+```text
+▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄   half-row padding
+▎ Ask Pi anything                                              draft bar
+▎▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀   half + half
+▎                               / commands  ! shell  @ files   footer bar (darker)
+▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀   half-row padding
+```
+
+- **Half-row padding:** `▄`/`▀` half-block rows give the draft bar and the footer bar half a row of padding above and below, so the draft and the footer labels sit vertically centred. Rows that carry native text (scroll or working indicators) stay full rows. In regular (non-fullscreen) mode, a terminal drag across those rows can copy the block glyphs; fullscreen selection never does.
+- **Mode rail:** the one-cell left inset shows `▎` in the theme's `accent` color, or `bashMode` for `!`/`!!` commands, from the draft through the footer. It needs `editorPaddingX` ≥ 1 and is never part of the draft.
+- **Placeholder:** an empty draft shows dim `Ask Pi anything`; it disappears on the first keystroke.
+- **Footer bar:** `shell` or `shell · no context` on the left; `/ commands  ! shell  @ files` on the right, replaced by `⌃Z undo  ⌃Y redo` right after an undo until you edit again. Hints drop from the end on narrow terminals.
+- Native scroll indicators replace the top or bottom row where content is hidden. Theme changes apply at render time, including with Obsidian Ice.
+- On exit, Pi erases the cursor by writing a plain space; the extension redraws that one cell in the composer color so the printed transcript has no black hole.
+
+## Slash-command history
+
+Submitted slash inputs, including built-in commands and command arguments, are added to the editor's Up/Down recall before Pi dispatches them. Up/Down history survives `/reload`, `/new`, and session switches within the same Pi process. When Prompt History Search is also loaded, every session start, including a freshly launched Pi, also fills Up/Down with saved prompts and commands from all projects (newest first, up to Pi's 100-entry limit). History from the current Pi run comes first, and each prompt appears once. Seeding reads only the saved index, never scanning sessions at startup; until that index exists (after the first `Alt+R` or first submitted prompt), fresh processes start with in-process history only. Choosing a completion without submitting does not add a history entry. Native consecutive-duplicate suppression prevents commands that Pi already records from appearing twice.
+
+When [Global Prompt History Search](../prompt-history-search/README.md) is also loaded, submissions are saved in its local 30-day index for `Alt+R` and `/prompt-history`. The extensions communicate through the `prompt-truly-mine:slash-submit` event; neither package imports or requires the other. History capture does not create conversation messages or invoke the model. Command arguments are stored verbatim (apart from outer whitespace), so do not put secrets in commands you do not want retained. Old commands that were never recorded cannot be recovered.
 
 ## Undo and redo
 
@@ -93,22 +117,27 @@ Behavior:
 - History records programmatic text replacement, inserted text, and autocomplete selections, including asynchronous single-match Tab completion and mouse selection. Mouse cursor movement also breaks typing groups.
 - The editor retains up to 200 undo and 200 redo snapshots.
 - The editor clears history after submission, including remapped submit keys and backslash-Enter, so you cannot accidentally restore a sent message into the empty editor.
-- Undo and redo hints appear at the top right of the editor header when those actions are available.
+- Undo and redo hints appear at the bottom right of the composer once an undo makes redo available.
 
 ## Context size and trust
 
-The extension expands only `skill` and `prompt` resources pi has already discovered. It never loads arbitrary slash paths. Project-local resources remain subject to pi's project-trust rules.
+The extension references only `skill` and `prompt` resources pi has already discovered. It never points the agent at arbitrary slash paths. Project-local resources remain subject to pi's project-trust rules.
 
 Loading several full resources and substituting the whole draft into prompt templates can use a lot of context. The extension loads each resource only once, but you should select only relevant skills and prompts and explicitly resolve conflicting instructions.
 
 ## Compatibility and limitations
 
-This extension targets pi and pi-tui **1.2.0**. The composer uses the protected editor-border hooks introduced in the newer runtime. Older runtime compatibility is not covered by this version's tests.
+This extension develops against pi and pi-tui **1.2.0**; the editor and history integration tests also pass against **1.3.0**. The composer uses protected editor-border hooks and a validated native menu-layout shim. Older runtime compatibility is not covered by this version's tests.
 
-Cursor/paste restoration, inline `/` autocomplete, and Enter selection without submission use compatibility shims because pi-tui does not currently expose complete public APIs for those operations. Private access is isolated in `editor-compat.ts` and runtime-validated rather than asserted through an invented SDK type. If internals change:
+Cursor/paste restoration, history retention, composer-owned selection, above-composer autocomplete placement, inline `/` autocomplete, and Enter selection without submission use compatibility shims because pi-tui does not currently expose complete public APIs for those operations. Private access is isolated in `editor-compat.ts` and runtime-validated rather than asserted through an invented SDK type. If internals change:
 
 - undo/redo falls back to restoring expanded text through the public API, preserving pasted content but possibly losing collapsed markers and exact cursor placement
 - inline `/` may require explicit Tab completion until the shim is updated
+- autocomplete falls back to native placement if the rendered menu geometry no longer matches
+- selection falls back to Pi's screen selection (which includes the inset) if the native row map is unavailable
+- the suggestion panel falls back to native menu rows if the native autocomplete list shape changes
+- the exit-cell repair only applies when Pi's regular-screen renderer still erases the cursor with a single space
+- Up/Down history starts empty after reload if the native history field changes
 - normal editor input remains exception-safe
 
 For extremely narrow terminals with fewer than two usable text columns, a bounded cursor row replaces native wrapping to avoid a pi-tui 1.2.0 wide-character recursion bug. The normal editor and autocomplete layout return when the terminal is widened; the stored draft is unchanged.

@@ -6,11 +6,9 @@ import {
 	encodeComposableCompletionPrefix,
 	extractReferencedCommands,
 	findSlashCompletionContext,
-	formatContextBundle,
-	isExpandedContextBundle,
-	parseCommandArgs,
+	formatContextReferences,
+	hasContextReferences,
 	promoteInlineExtensionCommand,
-	substitutePromptArguments,
 	type ComposableCommand,
 	type InlineCommand,
 	type LoadedContextResource,
@@ -153,32 +151,7 @@ test("extracts known references across punctuation boundaries and deduplicates b
 	assert.deepEqual(extractReferencedCommands("Open /unknown and https://example.com/review", commands), []);
 });
 
-test("parses quoted whole-draft arguments like Pi", () => {
-	assert.deepEqual(parseCommandArgs(`Build "login form" 'with tests' /review`), [
-		"Build",
-		"login form",
-		"with tests",
-		"/review",
-	]);
-});
-
-test("substitutes all Pi prompt-template placeholder forms without recursion", () => {
-	const args = ["one", "two", "$1"];
-	const template = [
-		"$1|$2|$4",
-		"$@|$ARGUMENTS",
-		"${1:-fallback}|${4:-fallback}",
-		"${@:-fallback}",
-		"${@:2}|${@:2:1}|${@:0:2}",
-	].join("\n");
-	assert.equal(
-		substitutePromptArguments(template, args),
-		["one|two|", "one two $1|one two $1", "one|fallback", "one two $1", "two $1|two|one two"].join("\n"),
-	);
-	assert.equal(substitutePromptArguments("$1", ["$ARGUMENTS"]), "$ARGUMENTS");
-});
-
-test("formats a collapsible mixed bundle and preserves the original draft verbatim", () => {
+test("keeps the request first and verbatim, then lists referenced resources as files to read", () => {
 	const original = `Implement "login form" with /skill:angular-developer /review`;
 	const resources: LoadedContextResource[] = [
 		{
@@ -192,23 +165,27 @@ test("formats a collapsible mixed bundle and preserves the original draft verbat
 			baseDir: "/home/me/.pi/agent/prompts",
 		},
 	];
-	const formatted = formatContextBundle(original, resources);
+	const formatted = formatContextReferences(original, resources);
 
-	assert.match(formatted, /^<skill name="angular-developer, prompt:review" location="multiple">/);
-	assert.match(formatted, /## Skill: angular-developer/);
-	assert.match(formatted, /References are relative to \/home\/me\/\.agents\/skills\/angular-developer\./);
-	assert.match(formatted, /## Prompt template: review/);
+	assert.ok(formatted.startsWith(`${original}\n\n`), "the request comes first, unchanged");
+	assert.match(formatted, /<!-- pi-extension:inline-context:v2 -->\n<context-references>\n/u);
+	assert.match(formatted, /Read each file before acting on the request/u);
 	assert.match(
 		formatted,
-		/Review this complete request: Implement login form with \/skill:angular-developer \/review/,
+		/- Skill `angular-developer`: \S+SKILL\.md \(relative paths inside it resolve against \/home\/me\/\.agents\/skills\/angular-developer\)/u,
 	);
-	assert.match(formatted, /First token: Implement/);
-	assert.ok(formatted.endsWith(`\n\n${original}`));
-	assert.equal(isExpandedContextBundle(formatted), true);
-	assert.equal((formatted.match(/# Angular/g) ?? []).length, 1);
+	assert.match(
+		formatted,
+		/- Prompt template `\/review`: \S+ \(its \$ARGUMENTS, \$@, and \$1, \$2, … placeholders refer to the request above\)/u,
+	);
+	assert.doesNotMatch(formatted, /Use standalone components|Review this complete request/u, "bodies are not inlined");
+	assert.ok(formatted.endsWith("</context-references>"));
+	assert.equal(hasContextReferences(formatted), true);
 });
 
 test("returns untouched text when no resources are available", () => {
-	assert.equal(formatContextBundle("Keep /unknown", []), "Keep /unknown");
-	assert.equal(isExpandedContextBundle("Keep /unknown"), false);
+	assert.equal(formatContextReferences("Keep /unknown", []), "Keep /unknown");
+	assert.equal(hasContextReferences("Keep /unknown"), false);
+	const legacy = '<skill name="x" location="y">\n<!-- pi-extension:inline-context:v1 -->\n</skill>\n\nTask';
+	assert.equal(hasContextReferences(legacy), true, "older bundles are not rewritten again");
 });
