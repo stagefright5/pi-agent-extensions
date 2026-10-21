@@ -56,6 +56,8 @@ The panel is 80% of the terminal by default. Pass `height: { max, min, fit }` to
 
 Preview lines are wrapped once per item, query, and width. For live content such as a log, pass `previewKey(item)` returning a version that changes with the text, so only a changed preview is re-wrapped; `previewTail: true` opens the preview at its end and keeps following new lines until you scroll up.
 
+Inside a frame that already shows the title, such as a [Pi Dialog](../pi-dialog/README.md) popup, pass `embedded: true`: the picker skips its title and count row, accepts heights below its standalone minimum, and exposes the count as `countLabel` for the host's border.
+
 Space types a space, so multi-word queries work; marking uses `Tab`. Actions can require a second press (`confirm`), notify in the footer, remove items, or close the picker. The preview opens at the first match.
 
 `renderInlinePanel` draws a suggestion panel for a host-owned list (Prompt Truly Mine passes Pi's native autocomplete state): aligned names, highlighted query, visible selection, word-boundary `…`, and a position/keys row.

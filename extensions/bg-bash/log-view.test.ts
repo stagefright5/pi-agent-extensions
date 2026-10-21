@@ -84,7 +84,8 @@ test("view: follows the end, scrolls back, toggles follow, and goes back on Esc"
 	let lines = log.render(80).map(plain);
 	assert.equal(lines.length, 20);
 	for (const line of lines) assert.ok(visibleWidth(line) <= 80);
-	assert.match(lines[1]!, /j1 · running 1m12s · pid 42/u);
+	assert.deepEqual(log.heading(), { kind: "j1", title: "make build", meta: "running 1m12s · pid 42" });
+	assert.match(lines.at(-1)!, /^\d+-\d+\/200 · /u, "the help line is last; the popup border carries the job");
 	assert.ok(
 		lines.some((line) => line.trim() === "row 199"),
 		"opens at the end",

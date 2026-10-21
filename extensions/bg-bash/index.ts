@@ -1,6 +1,7 @@
 import { type ExtensionAPI, type ExtensionContext, type Theme } from "@earendil-works/pi-coding-agent";
 import { Key, truncateToWidth, wrapTextWithAnsi, type Component } from "@earendil-works/pi-tui";
-import { jobTail, JobsBrowser } from "./browser.ts";
+import { openPopup } from "@stagefright5/pi-dialog";
+import { jobTail, JobsBrowser, PANEL_HEIGHT } from "./browser.ts";
 import { FooterStatus, STATUS_ID } from "./footer.ts";
 import { formatDuration, jobManager, type Job } from "./jobs.ts";
 import { registerStatusAction } from "./status-action.ts";
@@ -137,17 +138,28 @@ export default function backgroundBash(pi: ExtensionAPI): void {
 		}
 		browserOpen = true;
 		try {
-			await ctx.ui.custom<void>(
-				(tui, _theme, keybindings, done) =>
-					new JobsBrowser({
-						tui,
-						theme: () => ctx.ui.theme,
-						keybindings,
+			await openPopup<void>(
+				ctx,
+				(api) => {
+					const browser = new JobsBrowser({
+						tui: api.tui,
+						theme: api.theme,
+						keybindings: api.keybindings,
 						manager,
-						done: () => done(),
+						done: () => api.close(),
 						sendToAgent: (text) => pi.sendUserMessage(text, { deliverAs: "followUp" }),
-					}),
-				{ overlay: true, overlayOptions: { anchor: "center", width: "90%", minWidth: 50, maxHeight: "50%" } },
+						height: () => api.popup.bodySize().height,
+					});
+					return {
+						body: browser,
+						options: {
+							kind: () => browser.heading().kind,
+							title: () => browser.heading().title,
+							meta: () => browser.heading().meta,
+						},
+					};
+				},
+				{ icon: "⚙", padding: 1, height: PANEL_HEIGHT, overlay: { width: "90%", minWidth: 50 } },
 			);
 		} finally {
 			browserOpen = false;

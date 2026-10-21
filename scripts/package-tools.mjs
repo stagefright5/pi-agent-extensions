@@ -293,37 +293,79 @@ const importPattern = (name, flags = "g") =>
   new RegExp(`((?:\\bfrom|\\bimport)\\s*\\(?\\s*)(["'])${escapeRegExp(name)}\\2`, flags);
 const imports = (text, name) => importPattern(name, "").test(text);
 
+/** Workspace libraries each library imports directly; throws on an import cycle between libraries. */
+export function libraryGraph(workspace) {
+  const libraries = workspace.packages.filter((candidate) => candidate.kind === "library");
+  const graph = new Map(
+    libraries.map((library) => {
+      const sources = publicationFiles(library)
+        .filter((file) => SOURCE_FILE.test(file))
+        .map((file) => readFileSync(join(library.dir, file), "utf8"));
+      const uses = libraries.filter(
+        (other) => other !== library && sources.some((text) => imports(text, other.source.name)),
+      );
+      return [library.source.name, uses.map((other) => other.source.name)];
+    }),
+  );
+  const state = new Map();
+  const visit = (name, path) => {
+    if (state.get(name) === "done") return;
+    assert.notEqual(state.get(name), "active", `Workspace library import cycle: ${[...path, name].join(" -> ")}`);
+    state.set(name, "active");
+    for (const next of graph.get(name) ?? []) visit(next, [...path, name]);
+    state.set(name, "done");
+  };
+  for (const name of graph.keys()) visit(name, []);
+  return graph;
+}
+
 /**
- * Workspace libraries an extension imports are bundled into `vendor/<slug>/` of the staged package
+ * Workspace libraries a package imports are bundled into `vendor/<slug>/` of the staged package
  * and the staged imports are rewritten to that copy, so installs never resolve the library from npm.
+ * Imports between vendored libraries are followed and rewritten too (each library is vendored once,
+ * at the package's top-level `vendor/`), so libraries may build on other workspace libraries.
  * Source files are never modified.
  */
 function vendorLibraries(workspace, pkg, destination, files) {
-  if (pkg.kind === "library") return [];
-  const libraries = workspace.packages.filter((candidate) => candidate.kind === "library");
-  const sources = files.filter((file) => SOURCE_FILE.test(file));
+  libraryGraph(workspace);
+  const libraries = workspace.packages.filter((candidate) => candidate.kind === "library" && candidate !== pkg);
+  const entries = new Map();
   const added = [];
-  for (const library of libraries) {
-    const users = sources.filter((file) => imports(readFileSync(join(destination, file), "utf8"), library.source.name));
-    if (!users.length) continue;
-    const root = `vendor/${library.slug}`;
-    for (const file of publicationFiles(library)) {
-      if (!SOURCE_FILE.test(file)) continue;
-      const target = join(destination, root, file);
-      mkdirSync(dirname(target), { recursive: true });
-      copyFileSync(join(library.dir, file), target);
-      added.push(`${root}/${file}`);
-    }
-    const entry = posix.normalize(`${root}/${library.source.exports["."]}`);
-    assert.ok(added.includes(entry), `Missing vendored entry point for ${library.source.name}: ${entry}`);
-    for (const file of users) {
-      const path = join(destination, file);
-      let specifier = posix.relative(posix.dirname(file), entry);
+  const queue = files.filter((file) => SOURCE_FILE.test(file));
+  while (queue.length) {
+    const file = queue.shift();
+    const path = join(destination, file);
+    let text = readFileSync(path, "utf8");
+    assert.ok(
+      pkg.kind !== "library" || !file.startsWith("vendor/") || !imports(text, pkg.source.name),
+      `Vendored library imports the package being staged (${pkg.source.name}): ${file}`,
+    );
+    let changed = false;
+    for (const library of libraries) {
+      if (!imports(text, library.source.name)) continue;
+      if (!entries.has(library.source.name)) {
+        const root = `vendor/${library.slug}`;
+        const copied = [];
+        for (const source of publicationFiles(library)) {
+          if (!SOURCE_FILE.test(source)) continue;
+          const target = join(destination, root, source);
+          mkdirSync(dirname(target), { recursive: true });
+          copyFileSync(join(library.dir, source), target);
+          copied.push(`${root}/${source}`);
+        }
+        const entry = posix.normalize(`${root}/${library.source.exports["."]}`);
+        assert.ok(copied.includes(entry), `Missing vendored entry point for ${library.source.name}: ${entry}`);
+        entries.set(library.source.name, entry);
+        added.push(...copied);
+        queue.push(...copied);
+      }
+      let specifier = posix.relative(posix.dirname(file), entries.get(library.source.name));
       if (!specifier.startsWith(".")) specifier = `./${specifier}`;
-      const rewritten = readFileSync(path, "utf8").replace(importPattern(library.source.name), `$1$2${specifier}$2`);
-      assert.ok(!imports(rewritten, library.source.name), `Unrewritten ${library.source.name} import: ${file}`);
-      writeFileSync(path, rewritten);
+      text = text.replace(importPattern(library.source.name), `$1$2${specifier}$2`);
+      assert.ok(!imports(text, library.source.name), `Unrewritten ${library.source.name} import: ${file}`);
+      changed = true;
     }
+    if (changed) writeFileSync(path, text);
   }
   return added;
 }

@@ -403,3 +403,36 @@ test("height: functions still work; PickerHeight caps at a fraction and fits the
 	for (const char of "item 1") typing.handleInput(char);
 	assert.equal(typing.render(80).length, 15, "typing never resizes the panel");
 });
+
+test("embedded pickers skip the title row, expose the count, and accept small host heights", () => {
+	const make = (embedded: boolean, height: () => number) =>
+		createPicker<{ id: number }>({
+			tui: fakeTui(40),
+			theme: () => theme,
+			keybindings: new KeybindingsManager(),
+			title: "Jobs",
+			items: Array.from({ length: 5 }, (_, id) => ({ id })),
+			text: (item) => `item ${item.id}`,
+			height,
+			embedded,
+			actions: [],
+			onClose() {},
+		});
+	const standalone = make(false, () => 12)
+		.render(60)
+		.map(plain);
+	const embedded = make(true, () => 12);
+	const lines = embedded.render(60).map(plain);
+	assert.match(standalone[0]!, /Jobs +5\/5/u);
+	assert.equal(lines.length, 12);
+	assert.ok(!lines.some((line) => line.includes("Jobs")), "no title row");
+	assert.equal(lines[0], standalone[1], "the search input moves up to the first row");
+	assert.equal(lines.at(-1), standalone.at(-1), "the footer is unchanged");
+	assert.equal(embedded.countLabel, "5/5");
+	embedded.focused = true;
+	for (const char of "item 3") embedded.handleInput(char);
+	embedded.render(60);
+	assert.equal(embedded.countLabel, "1/5");
+	assert.equal(make(true, () => 4).render(60).length, 4, "embedded heights may go below the standalone minimum");
+	assert.equal(make(false, () => 4).render(60).length, 8);
+});

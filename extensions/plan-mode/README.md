@@ -48,11 +48,11 @@ After presenting a plan, the agent answers ordinary questions in regular assista
 
 ## Review shortcuts
 
-The review, diff, summary, and Q&A views use the same panel color as [Pi Picker](../../packages/pi-picker/README.md), darker than the composer:
+The review, diff, summary, and Q&A views, the revision editor, and the summary spinner open as [Pi Dialog](../../packages/pi-dialog/README.md) popups, the framed card shared by this workspace's extensions:
 
-- The header shows what you are viewing, the plan title, the iteration, and how far you have scrolled. The plan file path sits below it, then a thin rule.
-- The document is inset from both edges. A thin bar in the right margin shows where you are in a long plan.
-- Below another rule, the footer lists the actions. Approve is highlighted; copy and close sit on the right. On narrow screens the secondary actions are hidden from the legend but their keys still work.
+- The rounded top border shows what you are viewing, the plan title, the iteration, and how far you have scrolled. The plan file path sits below it.
+- The document is inset from both edges on the panel color. A thin bar in the right margin shows where you are in a long plan.
+- Below a separator, the footer lists the actions. Approve is highlighted; copy and close sit on the right. On narrow screens the secondary actions are hidden from the footer but their keys still work.
 
 While the agent writes a plan, its `plan_output` row shows line and character counts and the current section. The review opens when the plan is saved.
 
@@ -71,7 +71,7 @@ Inside the plan review overlay:
 - In fullscreen mode, use the mouse wheel to scroll. Regular mode leaves mouse reporting to the terminal; all actions remain available by keyboard.
 - Press `Escape` to close review and continue the conversation.
 
-Diff and summary actions become available after at least two iterations. Review, diff, summary, and Q&A share one resizable, scrollable viewer. Selection and confirmation keys respect pi's keybindings. `Home`/`g` and `End`/`G` jump to the start and end. Tiny viewports use a compact layout rather than overflowing.
+Diff and summary actions become available after at least two iterations. Review, diff, summary, and Q&A share one resizable, scrollable viewer. Selection and confirmation keys respect pi's keybindings. `Home`/`g` and `End`/`G` jump to the start and end. Tiny viewports drop the shadow, then the border, then the footer rather than overflowing.
 
 Cancelling a summary aborts its model request. Session shutdown, reload, tree navigation, and toggling the workflow cancel its interactions and pending saves. A review cannot approve an outdated iteration or a plan that is still being saved.
 

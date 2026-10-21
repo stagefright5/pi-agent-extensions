@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { stripVTControlCharacters as plain } from "node:util";
-import type { TUI } from "@earendil-works/pi-tui";
+import { visibleWidth, type TUI } from "@earendil-works/pi-tui";
 import { jobGlyph, jobLabel, JobsBrowser } from "./browser.ts";
 import { FooterStatus, jobsStatusText } from "./footer.ts";
 import { JobManager, OUTPUT_EVENT_MS, type Job } from "./jobs.ts";
@@ -157,5 +157,47 @@ test("jobs manager: output of an unselected job does not redraw; Ctrl+K kills af
 	assert.equal(closed(), 1);
 	chatty.kill();
 	await chatty.exited();
+	view.dispose();
+});
+
+test("jobs manager in a popup: border shows the list count, then the open log's job; heights fit", async () => {
+	const { Popup } = await import("@stagefright5/pi-dialog");
+	const host = new URL(".", import.meta.resolve("@earendil-works/pi-coding-agent"));
+	const { getThemeByName } = await import(new URL("modes/interactive/theme/theme.js", host).href);
+	const { PANEL_HEIGHT } = await import("./browser.ts");
+	const jobs = manager();
+	const job = background(jobs, "echo popup-output");
+	await job.exited();
+	const { view } = await browser(jobs);
+	const popup = new Popup(
+		view,
+		{
+			icon: "⚙",
+			padding: 1,
+			height: PANEL_HEIGHT,
+			kind: () => view.heading().kind,
+			title: () => view.heading().title,
+			meta: () => view.heading().meta,
+		},
+		{
+			rows: () => 60,
+			theme: () => getThemeByName("dark"),
+			requestRender() {},
+			keybindings: { matches: () => false },
+		},
+	);
+	let lines = popup.render(120).map(plain);
+	assert.match(lines[0]!, /^╭─ ⚙ Background jobs ─+ 1\/1 ─╮/u);
+	assert.equal(lines.length, 16, "one job fits the minimum height");
+	for (const line of popup.render(120)) assert.ok(visibleWidth(line) <= 120);
+	view.handleInput("\r");
+	for (let tries = 0; tries < 100 && !popup.render(120).map(plain).join("\n").includes("popup-output"); tries++)
+		await sleep(10);
+	lines = popup.render(120).map(plain);
+	assert.match(lines[0]!, /^╭─ ⚙ j1 {2}echo popup-output ─+ exit 0 · \d+s · pid \d+ ─╮/u);
+	assert.equal(lines.length, 30, "the log uses the full half-terminal height");
+	assert.ok(lines.some((line) => line.includes("popup-output")));
+	view.handleInput("\x1b");
+	assert.match(popup.render(120).map(plain)[0]!, /Background jobs/u);
 	view.dispose();
 });

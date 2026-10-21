@@ -58,3 +58,59 @@ test("invalid private files are reported and never overwritten", (t) => {
 	}
 	assert.throws(() => loadSettings(fixture(t), { toolExplain: false }));
 });
+
+test("/tool-explain opens a framed popup, saves toggles to the private file, and reloads on close", async (t) => {
+	const dir = fixture(t);
+	const { registerPicker } = await import("./settings.ts");
+	const { initTheme } = await import("@earendil-works/pi-coding-agent");
+	const host = new URL(".", import.meta.resolve("@earendil-works/pi-coding-agent"));
+	const { getThemeByName } = await import(new URL("modes/interactive/theme/theme.js", host).href);
+	const { KeybindingsManager } = await import(new URL("core/keybindings.js", host).href);
+	initTheme("dark", false);
+	const theme = getThemeByName("dark");
+	let handler!: (args: string, ctx: unknown) => Promise<void>;
+	const pi = {
+		registerCommand: (_name: string, command: { handler: typeof handler }) => {
+			handler = command.handler;
+		},
+		getSettings: () => ({}),
+		getAllTools: () => [{ name: "bash" }, { name: "read" }],
+	};
+	registerPicker(pi as never, () => dir);
+	let component: any;
+	let reloads = 0;
+	const ctx = {
+		mode: "tui",
+		waitForIdle: async () => {},
+		reload: async () => {
+			reloads++;
+		},
+		ui: {
+			theme,
+			notify: (message: string) => assert.fail(message),
+			custom: (factory: any) =>
+				new Promise((resolve) => {
+					const tui = { terminal: { rows: 40, columns: 100 }, requestRender() {} };
+					component = factory(tui, theme, new KeybindingsManager(), (value: unknown) => {
+						component.dispose?.();
+						resolve(value);
+					});
+				}),
+		},
+	};
+	const opened = handler("", ctx);
+	await new Promise((resolve) => setImmediate(resolve));
+	const { stripTerminalSequences } = await import("@earendil-works/pi-tui");
+	const plain = (lines: string[]) => lines.map(stripTerminalSequences);
+	const lines = plain(component.render(90));
+	assert.match(lines[0]!, /^╭─ ✦ Tool explanations ─+╮/u);
+	assert.match(lines[1]!, /All tools · 0 excluded/u);
+	assert.ok(lines.some((line) => /Tool selection +all/u.test(line)));
+	component.handleInput("\x1b[B"); // bash
+	component.handleInput("\r"); // enabled → disabled
+	assert.deepEqual(loadSettings(dir).excludeTools, ["bash"]);
+	assert.match(plain(component.render(90))[1]!, /All tools · 1 excluded/u);
+	component.handleInput("\x1b");
+	await opened;
+	assert.equal(reloads, 1);
+});

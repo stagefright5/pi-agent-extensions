@@ -81,7 +81,7 @@ The indicator is an ordinary extension status, so it appears in pi's default foo
 
 ## Jobs manager
 
-Open it with `/jobs`, `Alt+J`, a click on the footer indicator, or `Alt+S` then `Enter`. The panel fits its jobs (with room for a preview) and is never taller than half the terminal.
+Open it with `/jobs`, `Alt+J`, a click on the footer indicator, or `Alt+S` then `Enter`. It opens as a [Pi Dialog](../../packages/pi-dialog/README.md) popup: the border shows the match count, or the open log's job, command, and state. The popup fits its jobs (with room for a preview) and is never taller than half the terminal.
 
 | Key                 | Action                                                |
 | ------------------- | ----------------------------------------------------- |

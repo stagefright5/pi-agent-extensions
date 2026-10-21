@@ -95,6 +95,11 @@ export interface PickerOptions<T> {
 	 * optionally shrinking to fit the items). Defaults to 80% of the terminal height.
 	 */
 	height?: (() => number) | PickerHeight;
+	/**
+	 * Hosted inside a frame that shows the title (for example a pi-dialog popup): skip the title and
+	 * count row, and allow heights below the standalone minimum. Read `countLabel` for the count.
+	 */
+	embedded?: boolean;
 	/** Close the host overlay (Esc, or an action calling `context.close()`). */
 	onClose(): void;
 }
@@ -169,6 +174,11 @@ export class Picker<T> implements Component, Focusable {
 
 	invalidate(): void {
 		this.input.invalidate();
+	}
+
+	/** "matches/total", with " …" while a search is still running; the title row shows it unless embedded. */
+	get countLabel(): string {
+		return `${this.result.total}/${this.index.size}${this.busy ? " …" : ""}`;
 	}
 
 	/** Current query text. */
@@ -403,13 +413,15 @@ export class Picker<T> implements Component, Focusable {
 	/** Total rows for this frame. Fitting uses the item count, not the matches, so typing never resizes. */
 	private resolveHeight(): number {
 		const option = this.options.height;
-		if (typeof option === "function") return Math.max(MIN_HEIGHT, option());
+		const minimum = this.options.embedded ? 3 : MIN_HEIGHT;
+		if (typeof option === "function") return Math.max(minimum, option());
 		const rows = this.options.tui.terminal.rows;
 		const ratio = option?.max ?? 0.8;
 		const max = Math.max(MIN_HEIGHT, ratio <= 1 ? Math.floor(rows * ratio) : Math.floor(ratio));
 		if (!option?.fit) return max;
 		const min = Math.min(max, Math.max(MIN_HEIGHT, option.min ?? MIN_HEIGHT));
-		const content = CHROME_ROWS + (this.filterState ? 1 : 0) + Math.max(1, this.index.size);
+		const content =
+			CHROME_ROWS - (this.options.embedded ? 1 : 0) + (this.filterState ? 1 : 0) + Math.max(1, this.index.size);
 		return Math.max(min, Math.min(max, content));
 	}
 
@@ -420,10 +432,12 @@ export class Picker<T> implements Component, Focusable {
 		const panel = (line: string) => paintRow(truncateToWidth(line, width, ""), width, palette.text, palette.panel);
 		const lines: string[] = [];
 
-		const count = `${this.result.total}/${this.index.size}${this.busy ? " …" : ""}`;
-		const title = palette.fg("accent", palette.bold(this.options.title));
-		const titleGap = width - 2 - visibleWidth(this.options.title) - visibleWidth(count);
-		lines.push(panel(" " + title + " ".repeat(Math.max(1, titleGap)) + palette.fg("dim", count)));
+		if (!this.options.embedded) {
+			const count = this.countLabel;
+			const title = palette.fg("accent", palette.bold(this.options.title));
+			const titleGap = width - 2 - visibleWidth(this.options.title) - visibleWidth(count);
+			lines.push(panel(" " + title + " ".repeat(Math.max(1, titleGap)) + palette.fg("dim", count)));
+		}
 		// pi-tui's Input draws its own "> " prompt.
 		const inputLine = this.input.render(Math.max(1, width - 2))[0] ?? "";
 		lines.push(panel(" " + inputLine));

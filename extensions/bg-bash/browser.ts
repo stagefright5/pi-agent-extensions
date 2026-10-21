@@ -1,5 +1,7 @@
 /**
- * `/jobs`: a pi-picker overlay of background jobs with a live log preview, plus a full log view.
+ * `/jobs`: a pi-picker of background jobs with a live log preview, plus a full log view, inside a
+ * pi-dialog popup. The popup border shows "Background jobs" and the match count, or the open log's
+ * job, command and state.
  *
  * Render work is bounded: rows are cheap strings for the visible window; the preview is decoded once
  * per job output/state version (`previewKey`) from the in-memory tail; the 1 s tick runs only while
@@ -7,13 +9,18 @@
  */
 import { readFile } from "node:fs/promises";
 import { copyToClipboard, type KeybindingsManager, type Theme } from "@earendil-works/pi-coding-agent";
-import { Key, matchesKey, type Component, type Focusable, type TUI, type TuiMouseEvent } from "@earendil-works/pi-tui";
+import { Key, matchesKey, type Focusable, type TUI, type TuiMouseEvent } from "@earendil-works/pi-tui";
+import type { PopupBody } from "@stagefright5/pi-dialog";
 import { createPicker, type FilterGroup, type Picker } from "@stagefright5/pi-picker";
 import { cleanOutput, formatDuration, lastLines, type Job, type JobManager } from "./jobs.ts";
 import { LogView } from "./log-view.ts";
 
-/** Fit the jobs and preview within half the terminal height. */
-const PANEL_HEIGHT = { fit: true, max: 0.5, min: 14 } as const;
+/** Fit the jobs and preview within half the terminal height (rows include the popup frame). */
+export const PANEL_HEIGHT = { fit: true, max: 0.5, min: 16 } as const;
+/** Body rows the picker needs besides one row per job: input, filters, rule, footer. */
+const PICKER_CHROME = 4;
+/** Body rows that leave room for the stacked preview. */
+const PICKER_MIN = 12;
 const PREVIEW_LINES = 300;
 const PREVIEW_BYTES = 32 * 1024;
 const SEND_LINES = 80;
@@ -48,9 +55,11 @@ export interface JobsBrowserOptions {
 	copy?: (text: string) => Promise<void>;
 	/** Overrides the 1 s tick for tests. */
 	tickMs?: number;
+	/** Body rows available (the popup's body height); defaults to half the terminal. */
+	height?: () => number;
 }
 
-export class JobsBrowser implements Component, Focusable {
+export class JobsBrowser implements PopupBody, Focusable {
 	private readonly options: JobsBrowserOptions;
 	readonly picker: Picker<Job>;
 	private logView: LogView | undefined;
@@ -98,7 +107,8 @@ export class JobsBrowser implements Component, Focusable {
 			filters,
 			multiSelect: true,
 			emptyMessage: "No matching jobs",
-			height: PANEL_HEIGHT,
+			embedded: true,
+			height: () => this.bodyHeight(),
 			actions: [
 				{
 					id: "open",
@@ -252,7 +262,7 @@ export class JobsBrowser implements Component, Focusable {
 			tui: this.options.tui,
 			theme: this.options.theme,
 			keybindings: this.options.keybindings,
-			height: () => this.overlayHeight(),
+			height: () => this.bodyHeight(),
 			onBack: () => this.closeLog(),
 			onClose: () => this.options.done(),
 		});
@@ -268,8 +278,27 @@ export class JobsBrowser implements Component, Focusable {
 		this.options.tui.requestRender();
 	}
 
-	private overlayHeight(): number {
-		return Math.max(8, Math.floor(this.options.tui.terminal.rows * PANEL_HEIGHT.max));
+	private height: number | undefined;
+
+	private bodyHeight(): number {
+		return this.height ?? this.options.height?.() ?? Math.max(8, Math.floor(this.options.tui.terminal.rows * 0.5));
+	}
+
+	/** Popup border text for the current view. */
+	heading(): { kind: string; title?: string; meta: string } {
+		if (this.logView) return this.logView.heading();
+		return { kind: "Background jobs", meta: this.picker.countLabel };
+	}
+
+	/** Rows wanted: one per job plus the picker chrome, or as tall as allowed for the log view. */
+	naturalHeight(): number {
+		if (this.logView) return Number.MAX_SAFE_INTEGER;
+		return Math.max(PICKER_MIN, PICKER_CHROME + this.options.manager.size);
+	}
+
+	renderBody(width: number, height: number): string[] {
+		this.height = height;
+		return this.render(width);
 	}
 
 	invalidate(): void {

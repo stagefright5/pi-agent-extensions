@@ -437,10 +437,12 @@ test("picker saves choices to its own file and reloads only after a change", asy
 			reloads++;
 		},
 		ui: {
+			theme,
 			notify: () => {},
 			custom: async (factory: any) => {
 				let closed = false;
-				const component = factory({ requestRender() {} }, theme, {}, () => {
+				const tui = { terminal: { rows: 40, columns: 100 }, requestRender() {} };
+				const component = factory(tui, theme, { matches: () => false }, () => {
 					closed = true;
 				});
 				assert.ok(component.render(80).length);

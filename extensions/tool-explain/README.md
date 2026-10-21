@@ -20,7 +20,7 @@ pi install npm:@stagefright5/pi-tool-explain
 
 ## Choose tools
 
-Run `/reload` after updating the extension. Then run `/tool-explain` to open the searchable picker. Use arrow keys to navigate, Enter to toggle, and Esc to close.
+Run `/reload` after updating the extension. Then run `/tool-explain` to open the searchable picker in a [Pi Dialog](../../packages/pi-dialog/README.md) popup; its subtitle summarizes the current selection. Use arrow keys to navigate, Enter to toggle, and Esc to close.
 
 The picker has two modes:
 

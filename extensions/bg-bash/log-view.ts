@@ -1,5 +1,6 @@
 /**
- * Full-screen log of one job, inside the `/jobs` overlay.
+ * Full log of one job, inside the `/jobs` popup. The popup border carries the job id, command and
+ * state (`heading()`); this view draws the log rows and a help line.
  *
  * Bounded work per frame: the log file is read incrementally (new bytes only), at most
  * LOG_VIEW_MAX_LINES lines are kept, new lines are wrapped once and appended to a per-width cache,
@@ -176,7 +177,17 @@ export class LogView implements Component {
 	invalidate(): void {}
 
 	private pageSize(): number {
-		return Math.max(1, this.options.height() - 6);
+		return Math.max(1, this.options.height() - 2);
+	}
+
+	/** Popup border text: the job id, its command, and its state. */
+	heading(): { kind: string; title: string; meta: string } {
+		const { job } = this.options;
+		const state =
+			job.state === "running"
+				? `running ${formatDuration(job.elapsedMs())}`
+				: `${job.state === "exited" ? `exit ${job.exitCode}` : job.state === "timed-out" ? "timed out" : job.state} · ${formatDuration(job.elapsedMs())}`;
+		return { kind: job.id, title: job.command.replace(/\s+/gu, " "), meta: `${state} · pid ${job.pid ?? "?"}` };
 	}
 
 	/** Wrap only lines added since the last frame; rebuild when the width changes or lines were trimmed. */
@@ -195,8 +206,7 @@ export class LogView implements Component {
 	render(width: number): string[] {
 		if (width <= 0) return [];
 		const theme = this.options.theme();
-		const { job } = this.options;
-		const contentWidth = Math.max(1, width - 1);
+		const contentWidth = Math.max(1, width);
 		const rows = this.rows(contentWidth);
 		const pending: string[] = [];
 		if (this.model.pending) wrapLine(this.model.pending, contentWidth, pending);
@@ -207,28 +217,10 @@ export class LogView implements Component {
 		this.top = Math.max(0, Math.min(this.top, maxTop));
 
 		const rule = theme.fg("borderMuted", "─".repeat(width));
-		const state =
-			job.state === "running"
-				? theme.fg("accent", `running ${formatDuration(job.elapsedMs())}`)
-				: job.state === "exited" && job.exitCode === 0
-					? theme.fg("success", `exit 0 · ${formatDuration(job.elapsedMs())}`)
-					: theme.fg(
-							"error",
-							`${job.state === "exited" ? `exit ${job.exitCode}` : job.state} · ${formatDuration(job.elapsedMs())}`,
-						);
-		const lines = [
-			rule,
-			truncateToWidth(
-				` ${theme.fg("accent", theme.bold(job.id))} · ${state} · ${theme.fg("dim", `pid ${job.pid ?? "?"}`)}`,
-				width,
-				"…",
-			),
-			truncateToWidth(` ${theme.fg("dim", job.command.replace(/\s+/gu, " "))}`, width, "…"),
-			rule,
-		];
+		const lines: string[] = [];
 		for (let row = this.top; row < this.top + page; row++) {
 			const text = row < rows.length ? rows[row]! : (pending[row - rows.length] ?? "");
-			lines.push(` ${theme.fg("toolOutput", text)}`);
+			lines.push(theme.fg("toolOutput", text));
 		}
 		const position = total === 0 ? "0/0" : `${this.top + 1}-${Math.min(this.top + page, total)}/${total}`;
 		const earlier = this.model.dropped > 0 || this.model.cut ? " · earlier output in log file" : "";
@@ -236,7 +228,7 @@ export class LogView implements Component {
 			width < 80
 				? `${position} · f follow · esc back`
 				: `${position}${earlier} · ↑↓ scroll · f follow ${this.follow ? "on" : "off"} · esc back · ctrl+c close`;
-		lines.push(rule, truncateToWidth(` ${theme.fg("dim", help)}`, width, "…"));
+		lines.push(rule, truncateToWidth(theme.fg("dim", help), width, "…"));
 		return lines;
 	}
 

@@ -321,3 +321,75 @@ test("extensions that import a workspace library bundle a private copy and load 
   }
   assert.ok(validated > 0, "at least one used library was staged and loaded");
 });
+
+function addLibrary(workspace, slug, name, source) {
+  const dir = join(workspace.root, "packages", slug);
+  mkdirSync(join(dir, "src"), { recursive: true });
+  saveJson(join(dir, "package.json"), {
+    name,
+    version: "0.0.1",
+    description: `Fixture library ${slug}`,
+    type: "module",
+    exports: { ".": "./src/index.ts" },
+    scripts: { prepack: "node ../../scripts/package-tools.mjs stage-package" },
+    publishConfig: { directory: `../../.tmp/publish/${slug}`, linkDirectory: false },
+    packageTools: { title: slug, interface: "Library", include: ["src"] },
+  });
+  writeFileSync(
+    join(dir, "README.md"),
+    "# Fixture\n\n<!-- package-tools:install:start -->\n<!-- package-tools:install:end -->\n",
+  );
+  writeFileSync(join(dir, "src", "index.ts"), source);
+}
+
+test("libraries that import other workspace libraries are vendored transitively", (t) => {
+  let workspace = fixture(t);
+  addLibrary(workspace, "lib-b", "@fixture/lib-b", "export const b = (): string => 'b';\n");
+  addLibrary(
+    workspace,
+    "lib-a",
+    "@fixture/lib-a",
+    "import { b } from \"@fixture/lib-b\";\nexport const a = (): string => 'a' + b();\n",
+  );
+  const ext = join(workspace.root, "extensions", "tool-output-browser");
+  writeFileSync(
+    join(ext, "uses-a.ts"),
+    "import { a } from \"@fixture/lib-a\";\nimport { b } from '@fixture/lib-b';\nexport const ab = (): string => a() + b();\n",
+  );
+  workspace = loadWorkspace(workspace.root);
+
+  // An extension bundles both libraries once, with every import rewritten to the top-level vendor copy.
+  const destination = stagePackage(workspace, get(workspace, "tool-output-browser"));
+  const manifest = json(join(destination, "package.json"));
+  assert.ok(manifest.files.includes("vendor/lib-a/src/index.ts"));
+  assert.ok(manifest.files.includes("vendor/lib-b/src/index.ts"));
+  assert.match(read(join(destination, "uses-a.ts")), /from "\.\/vendor\/lib-a\/src\/index\.ts"/);
+  assert.match(read(join(destination, "uses-a.ts")), /from '\.\/vendor\/lib-b\/src\/index\.ts'/);
+  assert.match(read(join(destination, "vendor/lib-a/src/index.ts")), /from "\.\.\/\.\.\/lib-b\/src\/index\.ts"/);
+  assert.match(read(join(get(workspace, "lib-a").dir, "src/index.ts")), /"@fixture\/lib-b"/, "source untouched");
+  const output = execFileSync(
+    process.execPath,
+    [
+      "--no-warnings",
+      "--input-type=module",
+      "-e",
+      `const m = await import(${JSON.stringify(join(destination, "uses-a.ts"))}); console.log(m.ab());`,
+    ],
+    { encoding: "utf8" },
+  );
+  assert.equal(output.trim(), "abb");
+
+  // A library staged on its own bundles the libraries it builds on.
+  const library = stagePackage(workspace, get(workspace, "lib-a"));
+  const libraryManifest = json(join(library, "package.json"));
+  assert.ok(libraryManifest.files.includes("vendor/lib-b/src/index.ts"));
+  assert.match(read(join(library, "src/index.ts")), /from "\.\.\/vendor\/lib-b\/src\/index\.ts"/);
+  assert.equal(libraryManifest.dependencies?.["@fixture/lib-b"], undefined);
+
+  // Import cycles between libraries are rejected.
+  writeFileSync(
+    join(get(workspace, "lib-b").dir, "src/index.ts"),
+    'import { a } from "@fixture/lib-a";\nexport const b = a;\n',
+  );
+  assert.throws(() => stagePackage(workspace, get(workspace, "tool-output-browser")), /import cycle/);
+});

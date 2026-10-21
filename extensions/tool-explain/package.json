@@ -1,6 +1,6 @@
 {
   "name": "@stagefright5/pi-tool-explain",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Show AI summaries for tool calls and save tool choices in Pi settings",
   "type": "module",
   "keywords": [
@@ -20,6 +20,7 @@
     "@stagefright5/pi-extension-utils": "workspace:*",
     "@earendil-works/pi-coding-agent": "catalog:",
     "@earendil-works/pi-tui": "catalog:",
+    "@stagefright5/pi-dialog": "workspace:*",
     "typebox": "catalog:"
   },
   "pi": {
