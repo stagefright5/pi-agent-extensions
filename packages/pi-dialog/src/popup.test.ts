@@ -118,10 +118,8 @@ test("frame: rounded border with title and meta, panel-filled card including cor
 	assert.match(text.at(-1)!, /^ ▀+▘$/u);
 	for (const line of lines) assert.equal(visibleWidth(line), 60);
 	// Interior rows share one panel background that is not the composer surface colour.
-	const bg = (line: string) => {
-		const start = line.indexOf("\u001b[48;2;");
-		return start < 0 ? undefined : line.slice(start, line.indexOf("m", start));
-	};
+	// Truecolor (48;2;r;g;b) or, without COLORTERM, 256-colour (48;5;n).
+	const bg = (line: string) => /\u001b\[48;[25];[\d;]+m/u.exec(line)?.[0];
 	const panel = bg(lines[1]!);
 	assert.ok(panel);
 	for (const line of lines.slice(0, -1)) assert.equal(bg(line), panel);

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { stripVTControlCharacters as plain } from "node:util";
 import { CURSOR_MARKER, renderFakeCursor, visibleWidth, type TUI, type TuiMouseEvent } from "@earendil-works/pi-tui";
 import { UndoRedoEditor } from "./index.ts";
@@ -261,8 +262,9 @@ test("themed composer: padded draft bar, mode rail, footer strip, hint placehold
 });
 
 test("a lent status line fills the footer only while the focused composer draws it", async (t) => {
-	const { getThemeByName } = await import(new URL("modes/interactive/theme/theme.js", host).href);
-	const palette = getThemeByName("dark");
+	const { loadThemeFromPath } = await import(new URL("modes/interactive/theme/theme.js", host).href);
+	// Truecolor regardless of COLORTERM: the contrast check below compares RGB values.
+	const palette = loadThemeFromPath(fileURLToPath(new URL("modes/interactive/theme/dark.json", host)), "truecolor");
 	const editor = new UndoRedoEditor(
 		tui,
 		theme,
