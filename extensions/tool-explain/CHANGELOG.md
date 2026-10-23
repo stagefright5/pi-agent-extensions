@@ -1,5 +1,11 @@
 # @stagefright5/pi-tool-explain
 
+## 0.2.0
+
+### Minor Changes
+
+- e6f91bf: `/tool-explain` opens as a framed pi-dialog popup with a subtitle that summarizes the current selection.
+
 ## 0.1.1
 
 ### Patch Changes

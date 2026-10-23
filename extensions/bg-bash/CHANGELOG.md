@@ -1,5 +1,11 @@
 # @stagefright5/pi-bg-bash
 
+## 0.2.0
+
+### Minor Changes
+
+- e6f91bf: The `/jobs` manager opens in the shared pi-dialog popup. Its border shows the match count, or the open log's job, command, and state; the log view no longer repeats them in its own header.
+
 ## 0.1.0
 
 ### Added

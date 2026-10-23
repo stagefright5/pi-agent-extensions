@@ -2,6 +2,18 @@
 
 This file records workspace changes. Package release histories live in `extensions/<package>/CHANGELOG.md` and `packages/<library>/CHANGELOG.md`.
 
+## 2026-10-23 (IST)
+
+| Package                                                                                                                                                           | Version | Details                                                     |
+| ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | ----------------------------------------------------------- |
+| [`@stagefright5/pi-jenkins-cli-operations`](https://github.com/stagefright5/pi-agent-extensions/releases/tag/%40stagefright5%2Fpi-jenkins-cli-operations%400.3.0) | 0.3.0   | [Changelog](extensions/jenkins-cli-operations/CHANGELOG.md) |
+| [`@stagefright5/pi-picker`](https://github.com/stagefright5/pi-agent-extensions/releases/tag/%40stagefright5%2Fpi-picker%400.2.0)                                 | 0.2.0   | [Changelog](packages/pi-picker/CHANGELOG.md)                |
+
+- Jenkins CLI Operations lists and downloads build artifacts with path, symlink, overwrite, and redirect guards.
+- Pi Picker adds `embedded` for pickers hosted inside a framed popup.
+- Record the shared pi-dialog release from `e6f91bf` (pi-dialog 0.1.0, Background Bash 0.2.0, Plan Mode 0.3.0, Tool Explain 0.2.0) in the package changelogs. Those versions were already published, so they are not bumped again.
+- Tests that compare background colours accept 256-colour output when `COLORTERM` is unset.
+
 ## 2026-10-17 (IST)
 
 Release 13 packages from commit `1359b39`, including the first releases of Background Bash, Tool Explain, Pi Extension Utilities, and Pi Picker. Each package has its own GitHub release and tag.

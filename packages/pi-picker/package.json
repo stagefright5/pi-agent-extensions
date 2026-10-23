@@ -1,6 +1,6 @@
 {
   "name": "@stagefright5/pi-picker",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Fast multi-word fuzzy search, highlighted lists, and picker overlays for pi extensions",
   "type": "module",
   "keywords": [
