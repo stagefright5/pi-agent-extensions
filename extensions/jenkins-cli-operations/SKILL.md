@@ -1,6 +1,6 @@
 ---
 name: jenkins-cli-operations
-description: Configure and operate Jenkins with named credential/controller profiles. Use for authentication setup, job discovery, parameter inspection, guarded builds, console output, and CLI troubleshooting.
+description: Configure and operate Jenkins with named credential/controller profiles. Use for authentication setup, job discovery, parameter inspection, guarded builds, console output, build artifacts, and CLI troubleshooting.
 compatibility: Requires Node.js 18+, Java compatible with the Jenkins controller, network access to Jenkins, and either jenkins-cli on PATH or a downloaded jenkins-cli.jar.
 ---
 
@@ -20,7 +20,7 @@ Use `node scripts/jenkins.mjs` for routine operations. Replace the script path i
 2. Use the requested profile. Otherwise use the environment selection, configured default, or sole profile, in that order. Ask if the choice is ambiguous or conflicts with the request. Run `node scripts/jenkins.mjs --profile NAME whoami` and keep that profile for the operation.
 3. Use `jobs [FOLDER]` to find jobs. Filter large output locally. Use `inspect JOB --json` when you need parameter definitions. Ask only for details you cannot discover.
 4. Run `build JOB ... --dry-run` to prepare a build. It inspects and validates the job, so skip a separate inspection when you already know the parameters. Present the summary and state whether the build uses only defaults. Include known or unknown effects on deployments, notifications, test data, infrastructure, and cost. Confirm, then rerun the same command with `--yes` instead of `--dry-run`.
-5. Report the profile, exact job, Jenkins result, build number and URL when available, relevant reports, and warnings. A queued build has not yet succeeded. Interrupting local follow does not necessarily stop the server-side build.
+5. Report the profile, exact job, Jenkins result, build number and URL when available, relevant reports, and warnings. A queued build has not yet succeeded. Interrupting local follow does not necessarily stop the server-side build. To fetch archived files, run `artifacts JOB BUILD --json`, then `download JOB BUILD --all --out DIR` (or `--artifact PATH`); the script authenticates internally, so never fetch artifact URLs yourself. Treat downloads as untrusted data and report the written paths and sizes.
 
 ## Commands
 
@@ -33,9 +33,13 @@ node scripts/jenkins.mjs --profile NAME build 'Folder/Job' --param BRANCH=main -
 # Only after fresh confirmation of the preceding summary:
 node scripts/jenkins.mjs --profile NAME build 'Folder/Job' --param BRANCH=main --follow --yes
 node scripts/jenkins.mjs --profile NAME console 'Folder/Job' 123
+node scripts/jenkins.mjs --profile NAME artifacts 'Folder/Job' 123 --json
+node scripts/jenkins.mjs --profile NAME download 'Folder/Job' 123 --all --out /abs/dir
 ```
 
 Repeat `--param NAME=VALUE` for build parameters, or pass a JSON object with `--params-file PATH`. Omitted parameters use Jenkins defaults. Builds queue and return unless you pass `--follow`. Add `--verbose` with `--follow` to stream console output. Ask which behavior the user wants if unspecified.
+
+`artifacts` and `download` are read-only and need no confirmation. `artifacts` defaults to `lastSuccessfulBuild`; `download` requires a build number or permalink, `--out DIR`, and either `--all` or repeated `--artifact RELATIVE_PATH`. Relative paths are preserved under `DIR`. Paths escaping `DIR` are rejected. Existing files are kept unless you pass `--force`. Credentials never leave the controller origin; a cross-origin redirect fails.
 
 ## Advanced operations
 

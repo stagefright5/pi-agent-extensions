@@ -11,12 +11,29 @@ node scripts/jenkins.mjs --profile reader jobs
 node scripts/jenkins.mjs --profile reader jobs 'Folder Name'
 node scripts/jenkins.mjs --profile reader inspect 'Folder/Job' --json
 node scripts/jenkins.mjs --profile reader console 'Folder/Job' 123
+node scripts/jenkins.mjs --profile reader artifacts 'Folder/Job' 123 --json
 node scripts/jenkins.mjs --profile reader cli -- help build
 ```
 
 Job names are full names with `/` between folders. Discover multibranch names rather than guessing encoding. Filter large job lists locally, for example `... jobs | grep -i 'search-term'`. Use `Select-String` in PowerShell.
 
 `profiles` lists names, URLs, provider types, configured keychain user IDs, the configured default, and the environment selection. It does not read credentials or probe Jenkins. Use `whoami` to verify the actual authenticated identity, especially for file/env providers.
+
+## Build artifacts
+
+```bash
+node scripts/jenkins.mjs --profile reader artifacts 'Folder/Job'            # lastSuccessfulBuild
+node scripts/jenkins.mjs --profile reader artifacts 'Folder/Job' 123 --json
+node scripts/jenkins.mjs --profile reader download 'Folder/Job' 123 --all --out /abs/dir
+node scripts/jenkins.mjs --profile reader download 'Folder/Job' 123 \
+  --artifact dist/app.zip --artifact reports/junit.xml --out /abs/dir --json
+```
+
+Both commands are read-only REST calls that resolve the profile credential in-process; never fetch artifact URLs with your own HTTP client. `BUILD` is a number or a permalink such as `lastSuccessfulBuild`, `lastStableBuild`, or `lastBuild`. `--artifact` takes a `relativePath` exactly as `artifacts` lists it.
+
+`download` validates every destination before writing. It rejects absolute paths, `..` segments, backslashes, and symlinked directories that leave `--out`, whether the path came from the command line or from Jenkins. It refuses to replace existing files unless `--force` is given. Each file streams to a temporary file in its destination directory and is renamed after its size matches `Content-Length`. The output lists each final path and byte count.
+
+Redirects are followed only within the profile's controller origin. A redirect to another host fails rather than sending, or dropping, credentials. Artifact managers that redirect to external storage, such as S3 presigned URLs, are therefore unsupported. Treat downloaded files as untrusted data: store them in a new, empty directory and do not execute them.
 
 ## Prepare, confirm, execute
 
@@ -83,6 +100,7 @@ All helpers support `--config PATH`. Existing single-connection files resolve as
 - For a 403, check whether the user has `Overall/Read`, `Job/Read`, and `Job/Build`. Request minimum permissions. Do not switch to a privileged identity without asking.
 - If Jenkins cannot find a job, check its folder, case, spaces, multibranch encoding, and visibility under the selected identity.
 - If a parameter is unknown, inspect again. Jenkinsfile refreshes can change definitions.
+- If `artifacts` returns 404, check the build number and job name; `lastSuccessfulBuild` does not exist until a build succeeds. Artifacts may also have been discarded by the job's retention policy.
 - If keychain access fails, verify the selected service label and account without displaying the token. On Linux, verify an unlocked Secret Service session. On Windows, verify that `CredentialManager` is available and each account has its own target label.
 - If configuration is locked, verify no writer is active before removing a stale `.lock` file.
 

@@ -275,14 +275,43 @@ export function jobApiPath(jobName) {
     return parts.map((part) => `job/${encodeURIComponent(part)}`).join('/');
 }
 
+// Describe a URL for messages without its query (redirect targets may carry signatures).
+export function describeUrl(url) {
+    const parsed = new URL(url);
+    return `${parsed.origin}${parsed.pathname}`;
+}
+
+// Authenticated GET against the selected controller. Redirects are followed manually and only within the
+// controller origin, so the Authorization header never reaches another host. TLS verification is never relaxed.
+export async function jenkinsGet(config, credential, url, { maxRedirects = 5 } = {}) {
+    const origin = new URL(config.url).origin;
+    const headers = { Authorization: `Basic ${Buffer.from(credential).toString('base64')}` };
+    let current = new URL(url);
+    for (let hop = 0; ; hop++) {
+        if (current.origin !== origin)
+            throw new Error(`Refusing to send credentials to ${current.origin}; only ${origin} is allowed`);
+        const response = await fetch(current, { headers, redirect: 'manual' });
+        if (response.status < 300 || response.status >= 400) return response;
+        const location = response.headers.get('location');
+        await response.body?.cancel().catch(() => {});
+        if (!location) throw new Error(`Jenkins returned HTTP ${response.status} without a Location header`);
+        if (hop >= maxRedirects) throw new Error(`Too many redirects fetching ${describeUrl(url)}`);
+        const next = new URL(location, current);
+        if (next.origin !== origin)
+            throw new Error(
+                `Refusing cross-origin redirect from ${describeUrl(current)} to ${next.origin}; ` +
+                    `credentials stay on ${origin}`,
+            );
+        current = next;
+    }
+}
+
 export async function inspectJob(config, jobName) {
     const credential = await readCredential(config);
     const tree =
         'name,url,buildable,inQueue,nextBuildNumber,property[parameterDefinitions[name,type,description,defaultParameterValue[value]]]';
     const url = `${config.url}/${jobApiPath(jobName)}/api/json?tree=${encodeURIComponent(tree)}`;
-    const response = await fetch(url, {
-        headers: { Authorization: `Basic ${Buffer.from(credential).toString('base64')}` },
-    });
+    const response = await jenkinsGet(config, credential, url);
     if (!response.ok) throw new Error(`Jenkins job inspection returned HTTP ${response.status} for ${jobName}`);
     return response.json();
 }
