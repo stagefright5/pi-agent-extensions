@@ -335,6 +335,18 @@ test(
             [['whoami'], ['who-am-i']],
             [['cli', '--', '--version'], ['--version']],
             [
+                ['cli', '--', 'build', '--help'],
+                ['build', '--help'],
+            ],
+            [
+                ['cli', '--', 'build', '-h'],
+                ['build', '-h'],
+            ],
+            [
+                ['--', 'build', '--help'],
+                ['build', '--help'],
+            ],
+            [
                 ['jobs', 'Folder Name'],
                 ['list-jobs', 'Folder Name'],
             ],

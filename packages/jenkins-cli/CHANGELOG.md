@@ -1,5 +1,11 @@
 # @stagefright5/jenkins-cli
 
+## 0.1.2
+
+### Patch Changes
+
+- Support `--help` and `-h` consistently for every public command, plus `jenkins help COMMAND`. Show command-specific arguments, options, examples, and safety guidance without loading configuration, accessing credentials, or contacting Jenkins. Share help with the legacy helper entry points and preserve upstream help arguments after the pass-through separator.
+
 ## 0.1.1
 
 ### Patch Changes

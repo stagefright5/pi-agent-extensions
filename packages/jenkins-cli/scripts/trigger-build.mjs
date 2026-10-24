@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { commandHelp, hasHelp } from './lib/help.mjs';
 import { readFile, stat } from 'node:fs/promises';
 import readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
@@ -15,20 +16,7 @@ import {
 } from './lib/config.mjs';
 
 function usage() {
-    console.log(`Usage:
-  jenkins [--config PATH] [--profile NAME] build JOB [parameters] [--follow] [--verbose] [--dry-run] [--yes]
-
-Parameters:
-  --param NAME=VALUE          Repeatable build parameter
-  --params-file PATH          JSON object containing build parameters
-
-Execution:
-  --dry-run                   Inspect, validate, and summarize without queueing a build
-  --follow                    Wait for the final Jenkins result
-  --verbose                   Stream console output; requires --follow
-
-Safety:
-  Without --yes, type "trigger JOB" interactively. Agents may use --yes only after explicit user confirmation.`);
+    console.log(commandHelp('build'));
 }
 
 function takeOption(args, name) {
@@ -80,7 +68,7 @@ async function readParamsFile(filePath) {
 async function main() {
     const consumed = consumeConfigArg(process.argv.slice(2));
     const args = consumed.args;
-    if (args.includes('--help') || args.includes('-h')) return usage();
+    if (hasHelp(args)) return usage();
     const jobName = takeOption(args, '--job');
     const paramsFile = takeOption(args, '--params-file');
     const assignments = takeRepeated(args, '--param');

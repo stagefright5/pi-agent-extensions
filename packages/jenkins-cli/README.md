@@ -22,7 +22,12 @@ npm install -g @stagefright5/jenkins-cli
 ```bash
 jenkins --version
 jenkins --help
+jenkins profiles --help
+jenkins build --help
+jenkins help download
 ```
+
+Every public command supports `--help` and `-h`, including when arguments are present. `jenkins help COMMAND` shows the same command-specific usage, options, and examples. Local help does not read configuration, resolve credentials, contact Jenkins, or perform the requested operation. For upstream commands, use `jenkins cli -- help COMMAND`; arguments after `--` (including help flags) are forwarded unchanged and may contact Jenkins.
 
 Ensure the npm global bin directory is on PATH. If another program already owns `jenkins`, resolve that conflict before using this CLI; do not force an overwrite. Version output identifies the package as well as its version.
 

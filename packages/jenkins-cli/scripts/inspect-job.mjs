@@ -1,8 +1,9 @@
 #!/usr/bin/env node
+import { commandHelp, hasHelp } from './lib/help.mjs';
 import { consumeConfigArg, inspectJob, isSensitiveName, loadConfig, parameterDefinitions } from './lib/config.mjs';
 
 function usage() {
-    console.log('Usage: jenkins [--config PATH] [--profile NAME] inspect "Folder/Job Name" [--json]');
+    console.log(commandHelp('inspect'));
 }
 
 function takeOption(args, name) {
@@ -17,7 +18,7 @@ function takeOption(args, name) {
 async function main() {
     const consumed = consumeConfigArg(process.argv.slice(2));
     const args = consumed.args;
-    if (args.includes('--help') || args.includes('-h')) return usage();
+    if (hasHelp(args)) return usage();
     const jobName = takeOption(args, '--job');
     const json = args.includes('--json');
     if (json) args.splice(args.indexOf('--json'), 1);

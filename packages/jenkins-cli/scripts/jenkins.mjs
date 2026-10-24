@@ -10,11 +10,15 @@ import {
     withAuthFile,
 } from './lib/config.mjs';
 import { downloadArtifacts, listArtifacts } from './lib/artifacts.mjs';
+import { commandHelp, hasHelp } from './lib/help.mjs';
 
 function usage() {
     console.log(`Usage:
   jenkins [--config PATH] [--profile NAME] <command> [arguments]
   jenkins --version
+  jenkins help [COMMAND]
+
+Every command supports --help and -h (before any -- pass-through separator).
 
 Commands:
   profiles [--json]                 List safe connection metadata; no authentication
@@ -124,7 +128,14 @@ function requirePositionals(args, minimum, maximum, syntax) {
 async function main() {
     const { configPath, profile, args } = consumeConfigArg(process.argv.slice(2));
     const command = args.shift();
-    if (!command || ['--help', '-h', 'help'].includes(command)) return usage();
+    if (!command || ['--help', '-h'].includes(command)) return usage();
+    if (command === 'help') {
+        if (!args.length || hasHelp(args)) return usage();
+        requirePositionals(args, 1, 1, 'jenkins help [COMMAND]');
+        return console.log(commandHelp(args[0]));
+    }
+    // Never intercept help after --: those arguments belong to the upstream CLI.
+    if (command !== '--' && hasHelp(args)) return console.log(commandHelp(command));
     if (command === '--version' || command === '-v') {
         requirePositionals(args, 0, 0, '--version');
         const { name, version } = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
@@ -154,23 +165,14 @@ async function main() {
     if (command === 'configure') {
         result = await runHelper('./configure.mjs', configPath, profile, args);
     } else if (command === 'inspect' || command === 'build') {
-        if (args.length === 1 && ['--help', '-h'].includes(args[0])) {
-            result = await runHelper(
-                command === 'inspect' ? './inspect-job.mjs' : './trigger-build.mjs',
-                configPath,
-                profile,
-                args,
-            );
-        } else {
-            const job = args.shift();
-            requirePositionals(job === undefined ? [] : [job], 1, 1, `${command} JOB [options]`);
-            result = await runHelper(
-                command === 'inspect' ? './inspect-job.mjs' : './trigger-build.mjs',
-                configPath,
-                profile,
-                ['--job', job, ...args],
-            );
-        }
+        const job = args.shift();
+        requirePositionals(job === undefined ? [] : [job], 1, 1, `${command} JOB [options]`);
+        result = await runHelper(
+            command === 'inspect' ? './inspect-job.mjs' : './trigger-build.mjs',
+            configPath,
+            profile,
+            ['--job', job, ...args],
+        );
     } else {
         let cliArgs;
         if (command === '--') {

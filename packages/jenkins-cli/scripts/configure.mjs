@@ -1,28 +1,12 @@
 #!/usr/bin/env node
+import { commandHelp, hasHelp } from './lib/help.mjs';
 import path from 'node:path';
 
 import { consumeConfigArg, validateConnection } from './lib/config.mjs';
 import { saveConnection } from './lib/save-config.mjs';
 
 function usage() {
-    console.log(`Usage:
-  jenkins configure [--profile NAME] --url URL [launcher] [auth] [--transport webSocket|http] [--config PATH]
-
-Profiles:
-  --profile NAME             Add a named connection without changing other profiles
-  --replace                  Explicitly replace an existing named profile
-  --default                  Make this profile the default
-
-Launcher (choose at most one):
-  --jar PATH                 Invoke java -jar PATH
-  --command COMMAND          Invoke a jenkins-cli launcher on PATH (default: jenkins-cli)
-
-Authentication:
-  --auth-provider file --auth-file PATH
-  --auth-provider env [--user-variable NAME] [--token-variable NAME]
-  --auth-provider keychain --user-id ID [--service NAME]
-
-This script stores configuration only. It never accepts or stores an API token.`);
+    console.log(commandHelp('configure'));
 }
 
 function option(args, name) {
@@ -37,7 +21,7 @@ function option(args, name) {
 async function main() {
     const consumed = consumeConfigArg(process.argv.slice(2));
     const args = consumed.args;
-    if (args.includes('--help') || args.includes('-h')) return usage();
+    if (hasHelp(args)) return usage();
 
     const url = option(args, '--url');
     const transport = option(args, '--transport') || 'webSocket';
