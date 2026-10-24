@@ -6,7 +6,7 @@ import { saveConnection } from './lib/save-config.mjs';
 
 function usage() {
     console.log(`Usage:
-  node configure.mjs [--profile NAME] --url URL [launcher] [auth] [--transport webSocket|http] [--config PATH]
+  jenkins configure [--profile NAME] --url URL [launcher] [auth] [--transport webSocket|http] [--config PATH]
 
 Profiles:
   --profile NAME             Add a named connection without changing other profiles
@@ -88,7 +88,7 @@ async function main() {
     };
     await saveConnection(consumed.configPath, config, { profile: consumed.profile, replace, makeDefault });
     console.log(`Wrote non-secret Jenkins configuration to ${consumed.configPath}`);
-    console.log(`Next: node scripts/jenkins.mjs${consumed.profile ? ` --profile ${consumed.profile}` : ''} whoami`);
+    console.log(`Next: jenkins${consumed.profile ? ` --profile ${consumed.profile}` : ''} whoami`);
 }
 
 main().catch((error) => {

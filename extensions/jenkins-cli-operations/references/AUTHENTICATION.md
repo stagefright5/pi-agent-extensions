@@ -1,10 +1,10 @@
 # Authentication and installation
 
-Resolve `scripts/jenkins.mjs` relative to the directory containing `SKILL.md`, not the working directory.
+Install the standalone CLI with `npm install -g @stagefright5/jenkins-cli@0.1`, then run `jenkins --version`. It must identify `@stagefright5/jenkins-cli` version `0.1.x`. The skill does not bundle the executable or automatically add it to PATH. Use `jenkins` from any working directory.
 
 ## Reuse existing configuration
 
-Start with `node scripts/jenkins.mjs profiles --json`. This reads only non-secret metadata, not tokens or credential stores.
+Start with `jenkins profiles --json`. This reads only non-secret metadata, not tokens or credential stores.
 
 Configuration location:
 
@@ -12,20 +12,20 @@ Configuration location:
 - Linux/macOS: `$XDG_CONFIG_HOME/jenkins-cli-operations/config.json`, or `~/.config/jenkins-cli-operations/config.json`
 - Override: `JENKINS_SKILL_CONFIG` or explicit `--config PATH`
 
-Verify a selected profile with `node scripts/jenkins.mjs --profile NAME whoami`. Do not recreate working configuration or fall back to another account on authentication failure.
+Verify a selected profile with `jenkins --profile NAME whoami`. Do not recreate working configuration or fall back to another account on authentication failure.
 
 ## Named profiles
 
 Each profile pairs a controller/launcher with one credential-provider reference. Profiles can share a controller with different users or tokens, or connect to different controllers. Tokens are never stored in the config.
 
 ```bash
-node scripts/jenkins.mjs configure --profile staging \
+jenkins configure --profile staging \
   --url https://staging.example.com \
   --jar ~/.local/share/jenkins-cli/staging.jar \
   --auth-provider file --auth-file ~/.config/jenkins/staging-auth \
   --default
 
-node scripts/jenkins.mjs configure --profile production \
+jenkins configure --profile production \
   --url https://production.example.com \
   --jar ~/.local/share/jenkins-cli/production.jar \
   --auth-provider keychain --user-id build-bot \
@@ -96,7 +96,7 @@ Invoke-WebRequest -Uri 'https://jenkins.example.com/jnlpJars/jenkins-cli.jar' `
   -OutFile (Join-Path $Dir 'jenkins.jar')
 ```
 
-Configure with `--jar PATH`, or `--command NAME` for a launcher on PATH. The default launcher is `jenkins-cli`. Default transport is WebSocket; use `--transport http` only when needed for proxy compatibility. Never disable TLS verification.
+Configure with `--jar PATH`, or `--command NAME` for a launcher on PATH. The default upstream launcher is `jenkins-cli`; it is distinct from this package's `jenkins` command. Do not configure `--command jenkins`, which would invoke this wrapper instead of the upstream CLI. Default transport is WebSocket; use `--transport http` only when needed for proxy compatibility. Never disable TLS verification.
 
 ## Credential providers
 
@@ -133,7 +133,7 @@ $Credential = $null
 Then configure using only the file path:
 
 ```bash
-node scripts/jenkins.mjs configure --profile reader \
+jenkins configure --profile reader \
   --url https://jenkins.example.com --jar /path/to/jenkins.jar \
   --auth-provider file --auth-file /path/to/reader-auth
 ```
@@ -170,7 +170,7 @@ The helper retrieves the selected entry only and creates a temporary protected a
 Have a secret manager populate environment variables; do not put tokens in shell profiles or committed `.env` files. Separate profiles can use separate variable names:
 
 ```bash
-node scripts/jenkins.mjs configure --profile builder \
+jenkins configure --profile builder \
   --url https://jenkins.example.com --jar /path/to/jenkins.jar \
   --auth-provider env --user-variable JENKINS_BUILDER_USER --token-variable JENKINS_BUILDER_TOKEN
 ```
@@ -179,4 +179,4 @@ Defaults are `JENKINS_USER_ID` and `JENKINS_API_TOKEN`. The helper creates and r
 
 ## Verify and rotate
 
-Run `node scripts/jenkins.mjs --profile NAME whoami`. If a token is exposed, revoke it in Jenkins, create a replacement, update that profile's credential provider, and verify again. Never test alternative identities automatically after a 401/403.
+Run `jenkins --profile NAME whoami`. If a token is exposed, revoke it in Jenkins, create a replacement, update that profile's credential provider, and verify again. Never test alternative identities automatically after a 401/403.

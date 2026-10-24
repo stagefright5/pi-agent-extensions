@@ -129,6 +129,12 @@ test("all staged packages carry shared defaults, unchanged release identity, and
     if (library) {
       assert.ok(manifest.keywords.includes("pi-library"));
       assert.deepEqual(manifest.exports, pkg.source.exports);
+    } else if (pkg.kind === "cli") {
+      assert.ok(!manifest.keywords.includes("pi-package"));
+      assert.ok(!manifest.keywords.includes("pi-library"));
+      assert.deepEqual(manifest.bin, pkg.source.bin);
+      assert.deepEqual(manifest.engines, pkg.source.engines);
+      assert.equal(manifest.pi, undefined);
     } else {
       assert.ok(manifest.keywords.includes("pi-package"));
       assert.ok(manifest.keywords.includes(pkg.source.pi.skills ? "pi-skill" : "pi-extension"));
@@ -147,7 +153,15 @@ test("all staged packages carry shared defaults, unchanged release identity, and
       }
     }
     const readme = read(join(destination, "README.md"));
-    assert.ok(readme.includes(library ? `npm install ${pkg.source.name}` : `pi install npm:${pkg.source.name}`));
+    assert.ok(
+      readme.includes(
+        pkg.kind === "cli"
+          ? `npm install -g ${pkg.source.name}`
+          : library
+            ? `npm install ${pkg.source.name}`
+            : `pi install npm:${pkg.source.name}`,
+      ),
+    );
     assert.doesNotMatch(readme, /\]\(\.\.\/\.\.\/README.md\)|For source development, load this directory/);
   }
   const artifact = join(workspace.root, ".tmp/publish/artifact-design");
@@ -268,6 +282,64 @@ test("pnpm packs every source package through prepack and publishConfig.director
       read(join(workspace.root, "LICENSE")),
     );
   }
+});
+
+test("Jenkins CLI tarball installs without pi and runs on PATH outside the repository", (t) => {
+  const workspace = fixture(t);
+  const pkg = get(workspace, "jenkins-cli");
+  assert.equal(pkg.kind, "cli");
+  const skill = get(workspace, "jenkins-cli-operations");
+  const skillFiles = publicationFiles(skill);
+  assert.ok(skillFiles.includes("SKILL.md"));
+  assert.ok(!skillFiles.some((file) => file.startsWith("scripts/")));
+
+  const tarball = join(workspace.root, "jenkins-cli.tgz");
+  execFileSync("pnpm", ["--dir", pkg.dir, "pack", "--out", tarball], { stdio: "pipe" });
+  const sandbox = mkdtempSync(join(tmpdir(), "jenkins-cli-installed-"));
+  t.after(() => rmSync(sandbox, { recursive: true, force: true }));
+  const prefix = join(sandbox, "install");
+  const cwd = join(sandbox, "unrelated-directory");
+  mkdirSync(cwd);
+  execFileSync(
+    "npm",
+    ["install", "--global", "--prefix", prefix, "--ignore-scripts", "--offline", "--no-audit", "--no-fund", tarball],
+    { cwd, stdio: "pipe" },
+  );
+  const env = {
+    ...process.env,
+    PATH: `${join(prefix, "bin")}:${process.env.PATH}`,
+    JENKINS_SKILL_CONFIG: join(cwd, "missing-config.json"),
+    JENKINS_SKILL_PROFILE: "must-not-be-resolved-for-help",
+  };
+  const run = (...args) => execFileSync("jenkins", args, { cwd, env, encoding: "utf8" });
+  assert.equal(run("--version").trim(), `${pkg.source.name} ${pkg.source.version}`);
+  assert.match(run("--help"), /jenkins \[--config PATH\]/);
+  assert.match(run("configure", "--help"), /jenkins configure/);
+  assert.match(run("inspect", "--help"), /jenkins .*inspect/);
+  assert.match(run("build", "--help"), /jenkins .*build/);
+  const config = join(cwd, "config.json");
+  run(
+    "--config",
+    config,
+    "configure",
+    "--profile",
+    "reader",
+    "--url",
+    "https://jenkins.example.com",
+    "--auth-provider",
+    "env",
+  );
+  const listing = JSON.parse(run("--config", config, "profiles", "--json"));
+  assert.equal(listing.profiles[0].name, "reader");
+  assert.equal(listing.profiles[0].provider, "env");
+  const installed = json(join(prefix, "lib/node_modules/@stagefright5/jenkins-cli/package.json"));
+  assert.equal(installed.dependencies, undefined);
+  assert.equal(installed.peerDependencies, undefined);
+  assert.deepEqual(installed.bin, pkg.source.bin);
+  assert.ok(!existsSync(join(prefix, "lib/node_modules/@earendil-works")));
+
+  pkg.metadata.exclude = ["scripts/jenkins.mjs"];
+  assert.throws(() => stagePackage(workspace, pkg), /Missing published bin entry/);
 });
 
 test("extensions that import a workspace library bundle a private copy and load without it", (t) => {

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { fileURLToPath } from 'node:url';
+import { readFile } from 'node:fs/promises';
 import {
     cliInvocation,
     consumeConfigArg,
@@ -12,7 +13,8 @@ import { downloadArtifacts, listArtifacts } from './lib/artifacts.mjs';
 
 function usage() {
     console.log(`Usage:
-  node jenkins.mjs [--config PATH] [--profile NAME] <command> [arguments]
+  jenkins [--config PATH] [--profile NAME] <command> [arguments]
+  jenkins --version
 
 Commands:
   profiles [--json]                 List safe connection metadata; no authentication
@@ -41,7 +43,7 @@ Download options:
 
 Selection: --profile > JENKINS_SKILL_PROFILE > configured default > sole profile.
 Unknown or ambiguous profiles fail. Credentials are never tried in sequence.
-Legacy syntax remains supported: node jenkins.mjs [options] -- COMMAND [arguments].
+Legacy syntax remains supported: jenkins [options] -- COMMAND [arguments].
 Advanced/legacy pass-through does not enforce mutation confirmation; obtain it first.`);
 }
 
@@ -123,6 +125,12 @@ async function main() {
     const { configPath, profile, args } = consumeConfigArg(process.argv.slice(2));
     const command = args.shift();
     if (!command || ['--help', '-h', 'help'].includes(command)) return usage();
+    if (command === '--version' || command === '-v') {
+        requirePositionals(args, 0, 0, '--version');
+        const { name, version } = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
+        console.log(`${name} ${version}`);
+        return;
+    }
     let result;
     if (command === 'profiles') {
         if (args.length && (args.length !== 1 || args[0] !== '--json')) throw new Error('Usage: profiles [--json]');

@@ -211,6 +211,23 @@ test('dry-run rejects a non-buildable job', async (t) => {
 
 const entryScript = path.join(skillDir, 'scripts', 'jenkins.mjs');
 
+test('version identifies the package without reading configuration or credentials', async (t) => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), 'jenkins-version-test-'));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const config = path.join(directory, 'invalid.json');
+    await writeFile(config, 'not JSON');
+    const manifest = JSON.parse(await readFile(path.join(skillDir, 'package.json'), 'utf8'));
+    for (const flag of ['--version', '-v']) {
+        const result = await runNode([entryScript, '--config', config, '--profile', 'unknown', flag]);
+        assert.equal(result.code, 0, result.stderr);
+        assert.equal(result.stdout.trim(), `${manifest.name} ${manifest.version}`);
+        assert.equal(result.stderr, '');
+    }
+    const invalid = await runNode([entryScript, '--version', 'unexpected']);
+    assert.equal(invalid.code, 1);
+    assert.match(invalid.stderr, /Usage: --version/);
+});
+
 test('unified build selects credentials on the same controller and reports the profile', async (t) => {
     const fixture = await fakeJenkins(t);
     const connection = JSON.parse(await readFile(fixture.configPath, 'utf8'));
@@ -316,6 +333,7 @@ test(
         await writeFile(fixture.configPath, JSON.stringify(connection));
         for (const [args, expected] of [
             [['whoami'], ['who-am-i']],
+            [['cli', '--', '--version'], ['--version']],
             [
                 ['jobs', 'Folder Name'],
                 ['list-jobs', 'Folder Name'],

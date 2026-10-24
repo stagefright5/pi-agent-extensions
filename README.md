@@ -16,7 +16,7 @@ The workspace develops and typechecks against pi 1.3.0. Packages use pi's TypeSc
 | ---------------------------------------------------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | [Artifact Design](./extensions/artifact-design/README.md)                    | `@stagefright5/pi-artifact-design`        | Design self-contained HTML artifacts with a local Vite dev server, theme/CSP harness, and single-file build                            | `/skill:artifact-design`                                                    |
 | [Background Bash](./extensions/bg-bash/README.md)                            | `@stagefright5/pi-bg-bash`                | Run pi's bash tool commands in the background once they outlast a short wait, with job tools, finish notifications, and a jobs manager | `bash` override, `job_*` tools, `/jobs`, `Alt+J`                            |
-| [Jenkins CLI Operations](./extensions/jenkins-cli-operations/README.md)      | `@stagefright5/pi-jenkins-cli-operations` | Guarded Jenkins operations for pi using the official Jenkins CLI                                                                       | `/skill:jenkins-cli-operations`                                             |
+| [Jenkins CLI Operations](./extensions/jenkins-cli-operations/README.md)      | `@stagefright5/pi-jenkins-cli-operations` | Agent skill for safe Jenkins operations using the standalone jenkins command                                                           | `/skill:jenkins-cli-operations`                                             |
 | [Obsidian UI](./extensions/obsidian-ui/README.md)                            | `@stagefright5/pi-obsidian-ui`            | A copy-friendly graphite and ice theme with compact tool presentation for pi                                                           | Automatic tool styling; `obsidian-ice` theme                                |
 | [OpenAI Fast](./extensions/openai-fast/README.md)                            | `@stagefright5/pi-openai-fast`            | Toggle OpenAI Fast mode (priority service tier) in pi                                                                                  | `/fast`, `pi --fast`                                                        |
 | [Plan Mode](./extensions/plan-mode/README.md)                                | `@stagefright5/pi-plan-mode`              | Evidence-guided planning and interactive plan review for pi                                                                            | `/plan`, `Alt+P`                                                            |
@@ -26,17 +26,18 @@ The workspace develops and typechecks against pi 1.3.0. Packages use pi's TypeSc
 | [Compact Status Bar](./extensions/status-bar/README.md)                      | `@stagefright5/pi-status-bar`             | A compact single-line status bar for pi                                                                                                | Automatic in TUI mode                                                       |
 | [Tool Explain](./extensions/tool-explain/README.md)                          | `@stagefright5/pi-tool-explain`           | Show AI summaries for tool calls and save tool choices in Pi settings                                                                  | Automatic, `/tool-explain`                                                  |
 | [Tool Output Browser](./extensions/tool-output-browser/README.md)            | `@stagefright5/pi-tool-output-browser`    | Browse complete stored tool results without expanding every pi transcript row                                                          | `/tool-output`                                                              |
+| [Jenkins CLI](./packages/jenkins-cli/README.md)                              | `@stagefright5/jenkins-cli`               | Guarded Jenkins CLI with named profiles, build validation, and artifact downloads                                                      | `jenkins`                                                                   |
 | [Pi Dialog](./packages/pi-dialog/README.md)                                  | `@stagefright5/pi-dialog`                 | Framed pop-ups and ready-made dialogs (confirm, select, input, editor, document, loader) for pi extensions                             | Library: `openPopup`, `Popup`, `confirm`, `select`, `input`, `showDocument` |
 | [Pi Extension Utilities](./packages/pi-extension-utils/README.md)            | `@stagefright5/pi-extension-utils`        | Shared status-line, private storage, and usage contracts for pi extensions                                                             | Library: status-line and storage contracts                                  |
 | [Pi Picker](./packages/pi-picker/README.md)                                  | `@stagefright5/pi-picker`                 | Fast multi-word fuzzy search, highlighted lists, and picker overlays for pi extensions                                                 | Library: `createPicker`, `Searcher`, `renderInlinePanel`                    |
 
 <!-- package-tools:catalogue:end -->
 
-Each package has its own source `package.json`, version, Pi manifest, and README. Packages release independently to npm. The repository root is private and is never published.
+Each package has its own source `package.json`, version, and README; Pi resource packages also have a Pi manifest. Standalone CLIs such as `@stagefright5/jenkins-cli` do not require pi. Packages release independently to npm. The repository root is private and is never published.
 
 ## Install standalone packages
 
-After a package is published, install only the extension or skill you want:
+After a package is published, install only the extension, skill, or standalone CLI you want:
 
 <!-- package-tools:install:start -->
 
@@ -53,6 +54,7 @@ pi install npm:@stagefright5/pi-provider-url-logger
 pi install npm:@stagefright5/pi-status-bar
 pi install npm:@stagefright5/pi-tool-explain
 pi install npm:@stagefright5/pi-tool-output-browser
+npm install -g @stagefright5/jenkins-cli
 ```
 
 <!-- package-tools:install:end -->
@@ -77,7 +79,7 @@ For development, point Pi's global extension directory at this repository's `ext
 ln -s ~/PersonalDev/pi-agent-extensions/extensions ~/.pi/agent/extensions
 ```
 
-Pi auto-discovers each `extensions/*/index.ts`. Shared libraries live in `packages/*` ([Pi Picker](./packages/pi-picker/README.md), [Pi Dialog](./packages/pi-dialog/README.md), and [Pi Extension Utilities](./packages/pi-extension-utils/README.md)); extensions import them through workspace links during development, and staging bundles a private copy into each published package under `vendor/`. Libraries may import other workspace libraries: staging follows those imports and vendors each library once. The Jenkins wrapper exposes its colocated `SKILL.md` for source-tree development. Edit a source file and run `/reload` in Pi; no package build or reinstall is required.
+Pi auto-discovers each `extensions/*/index.ts`. Shared libraries live in `packages/*` ([Pi Picker](./packages/pi-picker/README.md), [Pi Dialog](./packages/pi-dialog/README.md), and [Pi Extension Utilities](./packages/pi-extension-utils/README.md)); extensions import them through workspace links during development, and staging bundles a private copy into each published package under `vendor/`. Libraries may import other workspace libraries: staging follows those imports and vendors each library once. The Jenkins wrapper exposes its colocated `SKILL.md` for source-tree development; it calls the separately installed [`jenkins` CLI](./packages/jenkins-cli/README.md). Edit a source file and run `/reload` in Pi; no package build or reinstall is required.
 
 ### Temporary local loading
 
@@ -110,6 +112,7 @@ Run one package's tests:
 ```bash
 vp run @stagefright5/pi-prompt-truly-mine#test
 vp run @stagefright5/pi-jenkins-cli-operations#test
+vp run @stagefright5/jenkins-cli#test
 ```
 
 Stage all packages and inspect the files that each workspace would publish (without uploading anything):
@@ -147,7 +150,7 @@ vp run packages:check  # Fail on drift without changing files
 vp run packages:stage  # Check indexes and regenerate all distribution directories
 ```
 
-Source manifests retain names, versions, descriptions, module type, package-specific keywords, dependencies, local Pi resources, and development scripts. `packageTools.title` and `packageTools.interface` supply catalogue labels. License and repository defaults come from the root manifest; `pi-package` and extension/skill keywords are derived from each package's Pi resources. Publication access and the branch used in README repository links come from the Changesets configuration.
+Source manifests retain names, versions, descriptions, module type, package-specific keywords, dependencies, local Pi resources, and development scripts. `packageTools.title` and `packageTools.interface` supply catalogue labels. Packages under `packages/` with named `bin` entries are standalone CLIs rather than libraries; their runtime directories must be listed in `packageTools.include`, their bin targets are validated during staging, and they receive npm global-install instructions without Pi keywords. License and repository defaults come from the root manifest; `pi-package` and extension/skill keywords are derived from each package's Pi resources. Publication access and the branch used in README repository links come from the Changesets configuration.
 
 The shared publication policy includes root JavaScript/TypeScript source, `README.md`, `CHANGELOG.md` when present, and `SKILL.md` when present. Skill packages also include `references/`, `scripts/`, and `template/`. Tests, dependencies, build output, and hidden files (except template `.gitignore` files) are excluded. Package-local `packageTools.include` and `packageTools.exclude` arrays accept explicit package-relative file/directory paths for exceptions; exclusions still apply to includes. Symlinks and paths outside the package are rejected.
 
@@ -168,7 +171,7 @@ vp run pack:check
 vp run release
 ```
 
-Commit the generated version and changelog changes before publishing. The release command regenerates distribution directories before Changesets publishes them. Every published package includes the `pi-package` keyword for Pi package-gallery discovery. Packing and staging never publish or create release tags.
+Commit the generated version and changelog changes before publishing. The release command regenerates distribution directories before Changesets publishes them. Published Pi resource packages include the `pi-package` keyword for Pi package-gallery discovery; standalone CLIs do not. Packing and staging never publish or create release tags.
 
 ## Local data and privacy
 

@@ -1,7 +1,7 @@
 {
   "name": "@stagefright5/pi-jenkins-cli-operations",
-  "version": "0.3.0",
-  "description": "Guarded Jenkins operations for pi using the official Jenkins CLI",
+  "version": "0.4.0",
+  "description": "Agent skill for safe Jenkins operations using the standalone jenkins command",
   "type": "module",
   "keywords": [
     "jenkins",

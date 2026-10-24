@@ -16,7 +16,7 @@ import {
 
 function usage() {
     console.log(`Usage:
-  node trigger-build.mjs [--config PATH] [--profile NAME] --job JOB [parameters] [--follow] [--verbose] [--dry-run] [--yes]
+  jenkins [--config PATH] [--profile NAME] build JOB [parameters] [--follow] [--verbose] [--dry-run] [--yes]
 
 Parameters:
   --param NAME=VALUE          Repeatable build parameter

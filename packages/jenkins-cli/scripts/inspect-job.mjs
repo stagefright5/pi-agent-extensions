@@ -2,7 +2,7 @@
 import { consumeConfigArg, inspectJob, isSensitiveName, loadConfig, parameterDefinitions } from './lib/config.mjs';
 
 function usage() {
-    console.log('Usage: node inspect-job.mjs [--config PATH] [--profile NAME] --job "Folder/Job Name" [--json]');
+    console.log('Usage: jenkins [--config PATH] [--profile NAME] inspect "Folder/Job Name" [--json]');
 }
 
 function takeOption(args, name) {

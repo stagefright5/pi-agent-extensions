@@ -1,18 +1,18 @@
 # Operational recipes and troubleshooting
 
-Resolve `scripts/jenkins.mjs` relative to the directory containing `SKILL.md`. Use the same explicit profile for the whole operation.
+Use the installed `jenkins` command from `@stagefright5/jenkins-cli` version `0.1.x`. Use the same explicit profile for the whole operation.
 
 ## Read-only discovery
 
 ```bash
-node scripts/jenkins.mjs profiles --json
-node scripts/jenkins.mjs --profile reader whoami
-node scripts/jenkins.mjs --profile reader jobs
-node scripts/jenkins.mjs --profile reader jobs 'Folder Name'
-node scripts/jenkins.mjs --profile reader inspect 'Folder/Job' --json
-node scripts/jenkins.mjs --profile reader console 'Folder/Job' 123
-node scripts/jenkins.mjs --profile reader artifacts 'Folder/Job' 123 --json
-node scripts/jenkins.mjs --profile reader cli -- help build
+jenkins profiles --json
+jenkins --profile reader whoami
+jenkins --profile reader jobs
+jenkins --profile reader jobs 'Folder Name'
+jenkins --profile reader inspect 'Folder/Job' --json
+jenkins --profile reader console 'Folder/Job' 123
+jenkins --profile reader artifacts 'Folder/Job' 123 --json
+jenkins --profile reader cli -- help build
 ```
 
 Job names are full names with `/` between folders. Discover multibranch names rather than guessing encoding. Filter large job lists locally, for example `... jobs | grep -i 'search-term'`. Use `Select-String` in PowerShell.
@@ -22,10 +22,10 @@ Job names are full names with `/` between folders. Discover multibranch names ra
 ## Build artifacts
 
 ```bash
-node scripts/jenkins.mjs --profile reader artifacts 'Folder/Job'            # lastSuccessfulBuild
-node scripts/jenkins.mjs --profile reader artifacts 'Folder/Job' 123 --json
-node scripts/jenkins.mjs --profile reader download 'Folder/Job' 123 --all --out /abs/dir
-node scripts/jenkins.mjs --profile reader download 'Folder/Job' 123 \
+jenkins --profile reader artifacts 'Folder/Job'            # lastSuccessfulBuild
+jenkins --profile reader artifacts 'Folder/Job' 123 --json
+jenkins --profile reader download 'Folder/Job' 123 --all --out /abs/dir
+jenkins --profile reader download 'Folder/Job' 123 \
   --artifact dist/app.zip --artifact reports/junit.xml --out /abs/dir --json
 ```
 
@@ -38,7 +38,7 @@ Redirects are followed only within the profile's controller origin. A redirect t
 ## Prepare, confirm, execute
 
 ```bash
-node scripts/jenkins.mjs --profile builder build 'Folder/Job' \
+jenkins --profile builder build 'Folder/Job' \
   --param BRANCH=main --follow --dry-run
 ```
 
@@ -47,7 +47,7 @@ This inspects the job and validates declared parameter names without queueing. A
 Before execution, present the selected profile, verified identity, controller, exact job, and execution mode. Show whether the job is buildable or queued. List submitted parameters with secrets redacted, or state that the build uses only defaults. Include known or unknown effects on deployments, notifications, test data, infrastructure, and cost. Obtain fresh explicit confirmation, then repeat with `--yes` instead of `--dry-run`:
 
 ```bash
-node scripts/jenkins.mjs --profile builder build 'Folder/Job' \
+jenkins --profile builder build 'Folder/Job' \
   --param BRANCH=main --follow --yes
 ```
 
@@ -74,19 +74,19 @@ Repeated `--param NAME=VALUE` entries override matching file values. Omitted par
 ## Advanced CLI and compatibility
 
 ```bash
-node scripts/jenkins.mjs --profile NAME cli -- help COMMAND
-node scripts/jenkins.mjs --profile NAME cli -- COMMAND ARGUMENTS
+jenkins --profile NAME cli -- help COMMAND
+jenkins --profile NAME cli -- COMMAND ARGUMENTS
 ```
 
 Pass-through does not classify or block mutations. Check command behavior and obtain confirmation before mutations. The convenience interface rejects unknown commands instead of silently forwarding them. Wrapper options go before `--`; upstream options after it are preserved.
 
-Legacy invocations still work, with optional `--profile NAME`:
+Legacy pass-through remains available, with optional `--profile NAME`. Replace old skill-relative helper paths with these public commands:
 
 ```bash
-node scripts/jenkins.mjs -- who-am-i
-node scripts/inspect-job.mjs --job 'Folder/Job' --json
-node scripts/trigger-build.mjs --job 'Folder/Job' --dry-run
-node scripts/configure.mjs --help
+jenkins -- who-am-i
+jenkins inspect 'Folder/Job' --json
+jenkins build 'Folder/Job' --dry-run
+jenkins configure --help
 ```
 
 All helpers support `--config PATH`. Existing single-connection files resolve as profile `default`; see [Authentication](AUTHENTICATION.md) for migration and rollback.

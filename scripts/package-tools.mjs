@@ -35,7 +35,7 @@ export function loadWorkspace(root = ROOT) {
   assert.ok(manifest.license && manifest.repository?.url && branch, "Missing shared publication defaults");
   assert.ok(["public", "restricted"].includes(access), "Missing Changesets publication access");
   const repositoryUrl = manifest.repository.url.replace(/^git\+/, "").replace(/\.git$/, "");
-  // `extensions/*` hold Pi resources; `packages/*` hold libraries that extensions bundle at stage time.
+  // `extensions/*` hold Pi resources; `packages/*` hold libraries and standalone CLIs.
   const packages = ["extensions", "packages"].flatMap((group) =>
     !existsSync(join(root, group))
       ? []
@@ -47,7 +47,7 @@ export function loadWorkspace(root = ROOT) {
             const dir = join(root, directory);
             const source = json(join(dir, "package.json"));
             const metadata = source.packageTools;
-            const kind = group === "packages" ? "library" : "pi";
+            const kind = group === "extensions" ? "pi" : source.bin ? "cli" : "library";
             assert.ok(
               source.name && source.version && source.description && source.type,
               `Incomplete manifest: ${directory}`,
@@ -59,8 +59,15 @@ export function loadWorkspace(root = ROOT) {
                 `Missing Pi resources: ${directory}`,
               );
             } else {
-              assert.ok(!source.pi, `Libraries must not declare Pi resources: ${directory}`);
-              assert.ok(typeof source.exports?.["."] === "string", `Libraries need a root export: ${directory}`);
+              assert.ok(!source.pi, `Standalone packages must not declare Pi resources: ${directory}`);
+              if (kind === "cli") {
+                assert.ok(
+                  typeof source.bin === "object" && Object.keys(source.bin).length > 0,
+                  `CLIs need named bin entries: ${directory}`,
+                );
+              } else {
+                assert.ok(typeof source.exports?.["."] === "string", `Libraries need a root export: ${directory}`);
+              }
             }
             assert.equal(
               source.publishConfig?.directory,
@@ -114,9 +121,11 @@ export function renderPiManifest(packages) {
 
 function installation(pkg, workspace) {
   let block =
-    pkg.kind === "library"
-      ? `## Installation\n\nInstall the library in a Pi extension package:\n\n\`\`\`bash\nnpm install ${pkg.source.name}\n\`\`\``
-      : `## Installation\n\nInstall the standalone package:\n\n\`\`\`bash\npi install npm:${pkg.source.name}\n\`\`\``;
+    pkg.kind === "cli"
+      ? `## Installation\n\nInstall the standalone CLI:\n\n\`\`\`bash\nnpm install -g ${pkg.source.name}\n\`\`\``
+      : pkg.kind === "library"
+        ? `## Installation\n\nInstall the library in a Pi extension package:\n\n\`\`\`bash\nnpm install ${pkg.source.name}\n\`\`\``
+        : `## Installation\n\nInstall the standalone package:\n\n\`\`\`bash\npi install npm:${pkg.source.name}\n\`\`\``;
   if (workspace) {
     block += `\n\nFor source development and tests, see the [source README](${sourceUrl(workspace, `${pkg.directory}/README.md`)}) and [workspace development guide](${sourceUrl(workspace, "README.md")}#local-development).`;
   }
@@ -138,7 +147,7 @@ export function syncWorkspace(workspace, { check = false } = {}) {
     "install",
     `\`\`\`bash\n${packages
       .filter((pkg) => pkg.kind !== "library")
-      .map(({ source }) => `pi install npm:${source.name}`)
+      .map(({ source, kind }) => (kind === "cli" ? `npm install -g ${source.name}` : `pi install npm:${source.name}`))
       .join("\n")}\n\`\`\``,
   );
   if (next !== readme) updates.push([readmePath, next]);
@@ -240,7 +249,7 @@ export function publicationFiles(pkg) {
 export function publicationManifest(workspace, pkg, files) {
   const source = pkg.source;
   const keywords = new Set([
-    ...(pkg.kind === "library" ? ["pi-library"] : ["pi-package"]),
+    ...(pkg.kind === "library" ? ["pi-library"] : pkg.kind === "pi" ? ["pi-package"] : []),
     ...(source.pi?.extensions?.length ? ["pi-extension"] : []),
     ...(source.pi?.skills?.length ? ["pi-skill"] : []),
     ...(source.keywords ?? []),
@@ -387,6 +396,12 @@ export function stagePackage(workspace, pkg) {
   for (const paths of Object.values(manifest.pi ?? {})) {
     for (const path of paths)
       assert.ok(files.includes(path.replace(/^\.\//, "")), `Missing published Pi resource: ${path}`);
+  }
+  for (const path of Object.values(manifest.bin ?? {})) {
+    assert.ok(
+      typeof path === "string" && files.includes(path.replace(/^\.\//, "")),
+      `Missing published bin entry: ${path}`,
+    );
   }
   for (const name of Object.keys({ ...manifest.dependencies, ...manifest.peerDependencies })) {
     assert.ok(

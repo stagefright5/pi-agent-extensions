@@ -218,6 +218,9 @@ importers:
         version: link:../../packages/pi-picker
     publishDirectory: ../../.tmp/publish/tool-output-browser
 
+  packages/jenkins-cli:
+    publishDirectory: ../../.tmp/publish/jenkins-cli
+
   packages/pi-dialog:
     devDependencies:
       '@earendil-works/pi-coding-agent':

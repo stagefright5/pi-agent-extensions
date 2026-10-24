@@ -24,7 +24,7 @@ export default defineConfig({
         },
       },
       {
-        files: ["extensions/jenkins-cli-operations/**/*.mjs"],
+        files: ["extensions/jenkins-cli-operations/**/*.mjs", "packages/jenkins-cli/**/*.mjs"],
         options: {
           useTabs: false,
           tabWidth: 4,
