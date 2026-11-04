@@ -103,6 +103,8 @@ Plan Mode saves only small workflow flags and metadata through `pi.appendEntry()
 
 Plan Mode restores state from the active session branch on startup, reload, resume, fork, and tree navigation. When you navigate the session tree, it uses that branch's latest state. Restoration itself is read-only: a legacy branch gets its small v2 replay boundary only when new messages or workflow changes occur, not merely when opened or navigated.
 
+A [Side Agent](../side-agent/README.md) fork inherits Plan Mode's active state, restrictions, and plan history, but not approval. The plan directory recorded before the fork belongs to the parent: the side agent's first revision creates a new plan repository, seeded with the inherited plan, so neither session overwrites the other's plan files. Forks are recognised by the `side-agent-fork` provenance entry from `@stagefright5/pi-extension-utils`.
+
 Closing review appends a display-only custom entry with an entry renderer, never a model message. Filters for legacy display/context messages remain for older sessions.
 
 ## Model and data usage

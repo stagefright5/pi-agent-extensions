@@ -88,3 +88,30 @@ test("attempted plans are not restored without a successful result; legacy resul
 	assert.deepEqual(restored.iterations, ["text"]);
 	assert.equal(restored.planTitle, "Legacy");
 });
+
+test("plan directories recorded before a side-agent fork are inherited until this session changes them", () => {
+	const fork = {
+		type: "custom",
+		customType: "side-agent-fork",
+		data: { version: 1, childSessionId: "c", parentSessionId: "p", boundaryId: "b" },
+	};
+	const parentState = snapshot({ version: 2, active: true, planDir: "/plans/parent" });
+	const inherited = restorePlanState([
+		parentState,
+		result(1, "plan"),
+		fork,
+		snapshot({ version: 2, planDir: "/old/plans/project", revisionPending: true }),
+	] as never);
+	assert.equal(inherited.planDir, "/old/plans/project");
+	assert.equal(inherited.planDirInherited, true, "re-persisting the inherited value keeps it inherited");
+	assert.equal(inherited.active, true);
+	const own = restorePlanState([parentState, fork, snapshot({ version: 2, planDir: "/plans/child" })] as never);
+	assert.equal(own.planDirInherited, false);
+	assert.equal(
+		restorePlanState([parentState, fork, snapshot({ version: 2, reset: true, active: true })] as never)
+			.planDirInherited,
+		false,
+	);
+	assert.equal(restorePlanState([parentState] as never).planDirInherited, false);
+	assert.equal(restorePlanState([fork, parentState] as never).planDirInherited, false, "set after the fork: owned");
+});

@@ -11,6 +11,8 @@ import {
 	statusLineChannel,
 	recordExtensionUsage,
 	EXTENSION_USAGE_TYPE,
+	isSideAgentForkEntry,
+	SIDE_AGENT_FORK_TYPE,
 } from "./index.ts";
 
 test("private atomic JSON storage fails closed on unreadable documents", (t) => {
@@ -50,4 +52,15 @@ test("nested usage is stored durably, not in model context", () => {
 	const usage = { cost: { total: 1 } };
 	recordExtensionUsage(pi as never, "summary", usage as never);
 	assert.deepEqual(entries, [[EXTENSION_USAGE_TYPE, { source: "summary", usage }]]);
+});
+
+test("fork provenance markers are recognised only when complete", () => {
+	const data = { version: 1, childSessionId: "c", parentSessionId: "p", boundaryId: "b" };
+	assert.equal(isSideAgentForkEntry({ type: "custom", customType: SIDE_AGENT_FORK_TYPE, data }), true);
+	assert.equal(isSideAgentForkEntry({ type: "custom_message", customType: SIDE_AGENT_FORK_TYPE, data }), false);
+	assert.equal(
+		isSideAgentForkEntry({ type: "custom", customType: SIDE_AGENT_FORK_TYPE, data: { ...data, version: 2 } }),
+		false,
+	);
+	assert.equal(isSideAgentForkEntry({ type: "custom", customType: SIDE_AGENT_FORK_TYPE }), false);
 });

@@ -1,4 +1,5 @@
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
+import { isSideAgentForkEntry } from "@stagefright5/pi-extension-utils";
 import { Type } from "typebox";
 import { Check } from "typebox/value";
 import { getMessageText } from "./planning.ts";
@@ -28,6 +29,11 @@ export type PlanState = {
 	iterations: string[];
 	qaMessages: Array<{ role: "user" | "assistant"; content: string }>;
 	revisionPending: boolean;
+	/**
+	 * The plan directory was recorded before a side-agent fork marker: it belongs to the parent
+	 * session. The next revision must go to a new repository instead of overwriting it.
+	 */
+	planDirInherited: boolean;
 };
 const empty = (): PlanState => ({
 	active: false,
@@ -36,6 +42,7 @@ const empty = (): PlanState => ({
 	iterations: [],
 	qaMessages: [],
 	revisionPending: false,
+	planDirInherited: false,
 });
 
 /** Replay only the active branch. Legacy snapshots remain authoritative at their position. */
@@ -43,7 +50,17 @@ export function restorePlanState(branch: readonly SessionEntry[]): PlanState {
 	let state = empty();
 	let legacySnapshots = true;
 	const calls = new Map<string, { title: string; plan: string }>();
+	// A directory only becomes this session's own when its value changes after the latest fork;
+	// re-persisting an inherited value (any state snapshot does) keeps it inherited.
+	const setPlanDir = (dir: string | null) => {
+		if (dir !== state.planDir) state.planDirInherited = false;
+		state.planDir = dir;
+	};
 	for (const entry of branch) {
+		if (isSideAgentForkEntry(entry)) {
+			state.planDirInherited = state.planDir !== null;
+			continue;
+		}
 		if (entry.type === "custom" && entry.customType === STATE_TYPE && Check(schema, entry.data)) {
 			const data = entry.data;
 			legacySnapshots = data.version !== 2;
@@ -52,7 +69,7 @@ export function restorePlanState(branch: readonly SessionEntry[]): PlanState {
 				calls.clear();
 			}
 			state.active = data.active ?? state.active;
-			state.planDir = data.planDir === undefined ? state.planDir : data.planDir;
+			if (data.planDir !== undefined) setPlanDir(data.planDir);
 			state.planTitle = data.planTitle === undefined ? state.planTitle : data.planTitle;
 			state.revisionPending = data.revisionPending ?? state.revisionPending;
 			if (data.iterations) state.iterations = [...data.iterations];
@@ -89,7 +106,7 @@ export function restorePlanState(branch: readonly SessionEntry[]): PlanState {
 				continue;
 			// A legacy snapshot may already contain this result. Do not append it twice.
 			if (data.iteration <= state.iterations.length + 1) state.iterations[data.iteration - 1] = plan;
-			state.planDir = data.planDir;
+			setPlanDir(data.planDir);
 			state.planTitle = typeof data.title === "string" ? data.title : (call?.title ?? state.planTitle);
 			state.revisionPending = false;
 			continue;

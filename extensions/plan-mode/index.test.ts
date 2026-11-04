@@ -20,6 +20,7 @@ import { planProgress } from "./index.ts";
 import { restorePlanState } from "./state.ts";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { SIDE_AGENT_FORK_TYPE } from "@stagefright5/pi-extension-utils";
 
 const host = new URL(".", import.meta.resolve("@earendil-works/pi-coding-agent"));
 const { KeybindingsManager } = await import(new URL("core/keybindings.js", host).href);
@@ -676,6 +677,46 @@ test("while the plan streams in, the call row shows it growing; once complete, o
 		for (const line of streaming) assert.ok(!line.includes("\u001b[0m"));
 		const done = f.tool.renderCall(args, theme, { argsComplete: true } as never).render(100);
 		assert.equal(done.length, 1);
+	} finally {
+		await f.close();
+	}
+});
+
+test("a side-agent fork keeps planning restrictions but writes revisions to its own plan repository", async () => {
+	const f = await fixture();
+	try {
+		await f.start();
+		await f.execute("# Parent plan");
+		const parentDir = f.state().planDir!;
+		const parentPlan = await readFile(join(parentDir, "plan.md"), "utf8");
+		// What /side new appends after the copied branch.
+		f.manager.appendCustomEntry(SIDE_AGENT_FORK_TYPE, {
+			version: 1,
+			parentSessionId: "parent",
+			parentSessionFile: "/parent.jsonl",
+			parentLeafId: null,
+			boundaryId: f.manager.getLeafId(),
+			childSessionId: "child",
+			createdAt: new Date().toISOString(),
+			title: "Side: plan",
+		});
+		await f.runner.emit({ type: "session_start", reason: "resume" });
+		assert.equal(f.state().active, true, "planning restrictions are inherited");
+		assert.equal(f.state().planDirInherited, true);
+		assert.deepEqual(f.activeTools(), ["read", "bash", "plan_output"]);
+		assert.deepEqual(f.userMessages, [], "forking never approves the plan");
+
+		await f.execute("# Child revision");
+		const childDir = f.state().planDir!;
+		assert.notEqual(childDir, parentDir);
+		assert.equal(f.state().planDirInherited, false);
+		assert.equal(await readFile(join(parentDir, "plan.md"), "utf8"), parentPlan, "parent artifact unchanged");
+		assert.equal(await readFile(join(childDir, "plan.md"), "utf8"), "# Child revision");
+		const log = await promisify(execFile)("git", ["-C", childDir, "log", "--format=%s"]);
+		assert.deepEqual(log.stdout.trim().split("\n"), ["Plan iteration 2", "Plan iteration 1", "init plan repo"]);
+		await f.execute("# Child revision 2");
+		assert.equal(f.state().planDir, childDir, "later revisions stay in the child's repository");
+		assert.deepEqual(f.errors, []);
 	} finally {
 		await f.close();
 	}

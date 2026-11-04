@@ -23,6 +23,7 @@ The workspace develops and typechecks against pi 1.3.0. Packages use pi's TypeSc
 | [Global Prompt History Search](./extensions/prompt-history-search/README.md) | `@stagefright5/pi-prompt-history-search`  | Fuzzy reverse search across prompts in saved pi sessions                                                                               | `Alt+R`, `/prompt-history`                                                  |
 | [Prompt Truly Mine](./extensions/prompt-truly-mine/README.md)                | `@stagefright5/pi-prompt-truly-mine`      | Inline extension commands and composable skill/prompt context with cursor-restoring undo and redo for pi                               | `$` references, inline `/`, `Ctrl+Z`, redo shortcuts                        |
 | [Provider URL Logger](./extensions/provider-url-logger/README.md)            | `@stagefright5/pi-provider-url-logger`    | Log the provider, model, and base URL selected for pi provider requests                                                                | Automatic                                                                   |
+| [Side Agent](./extensions/side-agent/README.md)                              | `@stagefright5/pi-side-agent`             | Open an independent, fully capable side agent forked from the current conversation in a Rex split                                      | `/side`, `/side new`, `/side send`, `/side inbox`, `side_agent_send`        |
 | [Compact Status Bar](./extensions/status-bar/README.md)                      | `@stagefright5/pi-status-bar`             | A compact single-line status bar for pi                                                                                                | Automatic in TUI mode                                                       |
 | [Tool Explain](./extensions/tool-explain/README.md)                          | `@stagefright5/pi-tool-explain`           | Show AI summaries for tool calls and save tool choices in Pi settings                                                                  | Automatic, `/tool-explain`                                                  |
 | [Tool Output Browser](./extensions/tool-output-browser/README.md)            | `@stagefright5/pi-tool-output-browser`    | Browse complete stored tool results without expanding every pi transcript row                                                          | `/tool-output`                                                              |
@@ -51,6 +52,7 @@ pi install npm:@stagefright5/pi-plan-mode
 pi install npm:@stagefright5/pi-prompt-history-search
 pi install npm:@stagefright5/pi-prompt-truly-mine
 pi install npm:@stagefright5/pi-provider-url-logger
+pi install npm:@stagefright5/pi-side-agent
 pi install npm:@stagefright5/pi-status-bar
 pi install npm:@stagefright5/pi-tool-explain
 pi install npm:@stagefright5/pi-tool-output-browser

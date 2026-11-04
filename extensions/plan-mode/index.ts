@@ -6,6 +6,7 @@ import { Type } from "typebox";
 import { Check } from "typebox/value";
 import { join } from "node:path";
 import { homedir } from "node:os";
+import { rm } from "node:fs/promises";
 import { PlanRepository, SerialTaskQueue } from "./plan-store.ts";
 import {
 	createPlanMessageComponent,
@@ -48,6 +49,8 @@ export function planProgress(plan: unknown): string {
 export default function planModeExtension(pi: ExtensionAPI): void {
 	let active = false;
 	let planDir: string | null = null;
+	/** `planDir` belongs to the session this one was forked from; never write to it. */
+	let planDirInherited = false;
 	let iterations: string[] = [];
 	let planTitle: string | null = null;
 	let qaMessages: Array<{ role: "user" | "assistant"; content: string }> = [];
@@ -99,7 +102,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		resetInteractions();
 		const branch = ctx.sessionManager.getBranch();
 		const restored = restorePlanState(branch);
-		({ planDir, iterations, planTitle, qaMessages, revisionPending } = restored);
+		({ planDir, planDirInherited, iterations, planTitle, qaMessages, revisionPending } = restored);
 		active = ctx.mode === "tui" && restored.active;
 		const latest = branch.findLast((entry) => entry.type === "custom" && entry.customType === STATE_TYPE);
 		const data = latest?.type === "custom" ? (latest.data as { version?: unknown } | undefined) : undefined;
@@ -133,6 +136,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		resetInteractions();
 		active = true;
 		planDir = null;
+		planDirInherited = false;
 		iterations = [];
 		planTitle = null;
 		qaMessages = [];
@@ -424,10 +428,33 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 			return saves.run(async () => {
 				operationSignal.throwIfAborted();
 				const iteration = iterations.length + 1;
-				const savedDir = await repository.save(planDir, params.title, params.plan, iteration, operationSignal);
+				let baseDir = planDir;
+				let seededDir: string | null = null;
+				if (planDirInherited) {
+					// A forked session gets its own repository, seeded with the inherited plan for history.
+					const inherited = iterations.at(-1);
+					seededDir = baseDir =
+						inherited === undefined
+							? null
+							: await repository.save(
+									null,
+									planTitle ?? params.title,
+									inherited,
+									iterations.length,
+									operationSignal,
+								);
+				}
+				let savedDir: string;
+				try {
+					savedDir = await repository.save(baseDir, params.title, params.plan, iteration, operationSignal);
+				} catch (error) {
+					if (seededDir) await rm(seededDir, { recursive: true, force: true });
+					throw error;
+				}
 				operationSignal.throwIfAborted();
 				// Commit succeeded; only now publish the new in-memory/session state.
 				planDir = savedDir;
+				planDirInherited = false;
 				planTitle = params.title;
 				iterations = [...iterations, params.plan];
 				revisionPending = false;
