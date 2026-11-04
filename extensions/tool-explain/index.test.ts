@@ -70,6 +70,14 @@ const call = (code: unknown, toolName = "codemode") => ({
 	input: { code },
 });
 const settle = () => new Promise((resolve) => setImmediate(resolve));
+/** Wait for a state rather than a fixed number of event-loop turns. */
+async function until(condition: () => boolean, what: string, timeoutMs = 2000): Promise<void> {
+	const deadline = Date.now() + timeoutMs;
+	while (!condition()) {
+		if (Date.now() > deadline) assert.fail(`Timed out waiting for ${what}`);
+		await new Promise((resolve) => setTimeout(resolve, 5));
+	}
+}
 const label = (text: string) => [{ type: "toolCall", id: "label-1", name: "label", arguments: { label: text } }];
 
 test("wraps default-shell tools and future MCP tools but preserves unknown self-owned shells", () => {
@@ -321,7 +329,7 @@ test("normalized bash arguments keep labels across concurrent calls, cache hits,
 	const invoke = (toolCallId: string) => handlers.get("tool_call")!({ toolName: "bash", toolCallId, input }, c);
 	invoke("bash-a");
 	invoke("bash-b");
-	await settle();
+	await until(() => c.requests.length === 1, "the shared summary request");
 	let redraws = 0;
 	const render = (resolve: typeof resolver, toolCallId: string) => {
 		const wrapped = resolve("bash", () => native) as ToolRenderers;
@@ -343,8 +351,11 @@ test("normalized bash arguments keep labels across concurrent calls, cache hits,
 	};
 	render(resolver, "bash-a");
 	render(resolver, "bash-b");
+	// Pending rows start a spinner whose ticks also invalidate. Stop it before any event-loop turn,
+	// so the redraw count measures only the completion notifications.
+	stopAnimations();
 	finish({ stopReason: "toolUse", content: label("Print the readiness marker") });
-	await settle();
+	await until(() => redraws >= 2 && entries.length === 1, "both rows to be notified of the summary");
 	for (const id of ["bash-a", "bash-b"])
 		assert.match(render(resolver, id), /bash tool completed: Print the readiness marker/);
 	assert.equal(redraws, 2);
