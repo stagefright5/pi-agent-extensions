@@ -2,7 +2,8 @@
  * The footer indicator: `● 2 running · ○1 ○1`. Updated from job state changes only (never output or
  * timers), and pushed to `ctx.ui.setStatus` only when its text actually changes.
  */
-import type { Theme } from "@earendil-works/pi-coding-agent";
+import type { ExtensionUIContext, Theme } from "@earendil-works/pi-coding-agent";
+import { plainStatusTheme, setThemedStatus } from "@stagefright5/pi-extension-utils";
 import type { JobManager } from "./jobs.ts";
 
 export const STATUS_ID = "bg-bash";
@@ -24,25 +25,24 @@ export function jobsStatusText(counts: JobCounts, theme: Pick<Theme, "fg">): str
 export class FooterStatus {
 	private last: string | undefined;
 	private readonly manager: JobManager;
-	private readonly theme: () => Pick<Theme, "fg">;
-	private readonly setStatus: (text: string | undefined) => void;
+	private readonly ui: Pick<ExtensionUIContext, "setStatus">;
 
-	constructor(manager: JobManager, theme: () => Pick<Theme, "fg">, setStatus: (text: string | undefined) => void) {
+	constructor(manager: JobManager, ui: Pick<ExtensionUIContext, "setStatus">) {
 		this.manager = manager;
-		this.theme = theme;
-		this.setStatus = setStatus;
+		this.ui = ui;
 	}
 
 	update(): void {
-		const text = jobsStatusText(this.manager.counts(), this.theme());
+		const counts = this.manager.counts();
+		const text = jobsStatusText(counts, plainStatusTheme);
 		if (text === this.last) return;
 		this.last = text;
-		this.setStatus(text);
+		setThemedStatus(this.ui, STATUS_ID, text ? (theme) => jobsStatusText(counts, theme)! : undefined);
 	}
 
 	clear(): void {
 		if (this.last === undefined) return;
 		this.last = undefined;
-		this.setStatus(undefined);
+		setThemedStatus(this.ui, STATUS_ID, undefined);
 	}
 }

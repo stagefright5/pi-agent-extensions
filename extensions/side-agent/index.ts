@@ -12,7 +12,12 @@ import {
 import { Markdown, truncateToWidth, type Component } from "@earendil-works/pi-tui";
 import * as dialogKit from "@stagefright5/pi-dialog";
 import { singleLine, spread, tildePath } from "@stagefright5/pi-dialog";
-import { isSideAgentForkEntry, notifyIfActive, type SideAgentForkData } from "@stagefright5/pi-extension-utils";
+import {
+	isSideAgentForkEntry,
+	notifyIfActive,
+	setThemedStatus,
+	type SideAgentForkData,
+} from "@stagefright5/pi-extension-utils";
 import { captureFork, deriveTitle, writeChildSession } from "./fork.ts";
 import {
 	childCommand,
@@ -236,10 +241,10 @@ export function createSideAgent(pi: ExtensionAPI, options: SideAgentOptions = {}
 	function setStatus(text: string | undefined): void {
 		try {
 			if (sessionCtx?.mode !== "tui") return;
-			const theme = sessionCtx.ui.theme;
-			sessionCtx.ui.setStatus(
+			setThemedStatus(
+				sessionCtx.ui,
 				STATUS_ID,
-				text === undefined ? undefined : theme.fg("accent", "⑂ ") + theme.fg("muted", text),
+				text === undefined ? undefined : (theme) => theme.fg("accent", "⑂ ") + theme.fg("muted", text),
 			);
 		} catch {
 			// Status is best-effort; the context may already be retired.

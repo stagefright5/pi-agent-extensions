@@ -1,3 +1,5 @@
+import type { ExtensionUIContext, Theme } from "@earendil-works/pi-coding-agent";
+
 /** Shared, versioned status-line contract. Vendored copies communicate through the same global symbol. */
 export const STATUS_LINE_CHANNEL = Symbol.for("@stagefright5/pi-status-line/v1");
 
@@ -32,7 +34,29 @@ export type StatusLineChannel = {
 	version?: number;
 	/** Model-adjacent status ids. Consumers may retain fallbacks for older producers. */
 	modelStatuses?: Set<string>;
+	/** Plain fallbacks plus styling evaluated by the footer after each theme invalidation. */
+	themedStatuses?: Map<string, { text: string; render: StatusRenderer }>;
 };
+
+export type StatusTheme = Pick<Theme, "fg">;
+export type StatusRenderer = (theme: StatusTheme) => string;
+
+/** Hosts without the shared footer get uncolored text that follows the terminal's foreground. */
+export const plainStatusTheme: StatusTheme = { fg: (_token, text) => text };
+
+/** Never store ANSI in Pi's persistent status strings: it survives theme invalidation. */
+export function setThemedStatus(
+	ui: Pick<ExtensionUIContext, "setStatus">,
+	id: string,
+	render: StatusRenderer | undefined,
+): void {
+	const channel = statusLineChannel();
+	const text = render?.(plainStatusTheme);
+	if (render && text) (channel.themedStatuses ??= new Map()).set(id, { text, render });
+	else channel.themedStatuses?.delete(id);
+	channel.version = (channel.version ?? 0) + 1;
+	ui.setStatus(id, text || undefined);
+}
 
 export function statusLineChannel(): StatusLineChannel {
 	const store = globalThis as typeof globalThis & { [STATUS_LINE_CHANNEL]?: StatusLineChannel };

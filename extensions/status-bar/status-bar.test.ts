@@ -5,6 +5,7 @@ import test from "node:test";
 import { stripVTControlCharacters as plain } from "node:util";
 import { visibleWidth, type TuiMouseEvent } from "@earendil-works/pi-tui";
 import statusBar from "./index.ts";
+import { setThemedStatus } from "@stagefright5/pi-extension-utils";
 import { registerStatusAction, registerModelStatus, statusLineChannel } from "./status-line.ts";
 
 type Footer = {
@@ -123,6 +124,36 @@ test("model statuses use the accent color, including legacy fast producers", () 
 		assert.equal(plain(line).split("turbo").length - 1, 1);
 	} finally {
 		unregister();
+		f.dispose();
+	}
+});
+
+test("status colors refresh on theme invalidation without a producer state change", () => {
+	let color = "\x1b[36m";
+	// Like Pi's theme proxy: identity is stable while its colors change.
+	const theme = { fg: (_token: string, text: string) => color + text + "\x1b[39m" };
+	const f = fixture(undefined, theme);
+	const ui = {
+		setStatus(id: string, text: string | undefined) {
+			if (text === undefined) f.statuses.delete(id);
+			else f.statuses.set(id, text);
+		},
+	};
+	try {
+		setThemedStatus(ui, "themed", (theme) => theme.fg("warning", "Planning"));
+		assert.equal(f.statuses.get("themed"), "Planning", "plain fallback for other footers");
+		assert.ok(f.render().includes("\x1b[36mPlanning"));
+		color = "\x1b[33m";
+		f.footer().invalidate();
+		assert.ok(f.render().includes("\x1b[33mPlanning"));
+		assert.ok(!f.render().includes("\x1b[36m"));
+		f.statuses.set("themed", "replacement");
+		assert.match(plain(f.render()), /replacement/);
+		assert.doesNotMatch(plain(f.render()), /Planning/);
+		setThemedStatus(ui, "themed", undefined);
+		assert.doesNotMatch(plain(f.render()), /replacement/);
+	} finally {
+		setThemedStatus(ui, "themed", undefined);
 		f.dispose();
 	}
 });

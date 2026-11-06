@@ -5,8 +5,8 @@ export type ThemeToken = "accent" | "bashMode" | "muted" | "dim" | "userMessageT
 
 /**
  * Colors derived from the active theme at render time. The surface reuses the user-message tokens;
- * panels are a shade darker so stacked layers read as separate, and the selected row is tinted
- * toward the accent. Non-truecolor terminals fall back to existing theme tokens.
+ * panels and selections use semantic background tokens. Do not derive a dark-only palette or
+ * parse ANSI: system themes can use terminal-default colors and indexed palettes.
  */
 export interface Palette {
 	/** Foreground ANSI for body text. */
@@ -23,28 +23,13 @@ export interface Palette {
 /** The color subset labels need; a plain fallback works without a theme. */
 export type LabelPalette = Pick<Palette, "fg" | "bold">;
 
-type Rgb = readonly [number, number, number];
-const TRUECOLOR = /\[(?:38|48);2;(\d+);(\d+);(\d+)m/u;
-
-function rgb(ansi: string): Rgb | undefined {
-	const match = TRUECOLOR.exec(ansi);
-	return match ? [Number(match[1]), Number(match[2]), Number(match[3])] : undefined;
-}
-function mix(from: Rgb, to: Rgb, amount: number): Rgb {
-	return from.map((value, index) => Math.round(value + (to[index]! - value) * amount)) as unknown as Rgb;
-}
-const bgAnsi = ([r, g, b]: Rgb) => `\x1b[48;2;${r};${g};${b}m`;
-
 export function paletteFromTheme(theme: Theme): Palette {
 	const surface = theme.getBgAnsi("userMessageBg");
-	const base = rgb(surface);
-	const accent = rgb(theme.getFgAnsi("accent"));
-	const darker = base ? mix(base, [0, 0, 0], 0.3) : undefined;
 	return {
 		text: theme.getFgAnsi("userMessageText"),
 		surface,
-		panel: darker ? bgAnsi(darker) : theme.getBgAnsi("toolPendingBg"),
-		selected: darker && accent ? bgAnsi(mix(darker, accent, 0.18)) : theme.getBgAnsi("selectedBg"),
+		panel: theme.getBgAnsi("toolPendingBg"),
+		selected: theme.getBgAnsi("selectedBg"),
 		fg: (token, text) => theme.fg(token, text),
 		bold: (text) => theme.bold(text),
 		match: (text) => theme.bg("searchMatchBg", theme.fg("searchMatchText", theme.bold(text))),

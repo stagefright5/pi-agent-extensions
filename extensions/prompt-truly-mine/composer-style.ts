@@ -13,7 +13,7 @@ import {
 
 /**
  * Composer palette: the shared picker palette plus the composer's layer names. The draft surface
- * reuses the user-message tokens; the footer strip and suggestion panel use the darker panel shade.
+ * reuses the user-message tokens; the footer strip and suggestion panel use the theme's panel token.
  */
 export interface ComposerPalette extends Palette {
 	footer: string;

@@ -35,11 +35,7 @@ test("indicator text: running count, then unfilled circles for unread successes 
 test("budget: a chatty background job causes no footer work and at most one output event per interval", async () => {
 	const jobs = manager();
 	const calls: (string | undefined)[] = [];
-	const footer = new FooterStatus(
-		jobs,
-		() => tag,
-		(text) => calls.push(text),
-	);
+	const footer = new FooterStatus(jobs, { setStatus: (_id, text) => calls.push(text) });
 	let stateEvents = 0;
 	let outputEvents = 0;
 	jobs.onChange((_job, change) => {
@@ -60,7 +56,7 @@ test("budget: a chatty background job causes no footer work and at most one outp
 	assert.equal(stateEvents, 2, "backgrounded, exited");
 	assert.deepEqual(
 		calls.map((text) => text && plain(text)),
-		["<accent>● 1 running</accent>", "<success>○1</success>"],
+		["● 1 running", "○1"],
 	);
 	assert.ok(
 		outputEvents <= Math.ceil(elapsed / OUTPUT_EVENT_MS) + 1,

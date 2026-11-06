@@ -201,7 +201,8 @@ export default function statusBarExtension(pi: ExtensionAPI): void {
 						left.localeCompare(right),
 					)) {
 						if (isModelStatus(id)) continue;
-						const text = sanitizeStatusText(raw);
+						const styled = channel.themedStatuses?.get(id);
+						const text = sanitizeStatusText(styled?.text === raw ? styled.render(theme) : raw);
 						if (!text) continue;
 						const action = id === focused ? channel.statusActions?.get(id) : undefined;
 						statuses.push(action ? focusedStatus(theme, text, action.label) : text);

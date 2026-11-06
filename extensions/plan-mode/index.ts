@@ -1,5 +1,5 @@
 import { getAgentDir, type ExtensionAPI, type ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { createUsageTracker } from "@stagefright5/pi-extension-utils";
+import { createUsageTracker, setThemedStatus } from "@stagefright5/pi-extension-utils";
 import { restorePlanState, STATE_TYPE } from "./state.ts";
 import { Key, stripTerminalSequences, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
@@ -116,12 +116,13 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		if (tools.includes("plan_output") !== enabled)
 			pi.setActiveTools(enabled ? [...tools, "plan_output"] : tools.filter((name) => name !== "plan_output"));
 		if (ctx.mode !== "tui") return;
-		const theme = ctx.ui.theme;
 		ctx.ui.setWorkingVisible(!active);
-		ctx.ui.setStatus(
+		setThemedStatus(
+			ctx.ui,
 			"plan-mode",
 			active
-				? theme.fg("warning", "▣ Planning") +
+				? (theme) =>
+						theme.fg("warning", "▣ Planning") +
 						(planTitle ? theme.fg("muted", ` ${planTitle.replace(/[\r\n\t]/g, " ")}`) : "") +
 						theme.fg(
 							"dim",
@@ -657,7 +658,7 @@ export default function planModeExtension(pi: ExtensionAPI): void {
 		await Promise.all([saves.idle(), usage.drain()]);
 		if (ctx.mode === "tui") {
 			ctx.ui.setWorkingVisible(true);
-			ctx.ui.setStatus("plan-mode", undefined);
+			setThemedStatus(ctx.ui, "plan-mode", undefined);
 		}
 	});
 }

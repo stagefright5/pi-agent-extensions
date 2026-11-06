@@ -63,6 +63,12 @@ npm install -g @stagefright5/jenkins-cli
 
 Use `pi config` to enable or disable resources from installed packages.
 
+## Follow the terminal theme
+
+Select `system` under **Theme** in Pi's `/settings` to follow the terminal's palette and light/dark appearance. `obsidian-ice` is an intentionally fixed dark palette; selecting it disables automatic appearance matching. Compact tool presentation works independently of that theme.
+
+The composer, pickers, dialogs, and status bar read Pi's active theme. Job, plan, and side-agent statuses are recolored after theme invalidation; with a different footer they use uncolored, terminal-aware fallback text. Live system changes depend on the terminal reporting its colors and appearance to Pi.
+
 ## Local development
 
 Install the global `vp` command using the [Vite+ installation guide](https://viteplus.dev/guide), then install workspace dependencies:

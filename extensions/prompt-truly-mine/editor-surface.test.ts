@@ -109,7 +109,7 @@ for (const mode of ["truecolor", "256color"]) {
 
 test("surface uses the current palette after theme changes, including light themes", () => {
 	const editors = pair();
-	for (const name of ["dark", "light", "obsidian-ice"]) {
+	for (const name of ["dark", "light", "system", "obsidian-ice"]) {
 		editors.setPalette(name === "obsidian-ice" ? loadThemeFromPath(path, "truecolor") : getThemeByName(name));
 		for (const width of [1, 2, 40, 80]) editors.check(width);
 	}

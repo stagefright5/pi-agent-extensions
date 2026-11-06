@@ -186,13 +186,7 @@ export default function backgroundBash(pi: ExtensionAPI): void {
 			store[EXIT_HOOK] = true;
 			process.once("exit", () => jobManager().killAll());
 		}
-		footer = ctx.hasUI
-			? new FooterStatus(
-					manager,
-					() => ctx.ui.theme,
-					(text) => ctx.ui.setStatus(STATUS_ID, text),
-				)
-			: undefined;
+		footer = ctx.hasUI ? new FooterStatus(manager, ctx.ui) : undefined;
 		offChange?.();
 		offChange = manager.onChange((job, change) => {
 			if (change !== "state") return;
