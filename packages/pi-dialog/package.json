@@ -1,6 +1,6 @@
 {
   "name": "@stagefright5/pi-dialog",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Framed pop-ups and ready-made dialogs (confirm, select, input, editor, document, loader) for pi extensions",
   "type": "module",
   "keywords": [

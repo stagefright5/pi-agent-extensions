@@ -1,5 +1,12 @@
 # @stagefright5/pi-plan-mode
 
+## 0.3.1
+
+### Patch Changes
+
+- 8de87bf: Side-agent forks keep Plan Mode's restrictions and plan history but write their first revision to a new plan repository, seeded with the inherited plan, so they never overwrite the parent's plan files. Forking never approves a plan.
+- 426fdf0: Use semantic theme backgrounds in shared picker, popup, and composer surfaces instead of deriving dark-only colors. Keep job, plan, and side-agent statuses uncolored in Pi's persistent storage and apply the active theme when the shared footer renders, with plain fallbacks for other footers. Include the updated vendored UI libraries in consuming extensions.
+
 ## 0.3.0
 
 ### Minor Changes

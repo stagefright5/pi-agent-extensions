@@ -1,6 +1,6 @@
 {
   "name": "@stagefright5/pi-side-agent",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Open an independent, fully capable side agent forked from the current conversation in a Rex split",
   "type": "module",
   "keywords": [

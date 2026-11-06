@@ -1,5 +1,15 @@
 # @stagefright5/pi-extension-utils
 
+## 0.2.0
+
+### Minor Changes
+
+- 8de87bf: Add the side-agent fork provenance contract (`SIDE_AGENT_FORK_TYPE`, `SideAgentForkData`, `isSideAgentForkEntry`) so extensions can recognise state inherited from another session.
+
+### Patch Changes
+
+- 426fdf0: Use semantic theme backgrounds in shared picker, popup, and composer surfaces instead of deriving dark-only colors. Keep job, plan, and side-agent statuses uncolored in Pi's persistent storage and apply the active theme when the shared footer renders, with plain fallbacks for other footers. Include the updated vendored UI libraries in consuming extensions.
+
 ## 0.1.0
 
 ### Added
