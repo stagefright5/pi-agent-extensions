@@ -3,7 +3,6 @@ import test from "node:test";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { stripVTControlCharacters as plain } from "node:util";
 import {
 	createReadToolDefinition,
@@ -22,15 +21,10 @@ import {
 	resultNotices,
 } from "./tool-renderers.ts";
 
-// Tests intentionally use pi's real schema/loader. Production imports only public APIs.
+// Tests use pi's real terminal-adaptive theme. Production imports only public APIs.
 const host = new URL(".", import.meta.resolve("@earendil-works/pi-coding-agent"));
-const { loadThemeFromPath, setThemeJsonValidator, setThemeInstance, getThemeByName } = await import(
-	new URL("modes/interactive/theme/theme.js", host).href
-);
-const { validateThemeJson } = await import(new URL("modes/interactive/theme/theme-schema.js", host).href);
-setThemeJsonValidator(validateThemeJson);
-const path = fileURLToPath(new URL("./themes/obsidian-ice.json", import.meta.url));
-const theme = loadThemeFromPath(path, "truecolor");
+const { setThemeInstance, getThemeByName } = await import(new URL("modes/interactive/theme/theme.js", host).href);
+const theme = getThemeByName("system");
 setThemeInstance(theme);
 const context = (extra = {}) => ({
 	args: {},
@@ -52,16 +46,6 @@ const context = (extra = {}) => ({
 const result = (text: string, details?: unknown) => ({ content: [{ type: "text" as const, text }], details });
 const render = (component: { render(width: number): string[] }, width = 80) =>
 	component.render(width).map(plain).join("\n");
-
-test("theme passes pi's strict loader in truecolor and 256-color modes", () => {
-	for (const mode of ["truecolor", "256color"]) {
-		const loaded = loadThemeFromPath(path, mode);
-		assert.equal(loaded.name, "obsidian-ice");
-		assert.equal(loaded.appearance, "dark");
-		assert.equal(loaded.getColorMode(), mode);
-		assert.equal(visibleWidth(loaded.fg("text", "世界 é 🧊")), 9);
-	}
-});
 
 test("headers handle partial arguments, sanitize metadata, and only show real durations", () => {
 	assert.equal(callSubject("read", null, "/project"), "");
@@ -292,11 +276,14 @@ test("host tool components refresh colors and native expansion after streaming",
 test("extension registers only a resolver, not tools or transcript mutators", () => {
 	const calls: string[] = [];
 	extension({
+		on(event: string) {
+			calls.push(event);
+		},
 		registerToolRenderer() {
 			calls.push("renderer");
 		},
 	} as never);
-	assert.deepEqual(calls, ["renderer"]);
+	assert.deepEqual(calls, ["session_start", "session_shutdown", "renderer"]);
 });
 
 test("cut labels keep the tool box background behind the ellipsis", () => {

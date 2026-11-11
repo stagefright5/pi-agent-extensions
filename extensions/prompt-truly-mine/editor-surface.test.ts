@@ -4,12 +4,13 @@ import { fileURLToPath } from "node:url";
 import { stripVTControlCharacters as plain } from "node:util";
 import { CURSOR_MARKER, visibleWidth, type TUI } from "@earendil-works/pi-tui";
 import { UndoRedoEditor } from "./index.ts";
+import { terminalSurfaceTheme } from "../obsidian-ui/terminal-surfaces.ts";
 import { composerPalette, FOOTER_TEXT_SOFTENING, softenForeground } from "./composer-style.ts";
 
 const host = new URL(".", import.meta.resolve("@earendil-works/pi-coding-agent"));
 const { KeybindingsManager } = await import(new URL("core/keybindings.js", host).href);
 const { getThemeByName, loadThemeFromPath } = await import(new URL("modes/interactive/theme/theme.js", host).href);
-const path = fileURLToPath(new URL("../obsidian-ui/themes/obsidian-ice.json", import.meta.url));
+const path = fileURLToPath(new URL("../obsidian-ui/themes/terminal-native.json", import.meta.url));
 const identity = (text: string) => text;
 const editorTheme = {
 	borderColor: identity,
@@ -107,10 +108,28 @@ for (const mode of ["truecolor", "256color"]) {
 	});
 }
 
+test("terminal-derived shades preserve composer content and adapt across dark/light backgrounds", () => {
+	const editors = pair();
+	for (const editor of [editors.reference, editors.surfaced]) editor.setText("Same draft 世界");
+	for (const background of [
+		{ r: 12, g: 16, b: 20 },
+		{ r: 245, g: 242, b: 235 },
+	]) {
+		for (const mode of ["truecolor", "256color"] as const) {
+			const palette = terminalSurfaceTheme({ background }, mode);
+			editors.setPalette(palette);
+			for (const width of [1, 2, 40, 80]) {
+				const rows = editors.check(width);
+				assert.ok(rows.some((row) => row.includes(palette.getBgAnsi("userMessageBg"))));
+			}
+		}
+	}
+});
+
 test("surface uses the current palette after theme changes, including light themes", () => {
 	const editors = pair();
-	for (const name of ["dark", "light", "system", "obsidian-ice"]) {
-		editors.setPalette(name === "obsidian-ice" ? loadThemeFromPath(path, "truecolor") : getThemeByName(name));
+	for (const name of ["dark", "light", "system", "terminal-native"]) {
+		editors.setPalette(name === "terminal-native" ? loadThemeFromPath(path, "truecolor") : getThemeByName(name));
 		for (const width of [1, 2, 40, 80]) editors.check(width);
 	}
 	assert.deepEqual(editors.surfaced.render(0), []);

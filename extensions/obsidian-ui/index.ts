@@ -7,15 +7,13 @@ import {
 	type ExtensionAPI,
 } from "@earendil-works/pi-coding-agent";
 import { resolveRenderers, type NativeRendererIdentity } from "./tool-renderers.ts";
+import { registerTerminalSurfaces } from "./terminal-surfaces.ts";
 
 export default function obsidianUi(pi: ExtensionAPI): void {
+	registerTerminalSurfaces(pi);
 	if (typeof pi.registerToolRenderer !== "function") {
 		pi.on("session_start", (_event, ctx) => {
-			if (ctx.mode === "tui")
-				ctx.ui.notify(
-					"Obsidian UI tool styling requires pi 1.0.1+. The theme can still be selected separately.",
-					"warning",
-				);
+			if (ctx.mode === "tui") ctx.ui.notify("Obsidian UI tool styling requires pi 1.0.1+.", "warning");
 		});
 		return;
 	}

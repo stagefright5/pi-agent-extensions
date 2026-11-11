@@ -65,7 +65,7 @@ test("checked-in indexes are current and sync is idempotent", () => {
     pi.extensions.length,
     workspace.packages.reduce((count, pkg) => count + (pkg.source.pi?.extensions?.length ?? 0), 0),
   );
-  assert.deepEqual(pi.themes, ["./extensions/obsidian-ui/themes/obsidian-ice.json"]);
+  assert.deepEqual(pi.themes, ["./extensions/obsidian-ui/themes/terminal-native.json"]);
   assert.deepEqual(pi.skills, [
     "./extensions/artifact-design/SKILL.md",
     "./extensions/jenkins-cli-operations/SKILL.md",

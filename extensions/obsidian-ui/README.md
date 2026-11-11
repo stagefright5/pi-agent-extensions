@@ -1,20 +1,25 @@
 # Obsidian UI
 
-A dark pi theme with off-white text, cyan focus indicators, violet syntax colors, and compact tool rows. It does not require font patches or add animation or user-message prefixes.
+Compact tool rows that follow the active Pi theme. No fixed palette is bundled. It does not require font patches or add animation or user-message prefixes.
 
 [Back to the extension workspace](../../README.md)
 
 ## Theme
 
-Select `obsidian-ice` in `/settings`. The package exposes `themes/obsidian-ice.json` as a pi theme. Selecting another theme changes the palette without disabling compact tool presentation.
+Select `terminal-native` under **Theme** in `/settings`. With this extension loaded, panel shades are derived from the terminal's reported background, preserving its tint rather than introducing a fixed blue, green, or red fill:
 
-The terminal still controls its overall background, font, and native selection behavior. This palette is designed for a dark terminal; it does not modify Ghostty or other terminal settings. The contrast tests cover normal text, syntax, secondary metadata, and selection/search text at **4.5:1**, plus meaningful borders, mode indicators, selection markers, and the scrollbar thumb at **3:1**. Tests measure pi's emitted colors in both truecolor and 256-color modes rather than assuming RGB values survive palette approximation.
+- Tool panels blend 7% toward white on dark terminals, or toward black on light terminals. Pending, success, and error states share the same shade.
+- Composer and user/custom messages use an 11% blend so they stand out a little more.
+- Selection/search uses an 18% blend for stronger interaction feedback.
+- Body text keeps the terminal's default foreground. Status icons, errors, warnings, diffs, and syntax retain ANSI palette colors.
 
-User messages and the companion composer share a dark, cool-charcoal surface (`#2e3337`); normal tool calls use near-black blue-charcoal (`#191e22`). The two backgrounds map to separate dark grayscale entries in 256-color mode. Regression checks require 1.25:1 contrast between user and tool backgrounds and 1.1:1 between normal tool rows and the reference terminal background. They also limit background brightness. These are design thresholds, not WCAG requirements for adjacent backgrounds. Tool errors retain their rose-tinted surface and status indicators.
+The extension queries terminal colors on activation and on terminal appearance notifications, then installs an in-memory theme through Pi's public API. It uses a zero-row widget to observe theme selection without replacing the editor or footer. No polling, terminal configuration changes, generated theme-file writes, or host patches are used. Listeners and pending updates are cleaned up on reload/shutdown.
 
-Selection/search and scrollbar-track surfaces also use a narrow cool tint so 256-color conversion does not turn them into unexpectedly bright blue-gray backgrounds. Secondary text uses silver; decorative separators can remain subtle. The matching composer has no horizontal rules or side rails; shortcut/shell/overflow labels remain readable within its filled surface.
+If the terminal does not report a background, or the JSON theme is loaded without the extension, message/tool panels fall back to the terminal's default background and selection/search to ANSI slot 8. Late color replies still apply. Live updates depend on the terminal emitting appearance notifications; run `/reload` after palette-only changes that it does not report. Contrast depends on the terminal's foreground and palette; no blanket contrast guarantee is made.
 
-These checks use the theme's panel backgrounds, the export-page background, and the configured Arizona Monsoon terminal background (`#0a0f14`) as **opaque references**. Window transparency, wallpaper, terminal palette overrides, and third-party hardcoded styles can affect actual contrast. This is not a claim of complete WCAG conformance. No terminal opacity or configuration is changed.
+The extension uses semantic tokens from the active theme for headers, status indicators, previews, and native tool backgrounds. It only derives surfaces while `terminal-native` is selected; other selected Pi themes are left alone. The terminal still controls its font, opacity, and native selection behavior.
+
+The former `obsidian-ice` palette is no longer shipped. If upgrading from it, select `terminal-native` in `/settings`. For a source-linked installation, also remove the old `~/.pi/agent/themes/obsidian-ice.json` symlink if you created one.
 
 User/assistant messages retain pi's native layout and Markdown. This extension does not insert labels or rails into user content or rewrite transcripts. Native Markdown rendering and terminal selection can still differ from the raw stored text.
 
@@ -42,7 +47,7 @@ Obsidian UI does not replace their editor or footer factories. Each companion al
 
 ## Compatibility
 
-Tool presentation is tested against **pi 1.2.0**. Older runtimes without `registerToolRenderer` receive a TUI warning instead of replacement tool registrations. The theme can be selected separately if the runtime supports its schema. We do not claim full compatibility with older pi versions.
+Terminal-derived surfaces are tested against **pi 1.5.2** and require its public TUI color-query and appearance-notification APIs. Older runtimes without `registerToolRenderer` receive a TUI warning instead of replacement tool registrations. We do not claim full compatibility with older pi versions.
 
 Tests use Node 24's experimental TypeScript transform because the existing editor/browser implementations use constructor parameter properties. No compiler or additional runtime dependency is required when pi loads these sources.
 
@@ -58,8 +63,8 @@ pi install npm:@stagefright5/pi-obsidian-ui
 
 <!-- package-tools:install:end -->
 
-For source development, load this directory with `pi -e ./extensions/obsidian-ui` or expose it through the workspace's development symlink. A plain extension-directory symlink does not expose nested theme files: link `themes/obsidian-ice.json` into `~/.pi/agent/themes/obsidian-ice.json` separately, then select it in `/settings`. Do not create the extra theme link when package discovery already exposes the theme. Run `/reload` after source changes.
+For source development, load this directory with `pi -e ./extensions/obsidian-ui` or expose it through the workspace's development symlink. When using only the extension-directory symlink, also link `themes/terminal-native.json` from this package into `~/.pi/agent/themes/terminal-native.json`. Package discovery exposes it automatically, so do not add the extra link for a package installation. Run `/reload` after source changes, then select `terminal-native` in `/settings`.
 
 ## Uninstall
 
-Select your previous theme (for example `dark`) in `/settings`, disable this extension through `pi config`, and reload. For a linked development installation, remove only the theme-file symlink you created if it is no longer needed. Companion chrome changes are independent; revert their presentation changes separately to restore their old appearance. No session migration is needed.
+Select `system` (or another installed theme) in `/settings`, disable this extension through `pi config`, and reload. Remove the `terminal-native.json` theme symlink if you created it for source development. Companion chrome changes are independent; revert their presentation changes separately to restore their old appearance. No session migration is needed.

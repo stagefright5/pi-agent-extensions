@@ -1,10 +1,9 @@
 {
   "name": "@stagefright5/pi-obsidian-ui",
   "version": "0.2.1",
-  "description": "A copy-friendly graphite and ice theme with compact tool presentation for pi",
+  "description": "Compact tool presentation with panel shades derived from the terminal background for pi",
   "type": "module",
   "keywords": [
-    "theme",
     "tui"
   ],
   "scripts": {
@@ -24,7 +23,7 @@
       "./index.ts"
     ],
     "themes": [
-      "./themes/obsidian-ice.json"
+      "./themes/terminal-native.json"
     ]
   },
   "publishConfig": {
@@ -33,7 +32,7 @@
   },
   "packageTools": {
     "title": "Obsidian UI",
-    "interface": "Automatic tool styling; `obsidian-ice` theme",
+    "interface": "Automatic tool styling; `terminal-native` theme",
     "include": [
       "themes"
     ]

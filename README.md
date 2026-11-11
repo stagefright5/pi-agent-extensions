@@ -17,7 +17,7 @@ The workspace develops and typechecks against pi 1.3.0. Packages use pi's TypeSc
 | [Artifact Design](./extensions/artifact-design/README.md)                    | `@stagefright5/pi-artifact-design`        | Design self-contained HTML artifacts with a local Vite dev server, theme/CSP harness, and single-file build                            | `/skill:artifact-design`                                                    |
 | [Background Bash](./extensions/bg-bash/README.md)                            | `@stagefright5/pi-bg-bash`                | Run pi's bash tool commands in the background once they outlast a short wait, with job tools, finish notifications, and a jobs manager | `bash` override, `job_*` tools, `/jobs`, `Alt+J`                            |
 | [Jenkins CLI Operations](./extensions/jenkins-cli-operations/README.md)      | `@stagefright5/pi-jenkins-cli-operations` | Agent skill for safe Jenkins operations using the standalone jenkins command                                                           | `/skill:jenkins-cli-operations`                                             |
-| [Obsidian UI](./extensions/obsidian-ui/README.md)                            | `@stagefright5/pi-obsidian-ui`            | A copy-friendly graphite and ice theme with compact tool presentation for pi                                                           | Automatic tool styling; `obsidian-ice` theme                                |
+| [Obsidian UI](./extensions/obsidian-ui/README.md)                            | `@stagefright5/pi-obsidian-ui`            | Compact tool presentation with panel shades derived from the terminal background for pi                                                | Automatic tool styling; `terminal-native` theme                             |
 | [OpenAI Fast](./extensions/openai-fast/README.md)                            | `@stagefright5/pi-openai-fast`            | Toggle OpenAI Fast mode (priority service tier) in pi                                                                                  | `/fast`, `pi --fast`                                                        |
 | [Plan Mode](./extensions/plan-mode/README.md)                                | `@stagefright5/pi-plan-mode`              | Evidence-guided planning and interactive plan review for pi                                                                            | `/plan`, `Alt+P`                                                            |
 | [Global Prompt History Search](./extensions/prompt-history-search/README.md) | `@stagefright5/pi-prompt-history-search`  | Fuzzy reverse search across prompts in saved pi sessions                                                                               | `Alt+R`, `/prompt-history`                                                  |
@@ -65,7 +65,7 @@ Use `pi config` to enable or disable resources from installed packages.
 
 ## Follow the terminal theme
 
-Select `system` under **Theme** in Pi's `/settings` to follow the terminal's palette and light/dark appearance. `obsidian-ice` is an intentionally fixed dark palette; selecting it disables automatic appearance matching. Compact tool presentation works independently of that theme.
+Select `terminal-native` under **Theme** in Pi's `/settings` for panel shades derived from your terminal's background: slightly lighter on dark terminals, slightly darker on light terminals. Tool panels use a subtle shade; composer/messages and selection highlights use progressively stronger shades. Success and failure share the same panel shade and retain colored indicators. Text and status colors use the terminal's default foreground and ANSI palette. Without a reported background (or without the extension), the JSON theme falls back to terminal-default panels. Unlike Pi's built-in `system` theme, this does not assign blue/green/red hues to panels. If upgrading from `obsidian-ice`, remove its old theme symlink; source-linked installations need a link to `extensions/obsidian-ui/themes/terminal-native.json` in `~/.pi/agent/themes/`. Compact tool presentation also works with other selected Pi themes.
 
 The composer, pickers, dialogs, and status bar read Pi's active theme. Job, plan, and side-agent statuses are recolored after theme invalidation; with a different footer they use uncolored, terminal-aware fallback text. Live system changes depend on the terminal reporting its colors and appearance to Pi.
 
@@ -113,7 +113,7 @@ Typecheck extension sources against the public SDK, check generated indexes, tes
 vp run test
 ```
 
-Run only the SDK typecheck with `pnpm typecheck`. Development SDK/TUI dependencies use the 1.3.0 baseline (Obsidian UI still pins 1.2.0); host-provided packages remain peers in published packages.
+Run only the SDK typecheck with `pnpm typecheck`. Development SDK/TUI dependencies use the workspace catalog; host-provided packages remain peers in published packages.
 
 Run one package's tests:
 

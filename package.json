@@ -54,7 +54,7 @@
       "./extensions/tool-output-browser/index.ts"
     ],
     "themes": [
-      "./extensions/obsidian-ui/themes/obsidian-ice.json"
+      "./extensions/obsidian-ui/themes/terminal-native.json"
     ]
   }
 }
