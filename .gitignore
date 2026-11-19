@@ -2,3 +2,12 @@ node_modules/
 .pnpm-store/
 .tmp/
 *.tgz
+
+# Claude Code-managed state (~/.claude/skills -> this dir)
+skills/synced/
+skills/.trash/
+.DS_Store
+# Codex-managed system skills (~/.codex/skills -> this dir)
+skills/.system/
+# Third-party clone of badlogic/pi-skills (own git repo)
+skills/pi-skills/
